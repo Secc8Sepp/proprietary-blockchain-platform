@@ -243,7 +243,7 @@ class BlockchainService extends EventEmitter {
 
         const currentBalance = this.calculateBalance(sender, chain);
         // Skip balance checks for certain types that don't consume balance
-        const balanceRequired = !['FOLLOW_USER', 'PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'SHOUTBOX_POST', 'ADMIN_MINT', 'SUBMIT_HOT_OR_NOT', 'VOTE_HOT_OR_NOT'].includes(type);
+        const balanceRequired = !['FOLLOW_USER', 'PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'SHOUTBOX_POST', 'ADMIN_MINT', 'SUBMIT_HOT_OR_NOT', 'VOTE_HOT_OR_NOT', 'STORY_POST'].includes(type);
         
         if (balanceRequired) {
             if (type === 'TRANSFER_COIN' && currentBalance < parseFloat(data.amount)) throw new Error("Insufficient funds for wire.");

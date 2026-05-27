@@ -80,9 +80,15 @@ function initializeApplicationListeners() {
     // Unified Media Composer
     const publishBtn = document.getElementById('btn-publish-post');
     if(publishBtn) {
-        publishBtn.addEventListener('click', handlePublishPost);
+        publishBtn.addEventListener('click', () => handlePublishPost(false));
         console.log('[INIT] ✓ Publish button wired');
     } else console.warn('[INIT] ✗ btn-publish-post not found');
+    
+    const storyBtn = document.getElementById('btn-publish-story');
+    if(storyBtn) {
+        storyBtn.addEventListener('click', () => handlePublishPost(true));
+        console.log('[INIT] ✓ Story button wired');
+    }
     
     const imgUpload = document.getElementById('composer-image-upload');
     if(imgUpload) imgUpload.addEventListener('change', updateComposerPreview);
@@ -554,7 +560,8 @@ async function sendSignedTransaction(type, receiver, data) {
     return tx;
 }
 
-async function handlePublishPost() {
+async function handlePublishPost(isStory = false) {
+    if (typeof isStory !== 'boolean') isStory = false;
     try {
         console.log('[PUBLISH] Starting post publish...');
         const textIn = document.getElementById('composer-text').value.trim();
@@ -562,9 +569,10 @@ async function handlePublishPost() {
         const imgFile = document.getElementById('composer-image-upload').files[0];
         const vidFile = document.getElementById('composer-video-upload') ? document.getElementById('composer-video-upload').files[0] : null;
         const zipFile = document.getElementById('composer-zip-upload') ? document.getElementById('composer-zip-upload').files[0] : null;
-        const btn = document.getElementById('btn-publish-post');
+        const btn = document.getElementById(isStory ? 'btn-publish-story' : 'btn-publish-post');
 
-        if (!textIn && !audFile && !imgFile && !vidFile && !zipFile) return alert("Please provide some content to broadcast.");
+        if (isStory && !imgFile && !vidFile) return alert("Stories must include an image or short video.");
+        if (!isStory && !textIn && !audFile && !imgFile && !vidFile && !zipFile) return alert("Please provide some content to broadcast.");
         if (!userKeys.publicKey) return alert("You must login first.");
 
         btn.innerText = "Uploading...";
@@ -572,7 +580,17 @@ async function handlePublishPost() {
 
         let type, data;
         // Determine post type and upload requisite files to IPFS node
-        if (audFile) {
+        if (isStory) {
+            if (imgFile) {
+                const hash = await uploadMediaAssetFile(imgFile);
+                type = 'STORY_POST';
+                data = { caption: textIn, imageHash: hash };
+            } else if (vidFile) {
+                const hash = await uploadMediaAssetFile(vidFile);
+                type = 'STORY_POST';
+                data = { caption: textIn, videoHash: hash };
+            }
+        } else if (audFile) {
             if (!textIn) throw new Error("Please provide a Track Title for the audio upload.");
             const hash = await uploadMediaAssetFile(audFile);
             
@@ -653,8 +671,11 @@ async function handlePublishPost() {
         console.error('[PUBLISH] ✗ Exception:', err);
         alert("Transaction Failed: " + err.message); 
     } finally {
-        document.getElementById('btn-publish-post').innerText = "Broadcast Block";
-        document.getElementById('btn-publish-post').disabled = false;
+        const btn = document.getElementById(isStory ? 'btn-publish-story' : 'btn-publish-post');
+        if (btn) {
+            btn.innerText = isStory ? "Deploy Story" : "Broadcast Block";
+            btn.disabled = false;
+        }
     }
 }
 
@@ -883,6 +904,31 @@ async function loadMainGlobalFeed() {
         const container = document.getElementById('feed-container');
         if(!container) return;
         
+        const now = Date.now();
+        const activeStories = data.filter(item => item.type === 'STORY_POST' && (now - item.timestamp <= 86400000));
+        
+        let storiesHtml = '';
+        if (activeStories.length > 0) {
+            const storiesByUser = {};
+            activeStories.forEach(s => {
+                if (!storiesByUser[s.sender]) storiesByUser[s.sender] = [];
+                storiesByUser[s.sender].push(s);
+            });
+            
+            storiesHtml = `<div class="stories-container" style="display: flex; gap: 15px; overflow-x: auto; padding-bottom: 15px; margin-bottom: 20px; border-bottom: 1px solid var(--border);">`;
+            for (const sender in storiesByUser) {
+                const profile = resolveProfile(sender);
+                storiesHtml += `
+                    <div class="story-avatar" onclick="openStoryModal('${sender}')" style="cursor: pointer; text-align: center; flex-shrink: 0;">
+                        <img src="${getAvatarUrl(sender)}" style="width: 60px; height: 60px; border-radius: 50%; border: 3px solid var(--primary); padding: 2px; object-fit: cover;">
+                        <div style="font-size: 11px; margin-top: 5px; color: #fff;">${escapeHtml(profile.username).substring(0,8)}</div>
+                    </div>
+                `;
+            }
+            storiesHtml += `</div>`;
+            window.currentActiveStories = storiesByUser;
+        }
+
         let filterHtml = '';
         if (activeFeedTag) {
             filterHtml = `<div style="padding: 10px; background: rgba(102, 252, 241, 0.1); color: var(--primary); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
@@ -890,7 +936,7 @@ async function loadMainGlobalFeed() {
                 <button class="secondary" style="padding: 2px 8px; font-size: 11px;" onclick="activeFeedTag=null; loadMainGlobalFeed();">Clear Filter</button>
             </div>`;
         }
-        container.innerHTML = filterHtml;
+        container.innerHTML = storiesHtml + filterHtml;
         
         // Filter out low-level system transactions from cluttering the main public feed
         const displayablePosts = data.filter(item => {
@@ -3057,4 +3103,64 @@ async function tipArticle(articleId, author) {
 
         alert(`Successfully tipped ${amount} $VOD to the author!`);
     } catch (err) { alert("Tip failed: " + err.message); }
+}
+
+// ==========================================
+// STORIES ENGINE LOGIC
+// ==========================================
+
+window.currentStoryIndex = 0;
+window.currentStoryUser = '';
+
+function openStoryModal(sender) {
+    if (!window.currentActiveStories || !window.currentActiveStories[sender]) return;
+    window.currentStoryUser = sender;
+    window.currentStoryIndex = 0;
+    renderStoryModal();
+    document.getElementById('story-modal').classList.remove('hidden');
+}
+
+function renderStoryModal() {
+    const stories = window.currentActiveStories[window.currentStoryUser];
+    if (!stories || window.currentStoryIndex >= stories.length) {
+        closeStoryModal();
+        return;
+    }
+    
+    const story = stories[window.currentStoryIndex];
+    const modalContent = document.getElementById('story-modal-content');
+    
+    let mediaHtml = '';
+    if (story.data.imageHash) {
+        mediaHtml = `<img src="/tracks/${story.data.imageHash}" style="max-width: 100%; max-height: 70vh; border-radius: 8px; object-fit: contain;">`;
+    } else if (story.data.videoHash) {
+        mediaHtml = `<video src="/tracks/${story.data.videoHash}" autoplay controls style="max-width: 100%; max-height: 70vh; border-radius: 8px; object-fit: contain;"></video>`;
+    }
+    
+    modalContent.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 15px; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 10px; cursor: pointer;" onclick="inspectTargetNode('${story.sender}'); closeStoryModal();">
+                <img src="${getAvatarUrl(story.sender)}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
+                <strong style="color: #fff;">${resolveProfile(story.sender).username}</strong>
+                <span style="font-size: 11px; color: var(--text-muted);">${new Date(story.timestamp).toLocaleString()}</span>
+            </div>
+            <button class="secondary" style="padding: 4px 10px; border-radius: 6px; width: auto;" onclick="closeStoryModal()">✖</button>
+        </div>
+        <div style="text-align: center; position: relative; padding: 0 15px;" onclick="nextStory()">
+            ${mediaHtml}
+            ${story.data.caption ? `<div style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 10px 20px; border-radius: 8px; width: 80%; pointer-events: none;">${escapeHtml(story.data.caption)}</div>` : ''}
+        </div>
+        <div style="text-align: center; padding: 15px; font-size: 12px; color: var(--text-muted);">Click media for next story (${window.currentStoryIndex + 1}/${stories.length})</div>
+    `;
+}
+
+function nextStory() {
+    window.currentStoryIndex++;
+    renderStoryModal();
+}
+
+function closeStoryModal() {
+    document.getElementById('story-modal').classList.add('hidden');
+    const modalContent = document.getElementById('story-modal-content');
+    modalContent.innerHTML = ''; 
 }

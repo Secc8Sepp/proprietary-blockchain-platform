@@ -305,7 +305,7 @@ class ProfileService {
         // Pass 1: Gather metric aggregates from the ledger
         for (const block of chain) {
             for (const tx of block.transactions) {
-                if (['SONG_UPLOAD', 'TEXT_POST', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST'].includes(tx.type)) {
+                if (['SONG_UPLOAD', 'TEXT_POST', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'STORY_POST'].includes(tx.type)) {
                     postOwners[block.hash] = tx.sender;
                 }
                 if (tx.type === 'SONG_UPLOAD') {
@@ -369,7 +369,7 @@ class ProfileService {
             if (deletedPosts.has(block.hash)) continue; // Hide deleted blocks from the feed
             
             for (const tx of block.transactions) {
-                if (['SONG_UPLOAD', 'TEXT_POST', 'PROFILE_UPDATE', 'FOLLOW_USER', 'LIKE_POST', 'LIKE_IMAGE', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'THEME_UPDATE', 'SHOUTBOX_POST', 'SET_TOP_8', 'STREAM_COMPLETED', 'BUY_SONG_SHARE', 'TRANSFER_COIN', 'REQUEST_SONG_SHARE', 'ACCEPT_SHARE_REQUEST'].includes(tx.type)) {
+                if (['SONG_UPLOAD', 'TEXT_POST', 'PROFILE_UPDATE', 'FOLLOW_USER', 'LIKE_POST', 'LIKE_IMAGE', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'THEME_UPDATE', 'SHOUTBOX_POST', 'SET_TOP_8', 'STREAM_COMPLETED', 'BUY_SONG_SHARE', 'TRANSFER_COIN', 'REQUEST_SONG_SHARE', 'ACCEPT_SHARE_REQUEST', 'STORY_POST'].includes(tx.type)) {
                     
                     const senderBalance = blockchainService.calculateBalance(tx.sender, chain);
                     const adminAddress = blockchainService.getAdminAddress(chain);

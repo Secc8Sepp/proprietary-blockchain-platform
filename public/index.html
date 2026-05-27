@@ -345,7 +345,10 @@
                                             <input id="composer-zip-upload" type="file" accept=".zip,.rar,.7z" style="display:none;" />
                                         </label>
                                     </div>
-                                    <button id="btn-publish-post" style="width: auto; padding: 12px 25px;">Broadcast Block</button>
+                                    <div style="display: flex; gap: 10px;">
+                                        <button id="btn-publish-story" class="secondary" style="width: auto; padding: 12px 15px;">Deploy Story</button>
+                                        <button id="btn-publish-post" style="width: auto; padding: 12px 25px;">Broadcast Block</button>
+                                    </div>
                                 </div>
                                 <div id="composer-audio-meta" style="display:none; margin-top:15px; padding:15px; background:rgba(0,0,0,0.3); border-radius:8px;">
                                     <input id="audio-meta-artist" placeholder="Artist Name (if different from profile)" style="margin-bottom:8px;"/>
@@ -665,6 +668,13 @@
                     <div style="color: var(--text-muted); font-size: 13px; text-align: center;">No pending requests.</div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Stories Modal -->
+    <div id="story-modal" class="modal-overlay hidden" style="z-index: 3000;" onclick="if(event.target===this) closeStoryModal()">
+        <div class="modal-content" style="width: auto; max-width: 600px; background: rgba(11,12,16,0.95);" id="story-modal-content">
+            <!-- Dynamic Content -->
         </div>
     </div>
 
