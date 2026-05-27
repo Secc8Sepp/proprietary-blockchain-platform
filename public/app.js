@@ -182,6 +182,11 @@ function getDragAfterElement(container, y, selector) {
     document.addEventListener('mousemove', resetIdleTimer);
     document.addEventListener('keypress', resetIdleTimer);
     
+    const chatInput = document.getElementById('chat-input');
+    if (chatInput) {
+        chatInput.addEventListener('input', handleChatTyping);
+    }
+
     // Discord Chat Socket Listeners
     socket.on('chat_history', (msgs) => {
         const chatLog = document.getElementById('ui-chat-log');
@@ -253,6 +258,52 @@ function getDragAfterElement(container, y, selector) {
         }
     });
     
+    socket.on('user_typing', (data) => {
+        if (data.serverId !== currentChatServer || data.channelId !== currentChatChannel) return;
+        if (data.sender === userKeys.publicKey) return;
+
+        const chatLog = document.getElementById('ui-chat-log');
+        if (!chatLog) return;
+
+        let indicator = document.getElementById(`typing_${data.sender}`);
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = `typing_${data.sender}`;
+            indicator.className = 'chat-msg typing-indicator';
+            indicator.style.color = 'var(--text-muted)';
+            indicator.style.fontStyle = 'italic';
+            indicator.style.fontSize = '12px';
+            indicator.style.padding = '5px 10px';
+            indicator.innerText = `${resolveProfile(data.sender).username} is typing...`;
+            chatLog.appendChild(indicator);
+            chatLog.scrollTop = chatLog.scrollHeight;
+        }
+
+        clearTimeout(indicator.timeout);
+        indicator.timeout = setTimeout(() => {
+            indicator.remove();
+        }, 2000);
+    });
+
+    socket.on('message_read', (data) => {
+        const { from, time } = data;
+        if (dmHistory[from]) {
+            const msg = dmHistory[from].find(m => m.time === time && m.sender === userKeys.publicKey);
+            if (msg) {
+                msg.read = true;
+                const msgId = msg.time + '_' + msg.sender.substring(0, 5);
+                const msgEl = document.getElementById(`msg_${msgId}`);
+                if (msgEl) {
+                    const readReceipt = msgEl.querySelector('.read-receipt');
+                    if (readReceipt) {
+                        readReceipt.innerText = ' ✓✓';
+                        readReceipt.style.color = 'var(--primary)';
+                    }
+                }
+            }
+        }
+    });
+
     socket.on('swarm_update', (nodes) => {
         const countHeader = document.getElementById('ui-online-count');
         const container = document.getElementById('ui-online-users');
@@ -1451,6 +1502,17 @@ function handleChatEnter(e) {
     }
 }
 
+let typingTimer = null;
+function handleChatTyping() {
+    if (!userKeys.publicKey || !currentChatServer || !currentChatChannel) return;
+    if (!typingTimer) {
+        socket.emit('user_typing', { serverId: currentChatServer, channelId: currentChatChannel, sender: userKeys.publicKey });
+        typingTimer = setTimeout(() => {
+            typingTimer = null;
+        }, 1500);
+    }
+}
+
 function promptCreateServer() {
     if(!userKeys.publicKey) return alert("Please unlock your identity to create a server.");
     const serverName = prompt("Enter new Server Name:");
@@ -1700,6 +1762,11 @@ function appendChatMessage(msg) {
     const senderName = isMe ? 'You' : resolveProfile(msg.sender).username;
     const timeStr = new Date(msg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     
+    let readReceiptHtml = '';
+    if (currentChatServer === '@dms' && isMe) {
+        readReceiptHtml = msg.read ? `<span class="read-receipt" style="color: var(--primary); font-size: 10px;"> ✓✓</span>` : `<span class="read-receipt" style="color: var(--text-muted); font-size: 10px;"> ✓</span>`;
+    }
+
     el.innerHTML = `
         <div class="chat-avatar" style="background: url('${getAvatarUrl(msg.sender)}'); background-size: cover; border-radius: 50%; cursor: pointer;" onclick="inspectTargetNode('${msg.sender}')"></div>
         <div class="chat-content" style="width: 100%;">
@@ -1707,7 +1774,7 @@ function appendChatMessage(msg) {
                 <div>
                     <span class="sender" style="cursor:pointer;" onclick="inspectTargetNode('${msg.sender}')">${senderName}</span>
                     ${renderBadges(msg.roles || [])}
-                    <span class="time">${timeStr}</span>
+                    <span class="time">${timeStr}${readReceiptHtml}</span>
                 </div>
                 <span class="chat-react-trigger" onclick="sendReaction('${msgId}')" title="Add Reaction">➕😀</span>
             </div>
@@ -1715,7 +1782,13 @@ function appendChatMessage(msg) {
             <div id="reactions_${msgId}" style="display:flex; gap: 5px; font-size: 14px; margin-top: 6px;"></div>
         </div>
     `;
-    chatLog.appendChild(el);
+    
+    const typingIndicators = chatLog.querySelectorAll('.typing-indicator');
+    if (typingIndicators.length > 0) {
+        chatLog.insertBefore(el, typingIndicators[0]);
+    } else {
+        chatLog.appendChild(el);
+    }
 }
 
 function playProfileTrack(index) {
@@ -2854,17 +2927,28 @@ socket.on('direct_message', (msg) => {
     const otherAddr = msg.sender === userKeys.publicKey ? msg.to : msg.sender;
     if (!dmHistory[otherAddr]) dmHistory[otherAddr] = [];
     msg.roles = msg.roles || [];
-    dmHistory[otherAddr].push(msg);
+
+    const exists = dmHistory[otherAddr].find(m => m.time === msg.time && m.sender === msg.sender);
+    if (!exists) {
+        dmHistory[otherAddr].push(msg);
+    }
 
     if (currentChatServer === '@dms' && currentChatChannel === otherAddr) {
-        appendChatMessage(msg);
-        const chatLog = document.getElementById('ui-chat-log');
-        chatLog.scrollTop = chatLog.scrollHeight;
+        if (!exists) {
+            appendChatMessage(msg);
+            const chatLog = document.getElementById('ui-chat-log');
+            chatLog.scrollTop = chatLog.scrollHeight;
+        }
+        if (msg.sender !== userKeys.publicKey) {
+            socket.emit('message_read', { to: msg.sender, time: msg.time });
+        }
     } else {
-        const badge = document.getElementById('ui-inbox-badge');
-        if (badge && msg.sender !== userKeys.publicKey) { 
-            badge.innerText = parseInt(badge.innerText) + 1; 
-            badge.classList.remove('hidden'); 
+        if (!exists) {
+            const badge = document.getElementById('ui-inbox-badge');
+            if (badge && msg.sender !== userKeys.publicKey) { 
+                badge.innerText = parseInt(badge.innerText) + 1; 
+                badge.classList.remove('hidden'); 
+            }
         }
     }
     if (currentChatServer === '@dms') renderDMList();

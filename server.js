@@ -354,6 +354,32 @@ io.on('connection', (socket) => {
         sendPushNotification(data.target, data.payload);
     });
 
+    socket.on('user_typing', (data) => {
+        const { serverId, channelId, sender } = data;
+        if (serverId === '@dms') {
+            const targetSocketId = Object.keys(dbMemory.connectedNodes).find(
+                id => dbMemory.connectedNodes[id].address === channelId
+            );
+            if (targetSocketId) {
+                io.to(targetSocketId).emit('user_typing', { serverId: '@dms', channelId: sender, sender });
+            }
+        } else {
+            socket.to(`${serverId}_${channelId}`).emit('user_typing', data);
+        }
+    });
+
+    socket.on('message_read', (data) => {
+        const { to, time } = data;
+        const senderNode = dbMemory.connectedNodes[socket.id];
+        if (!senderNode) return;
+        const targetSocketId = Object.keys(dbMemory.connectedNodes).find(
+            id => dbMemory.connectedNodes[id].address === to
+        );
+        if (targetSocketId) {
+            io.to(targetSocketId).emit('message_read', { from: senderNode.address, time });
+        }
+    });
+
     // --- 1-ON-1 DIRECT MESSAGING & REACTIONS ---
     socket.on('send_direct_message', (data) => {
         const senderNode = dbMemory.connectedNodes[socket.id];
