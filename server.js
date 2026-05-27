@@ -77,7 +77,7 @@ app.set('socketio', io);
 // ==========================================
 // P2P FULL NODE SYNC (Backend Mesh)
 // ==========================================
-const defaultPeers = ['https://vod-net.onrender.com']; // The main gateway node
+const defaultPeers = []; // Localhost standalone mode
 const PEERS = process.env.PEERS ? process.env.PEERS.split(',') : defaultPeers;
 app.set('peers', PEERS);
 

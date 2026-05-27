@@ -495,7 +495,6 @@ async function subscribeToPush(publicKey) {
         const { publicKey: vapidPublicKey } = await res.json();
         const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
 
-        const subscription = await swRegistration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: convertedVapidKey });
         let subscription;
         try {
             subscription = await swRegistration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: convertedVapidKey });
@@ -2676,7 +2675,8 @@ async function loadHotOrNot() {
 
 async function populateHotOrNotDropdown() {
     const select = document.getElementById('hotornot-submit-select');
-    if (!select) return;
+    const catSelect = document.getElementById('hotornot-category-select');
+    if (!select || !catSelect) return;
     if (!userKeys.publicKey) {
         select.innerHTML = '<option value="">Login to submit</option>';
         return;
@@ -2684,13 +2684,29 @@ async function populateHotOrNotDropdown() {
     try {
         const response = await fetch(`/api/social/profile?publicKey=${encodeURIComponent(userKeys.publicKey)}`);
         const profile = await response.json();
-        const myTracks = profile.uploadedTracks || [];
-        if (myTracks.length === 0) {
-            select.innerHTML = '<option value="">No tracks uploaded</option>';
-        } else {
-            select.innerHTML = '<option value="">Select your track...</option>' + 
-                myTracks.map(t => `<option value="${t.hash}">${escapeHtml(t.title)}</option>`).join('');
-        }
+        
+        catSelect.onchange = () => {
+            const category = catSelect.value;
+            if (category === 'music') {
+                const myTracks = profile.uploadedTracks || [];
+                if (myTracks.length === 0) {
+                    select.innerHTML = '<option value="">No tracks uploaded</option>';
+                } else {
+                    select.innerHTML = '<option value="">Select your track...</option>' + 
+                        myTracks.map(t => `<option value="${t.hash}">${escapeHtml(t.title)}</option>`).join('');
+                }
+            } else if (category === 'looks') {
+                const myImages = profile.uploadedImages || [];
+                let options = '<option value="">Select your image...</option>';
+                if (profile.avatarHash) options += `<option value="${profile.avatarHash}">Current Avatar</option>`;
+                if (myImages.length > 0) {
+                    options += myImages.map(img => `<option value="${img.hash}">Gallery Image (${new Date(img.timestamp).toLocaleDateString()})</option>`).join('');
+                }
+                if (!profile.avatarHash && myImages.length === 0) options = '<option value="">No images uploaded</option>';
+                select.innerHTML = options;
+            }
+        };
+        catSelect.onchange();
     } catch(e) {
         select.innerHTML = '<option value="">Error loading tracks</option>';
     }
@@ -2698,10 +2714,11 @@ async function populateHotOrNotDropdown() {
 
 function renderHotOrNot() {
     const filter = document.getElementById('hotornot-filter').value;
+    const categoryFilter = document.getElementById('hotornot-view-category').value;
     const container = document.getElementById('ui-hotornot-content');
     if (!container) return;
 
-    let items = [...hotOrNotData];
+    let items = [...hotOrNotData].filter(i => (i.category || 'music') === categoryFilter);
     const now = Date.now();
     const oneWeek = 7 * 24 * 60 * 60 * 1000;
     
@@ -2716,7 +2733,7 @@ function renderHotOrNot() {
     }
 
     if (items.length === 0) {
-        container.innerHTML = '<div style="color:var(--text-muted);">No songs found in this category.</div>';
+        container.innerHTML = '<div style="color:var(--text-muted);">No entries found in this category.</div>';
         return;
     }
 
@@ -2725,38 +2742,51 @@ function renderHotOrNot() {
         if (filter === 'vote') {
             voteHtml = `
                 <div style="display: flex; gap: 15px; margin-top: 15px;">
-                    <button style="flex:1; background: var(--danger); color: #fff;" onclick="castHotOrNotVote('${item.id}', '${item.submitter}', 1, '${item.audioHash}')">🔥 HOT</button>
-                    <button class="secondary" style="flex:1; border-color: var(--danger); color: var(--danger);" onclick="castHotOrNotVote('${item.id}', '${item.submitter}', -1, '${item.audioHash}')">🧊 NOT</button>
+                    <button style="flex:1; background: var(--danger); color: #fff;" onclick="castHotOrNotVote('${item.id}', '${item.submitter}', 1, '${item.targetHash}')">🔥 HOT</button>
+                    <button class="secondary" style="flex:1; border-color: var(--danger); color: var(--danger);" onclick="castHotOrNotVote('${item.id}', '${item.submitter}', -1, '${item.targetHash}')">🧊 NOT</button>
                 </div>
             `;
         } else {
             voteHtml = `<div style="font-size:12px; color:var(--text-muted); margin-top: 10px;">🔥 ${item.upvotes} Hot | 🧊 ${item.downvotes} Not</div>`;
         }
 
-        let displayArtist = item.trackDetails.artist ? escapeHtml(item.trackDetails.artist) : resolveProfile(item.submitter).username;
-        let coverHtml = item.trackDetails.coverHash ? `<img src="/tracks/${item.trackDetails.coverHash}" style="width: 80px; height: 80px; border-radius: 6px; object-fit: cover;">` : `<div style="width:80px; height:80px; border-radius:6px; background:var(--bg-darker); display:flex; align-items:center; justify-content:center; border:1px solid var(--border);">🎵</div>`;
+        if (categoryFilter === 'music') {
+            let displayArtist = item.trackDetails && item.trackDetails.artist ? escapeHtml(item.trackDetails.artist) : resolveProfile(item.submitter).username;
+            let title = item.trackDetails ? item.trackDetails.title : "Unknown Track";
+            let coverHtml = item.trackDetails && item.trackDetails.coverHash ? `<img src="/tracks/${item.trackDetails.coverHash}" style="width: 80px; height: 80px; border-radius: 6px; object-fit: cover;">` : `<div style="width:80px; height:80px; border-radius:6px; background:var(--bg-darker); display:flex; align-items:center; justify-content:center; border:1px solid var(--border);">🎵</div>`;
 
-        return `
-            <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--danger); padding: 15px; border-radius: 8px;">
-                <div style="display: flex; gap: 15px;">
-                    ${coverHtml}
-                    <div style="flex:1;">
-                        <div style="font-size: 18px; font-weight: bold; color: #fff;">${escapeHtml(item.trackDetails.title)}</div>
-                        <div style="font-size: 12px; color: var(--primary); margin-bottom: 5px;">By ${displayArtist}</div>
-                        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Submitted by @${resolveProfile(item.submitter).username}</div>
-                        <button style="padding: 5px 15px; font-size: 12px; background: var(--danger); color: #fff;" onclick="playTrack('${escapeJsArg(item.trackDetails.title)}', '${item.audioHash}', '${item.submitter}', '${escapeJsArg(displayArtist)}')">▶ Play Track</button>
+            return `
+                <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--danger); padding: 15px; border-radius: 8px;">
+                    <div style="display: flex; gap: 15px;">
+                        ${coverHtml}
+                        <div style="flex:1;">
+                            <div style="font-size: 18px; font-weight: bold; color: #fff;">${escapeHtml(title)}</div>
+                            <div style="font-size: 12px; color: var(--primary); margin-bottom: 5px;">By ${displayArtist}</div>
+                            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Submitted by @${resolveProfile(item.submitter).username}</div>
+                            <button style="padding: 5px 15px; font-size: 12px; background: var(--danger); color: #fff;" onclick="playTrack('${escapeJsArg(title)}', '${item.targetHash}', '${item.submitter}', '${escapeJsArg(displayArtist)}')">▶ Play Track</button>
+                        </div>
                     </div>
+                    ${voteHtml}
                 </div>
-                ${voteHtml}
-            </div>
-        `;
+            `;
+        } else {
+            let imgHtml = item.targetHash ? `<img src="/tracks/${item.targetHash}" style="max-width: 100%; max-height: 400px; border-radius: 8px; object-fit: contain; border: 1px solid var(--danger); margin-top: 10px;">` : '';
+            return `
+                <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--danger); padding: 15px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 18px; font-weight: bold; color: var(--primary); margin-bottom: 5px;">@${resolveProfile(item.submitter).username}</div>
+                    <div style="font-size: 11px; color: var(--text-muted);">Looks Battle</div>
+                    ${imgHtml}
+                    ${voteHtml}
+                </div>
+            `;
+        }
     }).join('');
 }
 
-async function castHotOrNotVote(submissionId, submitter, vote, audioHash) {
+async function castHotOrNotVote(submissionId, submitter, vote, targetHash) {
     if (!userKeys.publicKey) return alert("Must be logged in to vote.");
     try {
-        const msgData = { sender: userKeys.publicKey, receiver: submitter, type: 'VOTE_HOT_OR_NOT', data: { submissionId, vote, audioHash }, timestamp: Date.now() };
+        const msgData = { sender: userKeys.publicKey, receiver: submitter, type: 'VOTE_HOT_OR_NOT', data: { submissionId, vote, targetHash }, timestamp: Date.now() };
         const txFields = { ...msgData, signature: await generateClientSignature(userKeys.privateKey, msgData) };
         const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
         if (!res.ok) throw new Error((await res.json()).error);
@@ -2769,15 +2799,17 @@ async function castHotOrNotVote(submissionId, submitter, vote, audioHash) {
 async function submitHotOrNotFromDropdown() {
     if (!userKeys.publicKey) return alert("Must be logged in.");
     const select = document.getElementById('hotornot-submit-select');
-    const audioHash = select.value;
-    if (!audioHash) return alert("Please select a valid track to submit.");
+    const catSelect = document.getElementById('hotornot-category-select');
+    const targetHash = select.value;
+    const category = catSelect ? catSelect.value : 'music';
+    if (!targetHash) return alert("Please select a valid item to submit.");
 
     try {
-        const msgData = { sender: userKeys.publicKey, receiver: '0x00', type: 'SUBMIT_HOT_OR_NOT', data: { audioHash: audioHash }, timestamp: Date.now() };
+        const msgData = { sender: userKeys.publicKey, receiver: '0x00', type: 'SUBMIT_HOT_OR_NOT', data: { category: category, targetHash: targetHash, audioHash: category === 'music' ? targetHash : undefined }, timestamp: Date.now() };
         const txFields = { ...msgData, signature: await generateClientSignature(userKeys.privateKey, msgData) };
         const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
         if (!res.ok) throw new Error((await res.json()).error);
-        alert("Track submitted to Hot or Not!");
+        alert("Item submitted to Hot or Not!");
         loadHotOrNot();
     } catch(err) { alert("Submission failed: " + err.message); }
 }

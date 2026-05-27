@@ -510,9 +510,12 @@ class ProfileService {
                     }
                 }
                 if (tx.type === 'SUBMIT_HOT_OR_NOT') {
+                    const category = tx.data.category || 'music';
+                    const targetHash = tx.data.targetHash || tx.data.audioHash;
                     submissions[block.hash] = {
                         id: block.hash,
-                        audioHash: tx.data.audioHash,
+                        category: category,
+                        targetHash: targetHash,
                         submitter: tx.sender,
                         timestamp: tx.timestamp,
                         score: 0,
@@ -542,7 +545,7 @@ class ProfileService {
         return Object.values(submissions).map(s => {
             return {
                 ...s,
-                trackDetails: trackDetails[s.audioHash] || { title: "Unknown Track", creator: s.submitter },
+                trackDetails: s.category === 'music' ? (trackDetails[s.targetHash] || { title: "Unknown Track", creator: s.submitter }) : null,
                 votes: votes[s.id] || {}
             }
         }).sort((a,b) => b.timestamp - a.timestamp);

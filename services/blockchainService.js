@@ -259,9 +259,10 @@ class BlockchainService extends EventEmitter {
         }
 
         if (type === 'SUBMIT_HOT_OR_NOT') {
+            const category = data.category || 'music';
             const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
-            const recentSubmissions = chain.flatMap(b => b.transactions).filter(t => t.type === 'SUBMIT_HOT_OR_NOT' && t.sender === sender && t.timestamp > oneDayAgo);
-            if (recentSubmissions.length > 0) throw new Error("You can only submit 1 song per day to Hot or Not.");
+            const recentSubmissions = chain.flatMap(b => b.transactions).filter(t => t.type === 'SUBMIT_HOT_OR_NOT' && t.sender === sender && t.timestamp > oneDayAgo && (t.data.category || 'music') === category);
+            if (recentSubmissions.length > 0) throw new Error(`You can only submit 1 item per day to the ${category} category.`);
         }
 
         const latestBlock = this.getLatestBlock();
