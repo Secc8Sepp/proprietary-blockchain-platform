@@ -1,0 +1,17 @@
+{
+  "name": "VOD Social Network",
+  "short_name": "VOD Social",
+  "description": "Vibe or Die P2P Social Blockchain",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0c10",
+  "theme_color": "#66fcf1",
+  "icons": [
+    {
+      "src": "https://api.dicebear.com/7.x/identicon/svg?seed=vod&backgroundColor=1f2833",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>VOD Social // Vibe or Die</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#66fcf1">
+    
+    <style>
+        /* ==========================================
+           VOD Social Theme Variables & Reset
+           ========================================== */
+        :root {
+            --bg-body: #0b0c10;
+            --bg-card: #1f2833;
+            --bg-darker: #050608;
+            --primary: #66fcf1;
+            --primary-hover: #45b29d;
+            --text-dark: #c5c6c7;
+            --text-muted: #85929e;
+            --border: #45a29e;
+            --success: #1fbc73;
+            --warning: #ffaa00;
+            --danger: #ff0055;
+            --myspace-blue: #1d4e89;
+            --nft-hex: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+        }
+        * { box-sizing: border-box; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { margin: 0; background-color: var(--bg-body); color: var(--text-dark); overflow-x: hidden; padding-bottom: 90px; }
+        
+        /* Typography & Scrollbars */
+        h1, h2, h3, h4 { margin: 0 0 10px 0; color: #fff; }
+        a { color: var(--primary); text-decoration: none; cursor: pointer; transition: 0.2s; }
+        a:hover { text-decoration: underline; color: #fff; }
+        .hidden { display: none !important; }
+        
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-body); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+
+        /* Universal Form Elements */
+        button { background: var(--primary); color: #0b0c10; border: none; padding: 10px 20px; border-radius: 9999px; font-weight: bold; cursor: pointer; transition: 0.2s; text-transform: uppercase; letter-spacing: 0.5px; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px;}
+        button:hover { background: var(--primary-hover); color: #fff; box-shadow: 0 0 10px rgba(102, 252, 241, 0.4); }
+        button.secondary { background: transparent; color: var(--primary); border: 1px solid var(--border); }
+        button.secondary:hover { background: rgba(102, 252, 241, 0.1); color: var(--primary); }
+        input, textarea { width: 100%; padding: 12px; margin: 5px 0 15px 0; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; background: rgba(11, 12, 16, 0.8); color: #fff; outline: none; transition: 0.2s; }
+        input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 8px rgba(102, 252, 241, 0.2); }
+
+        /* NFT Hexagon Avatar Class */
+        .nft-avatar { clip-path: var(--nft-hex); border-radius: 0 !important; border: none !important; background: linear-gradient(45deg, var(--primary), var(--warning)); padding: 2px; }
+        .nft-avatar img { clip-path: var(--nft-hex); width: 100%; height: 100%; object-fit: cover; }
+
+        /* ==========================================
+           Authentication Screen (Secure Web3 Auth)
+           ========================================== */
+        #auth-screen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: radial-gradient(circle at center, #1f2833 0%, #0b0c10 100%); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .auth-card { background: var(--bg-card); padding: 50px 40px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.8), 0 0 20px rgba(102, 252, 241, 0.1); width: 100%; max-width: 450px; text-align: center; border: 1px solid rgba(102, 252, 241, 0.2); }
+        .wallet-btn { width: 100%; margin-bottom: 15px; padding: 15px; font-size: 15px; background: #2c3e50; color: #fff; border: 1px solid #45a29e; }
+        .wallet-btn:hover { background: #34495e; border-color: var(--primary); }
+
+        /* ==========================================
+           Layout & Navigation
+           ========================================== */
+        .navbar { background: rgba(31, 40, 51, 0.95); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.5); padding: 0 20px; height: 70px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
+        .nav-logo { font-size: 24px; font-weight: 900; color: var(--primary); letter-spacing: 2px; text-transform: uppercase; text-shadow: 0 0 10px rgba(102, 252, 241, 0.3); }
+        .nav-search input { padding: 10px 20px; border-radius: 9999px; margin: 0; width: 100%; max-width: 350px; background: #0b0c10; border-color: rgba(69, 162, 158, 0.5); }
+        .nav-wallet { font-weight: bold; color: var(--text-dark); font-size: 14px; display: flex; align-items: center; gap: 15px; background: rgba(0,0,0,0.3); padding: 8px 15px; border-radius: 999px; border: 1px solid var(--border); }
+        .wallet-address { background: rgba(102, 252, 241, 0.1); padding: 4px 10px; border-radius: 999px; color: var(--primary); font-family: monospace; }
+
+        .container { display: grid; grid-template-columns: 280px minmax(500px, 600px) 320px; gap: 30px; max-width: 1350px; margin: 30px auto; padding: 0 20px; align-items: start; }
+        .card { background: var(--bg-card); border-radius: 16px; padding: 25px; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.4); border: 1px solid rgba(69, 162, 158, 0.15); transition: transform 0.2s; }
+
+        /* Left Sidebar: Nav */
+        .side-nav { display: flex; flex-direction: column; gap: 8px; position: sticky; top: 100px; }
+        .side-nav-item { padding: 15px 20px; font-size: 16px; font-weight: 600; border-radius: 12px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 15px; color: var(--text-dark); border: 1px solid transparent; }
+        .side-nav-item:hover { background: rgba(102, 252, 241, 0.05); border-color: rgba(102, 252, 241, 0.2); }
+        .side-nav-item.active { background: rgba(102, 252, 241, 0.1); color: var(--primary); border-color: var(--primary); }
+
+        /* Date Picker / Calendar styling */
+        .event-calendar { background: rgba(0,0,0,0.8); border: 1px solid var(--border); color: #fff; padding: 5px 10px; border-radius: 8px; outline: none; }
+
+        /* ==========================================
+           Discord-Style Chat Module
+           ========================================== */
+        .chat-module { margin-top: 20px; display: flex; height: 450px; border: 1px solid rgba(69,162,158,0.3); border-radius: 12px; background: var(--bg-darker); overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        .server-list { width: 65px; background: #050608; border-right: 1px solid rgba(69,162,158,0.3); padding-top: 10px; display: flex; flex-direction: column; align-items: center; gap: 10px; overflow-y: auto; }
+        .server-icon { width: 45px; height: 45px; border-radius: 50%; background: #222; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: bold; font-size: 14px; transition: 0.2s; border: 2px solid transparent; overflow: hidden; flex-shrink: 0; }
+        .server-icon:hover, .server-icon.active { border-radius: 30%; border-color: var(--primary); }
+        .server-icon img { width: 100%; height: 100%; object-fit: cover; }
+        .chat-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .chat-header { background: var(--bg-card); padding: 12px; font-weight: bold; font-size: 14px; border-bottom: 1px solid rgba(69,162,158,0.3); display: flex; justify-content: space-between; align-items: center; }
+        .chat-channels { display: flex; flex-direction: column; background: var(--bg-card); border-bottom: 1px solid rgba(69,162,158,0.3); max-height: 120px; overflow-y: auto; padding: 5px 0; }
+        .channel-tab { padding: 8px 12px; font-size: 13px; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; gap: 8px; margin: 0 5px; border-radius: 5px; }
+        .channel-tab:hover { background: rgba(255,255,255,0.1); color: #fff; }
+        .channel-tab.active { color: var(--primary); font-weight: bold; background: rgba(102, 252, 241, 0.1); }
+        .channel-tab.locked { color: var(--warning); }
+        
+        .chat-messages { flex-grow: 1; overflow-y: auto; padding: 15px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth; }
+        .chat-msg { display: flex; gap: 10px; word-break: break-word; }
+        .chat-avatar { width: 30px; height: 30px; border-radius: 50%; background: #222; flex-shrink: 0; }
+        .chat-content .sender { color: var(--primary); font-weight: bold; cursor: pointer; }
+        .chat-content .sender:hover { text-decoration: underline; }
+        .chat-content .time { font-size: 10px; color: var(--text-muted); margin-left: 5px; }
+        
+        .chat-input-wrapper { display: flex; border-top: 1px solid rgba(69,162,158,0.3); background: var(--bg-card); padding: 10px; }
+        .chat-input-wrapper input { margin: 0; border: none; background: var(--bg-darker); border-radius: 8px; flex: 1; font-size: 13px; padding: 10px; }
+
+        /* ==========================================
+           Center Content (Feed & Profile)
+           ========================================== */
+        /* Composer */
+        .composer-textarea { width: 100%; border: none; resize: none; font-size: 18px; outline: none; background: transparent; padding-top: 10px; min-height: 90px; margin-bottom: 0; color: #fff; }
+        .composer-actions { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(69, 162, 158, 0.3); padding-top: 15px; margin-top: 10px; }
+        .attachment-btn { cursor: pointer; width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; transition: 0.2s; color: var(--primary); background: rgba(102, 252, 241, 0.1); font-size: 18px; border: 1px solid transparent; }
+        .attachment-btn:hover { background: rgba(102, 252, 241, 0.2); border-color: var(--primary); transform: scale(1.05); }
+
+        /* Post */
+        .post { display: flex; gap: 15px; border-bottom: 1px solid rgba(69, 162, 158, 0.15); padding: 25px 0; animation: fadeIn 0.5s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .post:last-child { border-bottom: none; }
+        .post-avatar { width: 50px; height: 50px; border-radius: 50%; background: #111; flex-shrink: 0; border: 2px solid var(--border); overflow: hidden; }
+        .post-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .post-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .post-name { font-weight: bold; font-size: 16px; cursor: pointer; color: #fff; }
+        .post-meta { color: var(--text-muted); font-size: 12px; font-family: monospace; }
+        .post-body { font-size: 15px; line-height: 1.6; color: #e5e7eb; }
+
+        /* Profile & MySpace Features */
+        .profile-cover { height: 200px; background: linear-gradient(135deg, #1d4e89 0%, var(--primary) 100%); border-radius: 16px 16px 0 0; background-size: cover; background-position: center; position: relative; }
+        .profile-avatar-large { width: 130px; height: 130px; border-radius: 50%; border: 5px solid var(--bg-card); position: absolute; top: 135px; left: 30px; background: #0b0c10; box-shadow: 0 5px 15px rgba(0,0,0,0.5); z-index: 10; overflow: hidden; }
+        .profile-actions { display: flex; justify-content: flex-end; padding: 15px 20px; gap: 15px; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(69,162,158,0.2); }
+        .profile-info { padding: 60px 25px 20px 25px; }
+        
+        /* MySpace Top 8 */
+        .top8-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-top: 15px; }
+        .top8-item { text-align: center; }
+        .top8-avatar { width: 100%; aspect-ratio: 1; border-radius: 12px; background: #111; border: 2px solid var(--border); margin-bottom: 8px; cursor: pointer; transition: 0.2s; object-fit: cover; }
+        .top8-avatar:hover { transform: scale(1.05); border-color: var(--primary); }
+        .top8-name { font-size: 12px; font-weight: bold; color: var(--primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* Profile Anthem Box */
+        .profile-anthem-box { background: rgba(0,0,0,0.4); border: 1px solid var(--primary); padding: 15px; border-radius: 8px; margin-top: 15px; display: flex; align-items: center; gap: 15px; box-shadow: 0 0 15px rgba(102, 252, 241, 0.1); }
+        .anthem-play-btn { width: 40px; height: 40px; border-radius: 50%; background: var(--primary); color: #000; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 20px; }
+
+        /* Right Sidebar */
+        .right-sidebar { position: sticky; top: 100px; }
+        .user-row { display: flex; align-items: center; justify-content: space-between; padding: 10px; border-radius: 8px; transition: 0.2s; margin-bottom: 5px; cursor: pointer; }
+        .user-row:hover { background: rgba(102, 252, 241, 0.05); }
+        .user-info { display: flex; align-items: center; gap: 12px; }
+        .user-info img { width: 35px; height: 35px; border-radius: 50%; border: 1px solid var(--border); }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--success); box-shadow: 0 0 5px var(--success); }
+
+        /* ==========================================
+           L2E Bottom Banner
+           ========================================== */
+        .stream-banner { position: fixed; bottom: 0; left: 0; width: 100vw; height: 90px; background: var(--bg-darker); border-top: 2px solid var(--primary); display: flex; justify-content: space-between; align-items: center; padding: 0 40px; z-index: 500; box-shadow: 0 -5px 20px rgba(0,0,0,0.8); }
+        .track-info { display: flex; align-items: center; gap: 20px; }
+        .track-art { width: 60px; height: 60px; background: #1f2833; border: 1px solid var(--border); border-radius: 6px; }
+        .l2e-status { color: var(--success); font-size: 12px; font-weight: bold; letter-spacing: 1px; font-family: monospace; }
+        .audio-controls { width: 500px; }
+        .stream-banner audio { width: 100%; height: 40px; outline: none; }
+
+        /* Social Interactions, Badges & Modals */
+        .post-interactions { display: flex; gap: 15px; margin-top: 10px; border-top: 1px solid rgba(69, 162, 158, 0.15); padding-top: 12px; }
+        .interaction-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 0; text-transform: none; transition: 0.2s; }
+        .interaction-btn:hover { color: var(--primary); background: none; box-shadow: none; }
+        .reply-box { margin-top: 15px; display: none; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; border: 1px solid rgba(69, 162, 158, 0.2); }
+        .reply-box textarea { min-height: 60px; margin-bottom: 10px; }
+        .user-badge { display: inline-flex; align-items: center; justify-content: center; font-size: 12px; margin: 0 4px; padding: 2px 5px; background: rgba(255,255,255,0.1); border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); cursor: help;}
+        .mention { color: var(--primary); font-weight: bold; cursor: pointer; background: rgba(102, 252, 241, 0.1); padding: 0 4px; border-radius: 4px; }
+        .chat-react-trigger { opacity: 0; transition: opacity 0.2s; cursor: pointer; font-size: 12px; }
+        .chat-msg:hover .chat-react-trigger { opacity: 1; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; z-index: 2000; }
+        .modal-content { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; width: 400px; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.9); }
+        .modal-header { padding: 15px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-weight: bold; }
+        .modal-body { padding: 15px; overflow-y: auto; flex: 1; min-height: 200px; }
+        .nav-icon-wrapper { display: flex; gap: 10px; align-items: center; margin-right: 20px; }
+        .nav-icon { position: relative; cursor: pointer; font-size: 18px; transition: 0.2s; background: rgba(0,0,0,0.3); width: 35px; height: 35px; border-radius: 50%; border: 1px solid transparent; display: flex; align-items: center; justify-content: center; }
+        .nav-icon:hover { background: rgba(102, 252, 241, 0.1); border-color: var(--primary); }
+        .badge-counter { position: absolute; top: -4px; right: -4px; background: var(--danger); color: white; font-size: 10px; font-weight: bold; padding: 2px 5px; border-radius: 10px; }
+
+        /* Interactive Bulletin Board */
+        .bulletin-board { position: relative; width: 100%; height: 600px; background: #2a1f1a url('https://www.transparenttextures.com/patterns/cork-board.png'); border: 12px solid #1a100c; border-radius: 8px; overflow: hidden; box-shadow: inset 0 0 30px rgba(0,0,0,0.9), 0 10px 20px rgba(0,0,0,0.5); cursor: crosshair; }
+        .bulletin-flyer { position: absolute; max-width: 140px; box-shadow: 2px 4px 10px rgba(0,0,0,0.7); cursor: default; user-select: none; transition: transform 0.2s; }
+        .bulletin-flyer img { width: 100%; display: block; border: 2px solid #eee; }
+        .bulletin-flyer::before { content: ''; position: absolute; top: 4px; left: 50%; transform: translateX(-50%); width: 10px; height: 10px; background: radial-gradient(circle at 30% 30%, #ff5555, #880000); border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.5); z-index: 2; }
+        .flyer-preview-cursor { position: fixed; max-width: 120px; pointer-events: none; z-index: 9999; opacity: 0.7; box-shadow: 0 0 20px var(--primary); display: none; }
+        .flyer-meta-tag { position: absolute; bottom: -20px; left: 0; width: 100%; text-align: center; font-size: 10px; color: #fff; text-shadow: 1px 1px 2px #000; font-weight: bold; background: rgba(0,0,0,0.5); border-radius: 4px; padding: 2px 0; opacity: 0; transition: 0.2s; pointer-events: none; }
+        .bulletin-flyer:hover .flyer-meta-tag { opacity: 1; }
+        .bulletin-flyer:hover { z-index: 50; }
+
+        /* Flyer Mode Fullscreen Focus */
+        .container.flyer-mode { grid-template-columns: 1fr; max-width: 1600px; }
+        .container.flyer-mode .side-nav, .container.flyer-mode .right-sidebar { display: none !important; }
+        .container.flyer-mode .bulletin-board { height: 75vh; border-width: 16px; }
+        .container.flyer-mode .bulletin-flyer { max-width: 250px; }
+        .container.flyer-mode .flyer-preview-cursor { max-width: 250px; }
+
+        /* Zine Specific Styles */
+        .zine-sub-view { animation: fadeIn 0.3s ease; }
+        .article-card { background: rgba(0,0,0,0.4); border: 1px solid var(--border); padding: 20px; border-radius: 12px; display: flex; flex-direction: column; transition: transform 0.2s; }
+        .article-card:hover { border-color: var(--primary); transform: translateY(-3px); }
+        .article-snippet { color: var(--text-muted); font-size: 13px; line-height: 1.5; margin: 15px 0; flex-grow: 1; white-space: pre-wrap; }
+        .article-meta { font-size: 11px; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; }
+
+        /* Events/Map Positioning */
+        .events-view-container { position: relative; width: 100%; height: 600px; border-radius: 12px; overflow: hidden; }
+        #events-3d-map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+        .bulletin-board { position: relative; z-index: 1; background: rgba(42, 31, 26, 0.3) !important; backdrop-filter: blur(3px); border-color: rgba(26, 16, 12, 0.8) !important; }
+    </style>
+
+    <!-- User's dynamic CSS injected here (Sanitized) AFTER main styles to ensure override -->
+    <style id="ui-dynamic-user-theme"></style>
+</head>
+<body>
+
+    <!-- ==========================================
+         AUTHENTICATION (Web3 Safe Flow)
+         ========================================== -->
+    <div id="auth-screen">
+        <div class="auth-card">
+            <h1 style="color: var(--primary); font-size: 38px; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 5px;">VOD Social</h1>
+            <p style="color: var(--text-muted); margin-bottom: 35px; font-size: 14px;">Mint a VOD identity or paste your saved wallet key to unlock the network.</p>
+            
+            <div style="text-align: left; margin-bottom: 20px;">
+                <input id="input-signup-username" placeholder="Choose your username..." style="margin-bottom: 12px;" />
+                <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px;">Upload your profile picture</label>
+                <input id="input-signup-avatar" type="file" accept="image/*" style="margin-bottom: 12px;" />
+            </div>
+            <button class="wallet-btn" id="btn-signup">Mint & Download Identity</button>
+            <div style="margin-top: 35px; text-align: left; border-top: 1px solid var(--border); padding-top: 20px;">
+                <label for="input-login-key" style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px;">Paste saved wallet JSON</label>
+                <textarea id="input-login-key" rows="4" placeholder="Paste your vod_private_key.json content here" style="width:100%; border:1px solid rgba(69,162,158,0.5); background: rgba(11,12,16,0.9); color:#fff; border-radius:12px; padding:10px;"></textarea>
+                <button class="wallet-btn" id="btn-login-submit" style="margin-top: 12px; width: 100%;">Unlock Existing Profile</button>
+            </div>
+            <p id="auth-status" style="font-size: 12px; color: var(--warning); margin-top: 15px; min-height: 15px;"></p>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         MAIN APP SCREEN
+         ========================================== -->
+    <div id="app-screen" class="hidden">
+        
+        <!-- Navbar -->
+        <div class="navbar">
+            <div class="nav-logo">VOD Social</div>
+            <div class="nav-search">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <a onclick="switchTab('hotornot')" style="white-space: nowrap; font-weight: 900; font-size: 13px; color: var(--danger); text-shadow: 0 0 10px var(--danger); cursor:pointer;">🔥 HOT OR NOT</a>
+                    <input id="search-input" type="text" placeholder="🔍 Search block producers, crews, or hashes...">
+                    <a onclick="switchTab('zine')" style="white-space: nowrap; font-weight: 900; font-size: 13px; color: var(--primary); text-shadow: 0 0 10px var(--primary); cursor:pointer;">📰 THE ZINE</a>
+                </div>
+            </div>
+            <div class="nav-wallet">
+                <div class="nav-icon-wrapper">
+                    <div class="nav-icon" onclick="toggleModal('requests-modal')" title="Friend Requests">
+                        👥 <span class="badge-counter hidden" id="ui-requests-badge">0</span>
+                    </div>
+                    <div class="nav-icon" onclick="switchServer('@dms'); resetInboxBadge()" title="Direct Messages">
+                        💬 <span class="badge-counter hidden" id="ui-inbox-badge">0</span>
+                    </div>
+                    <div class="nav-icon" onclick="resetNotifBadge()" title="Notifications">
+                        🔔 <span class="badge-counter hidden" id="ui-notif-badge">0</span>
+                    </div>
+                </div>
+                <div class="wallet-address" id="ui-user-address">0x...</div>
+                <div title="View Transaction History" style="display:flex; align-items:center; gap:5px; cursor:pointer;" onclick="switchTab('wallet', document.getElementById('nav-wallet-tab'))">
+                    <span style="font-size: 18px;">💎</span> <span id="ui-balance-display">0</span> $VOD
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            
+            <!-- LEFT SIDEBAR -->
+            <div class="side-nav">
+                <div class="side-nav-item active" onclick="switchTab('feed', this)">🏠 The Global Feed</div>
+                <div class="side-nav-item" onclick="switchTab('profile', this)">👤 My Profile (MySpace)</div>
+                <div class="side-nav-item" onclick="switchTab('events', this)">📅 Events</div>
+                <div class="side-nav-item" id="nav-wallet-tab" onclick="switchTab('wallet', this)">💼 Wallet & Escrow</div>
+                <div class="side-nav-item" id="nav-market-tab" onclick="switchTab('market', this)">🛒 Digital Marketplace</div>
+                
+                <!-- Discord Hybrid Chat Module -->
+                <div class="chat-module">
+                    <!-- Servers List -->
+                    <div class="server-list" id="ui-server-list">
+                        <!-- Populated dynamically via JS -->
+                        <div class="server-icon" onclick="promptCreateServer()" style="background: rgba(102, 252, 241, 0.1); color: var(--primary); font-size: 24px;" title="Create Server">+</div>
+                    </div>
+                    <!-- Chat Main Area -->
+                    <div class="chat-main">
+                        <div class="chat-header">
+                            <span id="ui-active-server-name">📡 Select a Server</span>
+                            <span style="color: var(--success); cursor: pointer; font-size: 11px; margin-left: 10px;" onclick="joinActiveVoiceChannel()" title="Join Voice Room">🎙️ Connect Voice</span>
+                            <span style="color: var(--primary); cursor: pointer; font-size: 12px;" onclick="promptCreateChannel()" title="Create Channel">➕ Add Channel</span>
+                        </div>
+                        <div class="chat-channels" id="ui-channel-list">
+                            <!-- Populated dynamically via JS -->
+                        </div>
+                        <div class="chat-messages" id="ui-chat-log">
+                            <div class="chat-msg">
+                                <div class="chat-avatar"></div>
+                                <div class="chat-content">
+                                    <div><span class="sender">System</span></div>
+                                    <div style="color: var(--text-muted);">Connect to a server to start chatting.</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chat-input-wrapper">
+                            <input type="text" id="chat-input" placeholder="Select a channel..." onkeypress="handleChatEnter(event)" disabled>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CENTER COLUMN -->
+            <div class="main-content">
+                
+                <!-- VIEW 1: FEED -->
+                <div id="view-feed">
+                    <div class="card" style="padding-bottom: 15px;">
+                        <div style="display: flex; gap: 20px;">
+                            <div class="post-avatar nft-avatar"><img id="composer-avatar" src="https://api.dicebear.com/7.x/identicon/svg?seed=placeholder&backgroundColor=0b0c10" alt="Me"></div>
+                            <div style="flex: 1;">
+                                <textarea id="composer-text" class="composer-textarea" placeholder="Drop a status, leak a new track, or deploy visual art..."></textarea>
+                                <div id="composer-preview-area" style="display:none; color: var(--text-muted); font-size: 13px; margin-bottom: 10px;"></div>
+                                <div class="composer-actions">
+                                    <div style="display: flex; gap: 15px;">
+                                        <label class="attachment-btn" title="Deploy Visual Art">
+                                            🖼️
+                                            <input id="composer-image-upload" type="file" accept="image/*" style="display:none;" />
+                                        </label>
+                                        <label class="attachment-btn" title="Deploy Audio Track">
+                                            🎵
+                                            <input id="composer-audio-upload" type="file" accept="audio/*" style="display:none;" />
+                                        </label>
+                                        <label class="attachment-btn" title="Deploy Video">
+                                            🎥
+                                            <input id="composer-video-upload" type="file" accept="video/*" style="display:none;" />
+                                        </label>
+                                        <label class="attachment-btn" title="Deploy Project File / Zipped Stems">
+                                            📦
+                                            <input id="composer-zip-upload" type="file" accept=".zip,.rar,.7z" style="display:none;" />
+                                        </label>
+                                    </div>
+                                    <button id="btn-publish-post" style="width: auto; padding: 12px 25px;">Broadcast Block</button>
+                                </div>
+                                <div id="composer-audio-meta" style="display:none; margin-top:15px; padding:15px; background:rgba(0,0,0,0.3); border-radius:8px;">
+                                    <input id="audio-meta-artist" placeholder="Artist Name (if different from profile)" style="margin-bottom:8px;"/>
+                                    <input id="audio-meta-genre" placeholder="Genre / Mood / Details" style="margin-bottom:8px;"/>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:5px;">Cover Art Image</label>
+                                    <input id="audio-cover-upload" type="file" accept="image/*" style="margin-bottom:15px;" />
+                                    
+                                    <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--border); padding: 10px; border-radius: 8px; margin-bottom: 10px;">
+                                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:5px;">Collaborators & Splits</label>
+                                        <div id="collaborator-list"></div>
+                                        <button type="button" class="secondary" style="padding: 4px 8px; font-size: 11px;" onclick="addCollaboratorField()">+ Add Collaborator</button>
+                                    </div>
+                                    
+                                    <label style="font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                                        <input type="checkbox" id="audio-stake-checkbox" style="width:auto; margin:0;" onchange="document.getElementById('audio-stake-options').style.display = this.checked ? 'block' : 'none'"> 
+                                        Put shares up for stake
+                                    </label>
+                                    
+                                    <div id="audio-stake-options" style="display:none;">
+                                        <input type="number" id="audio-stake-percent" placeholder="% of shares to sell (e.g. 50)" style="margin-bottom:8px;" max="100" min="1"/>
+                                        <input type="number" id="audio-stake-price" placeholder="Price per share ($VOD)" style="margin-bottom:8px;" min="1"/>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="feed-container"></div>
+                </div>
+
+                <!-- VIEW 2: PROFILE (MySpace Vibe) -->
+                <div id="view-profile" class="hidden">
+                    <div class="card" style="padding: 0; overflow: hidden; position: relative;">
+                        <div class="profile-cover" id="ui-profile-cover">
+                            <label id="btn-edit-banner" class="hidden" style="position:absolute; top:15px; right:15px; background:rgba(0,0,0,0.7); padding:8px 15px; border-radius:8px; cursor:pointer; color:#fff; font-size: 12px; border: 1px solid var(--border);">📷 Change Banner<input type="file" id="input-edit-banner" hidden accept="image/*"></label>
+                        </div>
+                        <div class="profile-avatar-large nft-avatar">
+                            <img id="ui-profile-view-avatar" src="https://api.dicebear.com/7.x/identicon/svg?seed=default&backgroundColor=1f2833" alt="Avatar">
+                            <label id="btn-edit-avatar" class="hidden" style="position:absolute; bottom:0; left:0; width:100%; text-align:center; background:rgba(0,0,0,0.7); cursor:pointer; color:#fff; font-size:11px; padding:4px 0;">📷 Change<input type="file" id="input-edit-avatar" hidden accept="image/*"></label>
+                        </div>
+                        <div class="profile-actions">
+                            <button class="secondary" id="btn-toggle-edit" onclick="toggleInlineEdit()">⚙️ Edit Profile</button>
+                            <button id="btn-profile-follow">Lock In Crew</button>
+                        </div>
+                        
+                        <div class="profile-info">
+                            <div id="profile-display-mode">
+                                <h2 id="ui-profile-view-name" style="font-size: 28px; margin-bottom: 5px;">Loading...</h2>
+                                <p id="ui-profile-view-address" style="color: var(--primary); font-family: monospace; font-size: 12px; margin-top: 0;">0x...</p>
+                                <div id="ui-profile-view-bio" style="font-size: 14px; margin: 15px 0; color: #fff;">"..."</div>
+                                <div style="display:flex; gap:10px; align-items:center; font-size: 13px; color: var(--text-muted);">
+                                    <span>Balance:</span> <strong id="ui-profile-view-balance">0</strong> $VOD
+                                </div>
+                            </div>
+
+                            <div id="profile-edit-mode" class="hidden" style="margin-top: 15px; border-top: 1px solid var(--border); padding-top: 15px;">
+                                <h4 style="margin-bottom: 10px; color: var(--primary);">Edit Identity & Theme</h4>
+                                <input id="input-edit-username" placeholder="Display name" style="margin-bottom: 8px;" />
+                                <textarea id="input-edit-bio" rows="2" placeholder="Profile bio" style="margin-bottom: 8px;"></textarea>
+                                <input id="input-edit-top8" placeholder="Top 8 public keys, comma separated" style="margin-bottom: 8px;" />
+                                <div style="display: flex; gap: 15px; margin-bottom: 15px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                                    <div><label style="font-size: 11px; display:block;">Primary</label><input type="color" id="input-color-primary" style="padding:0; width:40px; height:30px; cursor:pointer; border:none; background:none;"></div>
+                                    <div><label style="font-size: 11px; display:block;">Background</label><input type="color" id="input-color-bg" style="padding:0; width:40px; height:30px; cursor:pointer; border:none; background:none;"></div>
+                                    <div><label style="font-size: 11px; display:block;">Card BG</label><input type="color" id="input-color-card" style="padding:0; width:40px; height:30px; cursor:pointer; border:none; background:none;"></div>
+                                </div>
+                                <div style="margin-bottom: 15px;">
+                                    <label style="font-size: 11px; display:block;">Section Background Image</label>
+                                    <input type="file" id="input-section-bg" accept="image/*" style="margin-bottom: 8px;" />
+                                </div>
+                                <textarea id="input-edit-css" rows="3" placeholder="Advanced: Inject custom CSS here..."></textarea>
+                                <div style="display:flex; gap:10px; margin-top: 10px;">
+                                    <button onclick="handleProfileUpdateSubmission()">💾 Save & Deploy to Ledger</button>
+                                    <button class="secondary" onclick="toggleInlineEdit()">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2-Column Dashboard Layout -->
+                    <div style="display: grid; grid-template-columns: 3fr 2fr; gap: 25px; align-items: start; margin-top: 25px;">
+                        
+                        <!-- Left Column: Playlist, Feed, Shoutbox -->
+                        <div style="display: flex; flex-direction: column; gap: 25px;" id="profile-col-left" class="profile-sortable">
+                            <div class="card profile-section" id="profile-section-playlist" draggable="true" style="background-color: var(--bg-card);">
+                                <h3 style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 8px;"><span>🎵</span> Uploaded Playlist</h3>
+                                <div id="ui-profile-playlist" style="display:flex; flex-direction:column; gap:10px; margin-top: 15px;"></div>
+                            </div>
+                            <div class="card profile-section" id="profile-section-feed" draggable="true" style="background-color: var(--bg-card);">
+                                <h3 style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 8px;"><span>📝</span> Node Feed</h3>
+                                <div id="ui-profile-feed" style="display:flex; flex-direction:column; margin-top: 15px;"></div>
+                            </div>
+                            <div class="card profile-section" id="profile-section-shoutbox" draggable="true" style="background-color: var(--bg-card);">
+                                <h3 style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 8px;"><span>💬</span> Profile Shoutbox</h3>
+                                <div id="ui-profile-shoutbox" style="display:flex; flex-direction:column; gap:15px; margin-top: 15px;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Right Column: Transactions, Top 8, Crew Net -->
+                        <div style="display: flex; flex-direction: column; gap: 25px;" id="profile-col-right" class="profile-sortable">
+                            <div class="card profile-section" id="profile-section-top8" draggable="true" style="background-color: var(--bg-card);">
+                                <h3 style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 8px;"><span>🔥</span> Top 8 Crew</h3>
+                                <div class="top8-grid" id="ui-profile-top8"></div>
+                            </div>
+                            <div class="card profile-section" id="profile-section-network" draggable="true" style="background-color: var(--bg-card);">
+                                <h3 style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 8px;"><span>🤝</span> Mutuals & Network</h3>
+                                <div id="ui-profile-recommended" style="display:flex; flex-direction:column; gap:10px; margin-top: 15px;"></div>
+                            </div>
+                            <div class="card profile-section" id="profile-section-gallery" draggable="true" style="background-color: var(--bg-card);">
+                                <h3 style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 8px;"><span>🖼️</span> Digital Gallery</h3>
+                                <div id="ui-profile-gallery" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px;"></div>
+                            </div>
+                            <div class="card profile-section" id="profile-section-vst" draggable="true" style="background-color: var(--bg-card);">
+                                <h3 style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 8px;"><span>💿</span> VST Portfolio</h3>
+                                <div id="ui-profile-vst" style="display:flex; flex-direction:column; gap:10px; margin-top: 15px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VIEW 4: EVENTS (Rip & Rebuild) -->
+                <div id="view-events" class="hidden">
+                    <div class="events-perspective-container">
+                        <div id="ui-events-board" class="events-wall" onclick="handleBoardClick(event)">
+                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255,255,255,0.05); font-weight: 900; font-size: 60px; pointer-events: none; letter-spacing: 5px;">BOARD</div>
+                        </div>
+                        <div id="ui-events-map" class="events-floor"></div>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); padding: 15px; border-radius: 12px; margin-top: 15px; border: 1px solid var(--border);">
+                        <div style="display:flex; align-items:center; gap: 20px;">
+                            <input type="date" id="event-date-picker" class="event-calendar" onchange="loadEventsEngine()">
+                            <button class="secondary" onclick="switchTab('feed')">Back to Feed</button>
+                        </div>
+                        <div style="display:flex; align-items:center; gap: 15px;">
+                            <span style="font-size:12px; color:var(--text-muted);">Pin Flyer:</span>
+                            <label class="attachment-btn" style="cursor: pointer;">
+                                📌
+                                <input id="event-file-input" type="file" accept="image/*" style="display:none;" onchange="handleEventFileSelect(event)" />
+                            </label>
+                        </div>
+                    </div>
+                    <img id="ui-flyer-cursor" class="flyer-placement-cursor" />
+                </div>
+
+                <!-- VIEW 7: THE ZINE -->
+                <div id="view-zine" class="hidden">
+                    <div class="card" style="margin-bottom: 20px; padding: 10px;">
+                        <div style="display: flex; gap: 10px;">
+                            <button id="zine-btn-market" class="secondary" style="background: var(--primary); color: #000;" onclick="switchZineSubTab('market')">Marketplace</button>
+                            <button id="zine-btn-studio" class="secondary" onclick="switchZineSubTab('studio')">Writer Studio</button>
+                            <button id="zine-btn-curated" class="secondary" onclick="switchZineSubTab('curated')">My Curated Zine</button>
+                        </div>
+                    </div>
+                    <div id="zine-market" class="zine-sub-view">
+                        <div id="ui-zine-articles" class="feed-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;"></div>
+                    </div>
+                    <div id="zine-studio" class="zine-sub-view hidden">
+                        <div class="card" style="padding: 25px;">
+                            <h3 style="color: var(--primary); margin-bottom: 20px;">Publish New Article</h3>
+                            <input id="zine-publish-title" placeholder="Article Title..." style="margin-bottom: 15px;">
+                            <textarea id="zine-publish-body" placeholder="Write your masterpiece here..." style="height: 300px; margin-bottom: 15px;"></textarea>
+                            <div style="display: flex; align-items: center; gap: 15px;">
+                                <div style="flex: 1;">
+                                    <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 5px;">CURATION PRICE ($VOD)</label>
+                                    <input type="number" id="zine-publish-price" value="5000" style="width: 100%;">
+                                </div>
+                                <button id="btn-zine-publish" style="margin-top: 18px; padding: 10px 30px;" onclick="handlePublishArticle()">Publish to Swarm</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="zine-curated" class="zine-sub-view hidden">
+                        <div id="ui-zine-owned" class="feed-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;"></div>
+                    </div>
+                </div>
+
+                <!-- VIEW 5: WALLET & ESCROW -->
+                <div id="view-wallet" class="hidden card">
+                    <h2 style="font-size: 26px; border-bottom: 2px solid var(--border); padding-bottom: 15px;">💼 Wallet & Escrow</h2>
+                    
+                    <h4 style="margin-top: 20px;">🤝 Create a Commission (Escrow)</h4>
+                    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">Lock $VOD in a smart contract. The creator only gets paid when they upload the requested asset.</p>
+                    <input id="input-comm-recipient" placeholder="Creator Public Key" style="margin-bottom: 12px;" />
+                    <input id="input-comm-amount" type="number" placeholder="Amount of $VOD" style="margin-bottom: 12px;" />
+                    <textarea id="input-comm-terms" placeholder="Describe the commission (e.g., 'Produce a dark trap beat for my intro')" rows="2" style="margin-bottom: 12px;"></textarea>
+                    <button onclick="createCommission()" style="margin-bottom: 30px;">Lock Funds in Escrow</button>
+
+                    <h4 style="margin-top: 20px;">📦 Active Escrow Contracts</h4>
+                    <div id="ui-active-commissions" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 30px;"></div>
+
+                    <h4 style="margin-top: 20px;">📜 Transaction History</h4>
+                    <div id="ui-tx-history" style="max-height: 300px; overflow-y: auto; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 10px;">
+                        <!-- JS populated -->
+                    </div>
+
+                    <div id="ui-admin-panel" class="hidden" style="margin-top: 30px; border-top: 1px solid var(--danger); padding-top: 20px;">
+                        <h4 style="color: var(--danger);">🛑 Admin OTC Mint (Investors)</h4>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">Mint raw $VOD directly to an investor's wallet after clearing a USD wire transfer.</p>
+                        <input id="input-mint-recipient" placeholder="Investor Public Key" style="margin-bottom: 12px;" />
+                        <input id="input-mint-amount" type="number" placeholder="Amount to Mint" style="margin-bottom: 12px;" />
+                        <button style="background: var(--danger); color: #fff; width: 100%;" onclick="executeAdminMint()">Mint & Transfer</button>
+                    </div>
+
+                    <h4 style="margin-top: 20px;">🤝 Incoming Stake Requests</h4>
+                    <div id="ui-wallet-stake-requests" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 30px;">
+                        <div style="color:var(--text-muted); font-size:13px;">No incoming stake requests.</div>
+                    </div>
+                </div>
+
+                <!-- VIEW 6: DIGITAL MARKETPLACE -->
+                <div id="view-market" class="hidden card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); padding-bottom: 15px; margin-bottom: 20px;">
+                        <h2 style="margin:0;">🛒 Digital Marketplace</h2>
+                    </div>
+                    
+                    <!-- Market Tabs -->
+                    <div style="display: flex; gap: 15px; margin-bottom: 20px; border-bottom: 1px solid rgba(69,162,158,0.3); padding-bottom: 10px;">
+                        <button id="tab-btn-commission" onclick="switchMarketTab('commission')" style="background: var(--primary); color: #000;">🎯 Commissions</button>
+                        <button id="tab-btn-buy" class="secondary" onclick="switchMarketTab('buy')">🛍️ Buy Assets</button>
+                        <button id="tab-btn-sell" class="secondary" onclick="switchMarketTab('sell')">💸 Sell Assets</button>
+                    </div>
+
+                    <!-- Commissions Tab -->
+                    <div id="market-sec-commission">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <div style="display: flex; gap: 10px;">
+                                <select id="comm-order-filter" onchange="renderMarketplace()" style="padding: 8px; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid var(--border); margin: 0; outline: none;">
+                                    <option value="yours-first">Your Commissions First</option>
+                                    <option value="others-first">Other Users' Commissions First</option>
+                                </select>
+                                <select id="comm-sort-filter" onchange="renderMarketplace()" style="padding: 8px; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid var(--border); margin: 0; outline: none;">
+                                    <option value="newest">Sort: Newest</option>
+                                    <option value="highest">Sort: Highest Bounty</option>
+                                    <option value="oldest">Sort: Oldest</option>
+                                </select>
+                            </div>
+                            <button class="secondary" style="padding: 8px 15px;" onclick="createOpenBounty()">+ Add a Commission</button>
+                        </div>
+                        <div id="ui-market-bounties" style="display: flex; flex-direction: column; gap: 15px;"></div>
+                    </div>
+
+                    <!-- Buy Tab -->
+                    <div id="market-sec-buy" class="hidden">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <input id="buy-search-filter" placeholder="🔍 Search assets..." onkeyup="renderMarketplace()" style="margin: 0; width: 300px; padding: 10px;">
+                            <select id="buy-sort-filter" onchange="renderMarketplace()" style="padding: 8px; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid var(--border); margin: 0; outline: none;">
+                                <option value="newest">Newest Listed</option>
+                                <option value="price-low">Price: Low to High</option>
+                                <option value="price-high">Price: High to Low</option>
+                                <option value="popular">Most Sales</option>
+                            </select>
+                        </div>
+                        <div id="ui-market-items" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;"></div>
+                    </div>
+
+                    <!-- Sell Tab -->
+                    <div id="market-sec-sell" class="hidden">
+                        <h4 style="margin-top:0;">List a Digital Asset</h4>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">Upload a beat, drum kit, stems, or project files to sell on the open market.</p>
+                        <select id="sell-type-input" style="padding: 12px; border-radius: 8px; background: rgba(11, 12, 16, 0.8); color: #fff; border: 1px solid var(--border); margin-bottom: 12px; width: 100%;">
+                            <option value="beat">Beat / Instrumental</option>
+                            <option value="stems">Acapella / Stems</option>
+                            <option value="project">DAW Project File</option>
+                            <option value="art">Artwork / Visuals</option>
+                        </select>
+                        <input id="sell-title-input" placeholder="Asset Title (e.g. 'Dark Trap Drum Kit')" style="margin-bottom: 12px;">
+                        <input id="sell-price-input" type="number" placeholder="Price in $VOD" style="margin-bottom: 12px;">
+                        <input id="sell-file-input" type="file" style="margin-bottom: 12px;">
+                        <button onclick="executeSellItem()">List Item on Market</button>
+                    </div>
+                </div>
+
+                <!-- VIEW 8: HOT OR NOT -->
+                <div id="view-hotornot" class="hidden card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); padding-bottom: 15px; margin-bottom: 20px;">
+                        <h2 style="margin:0; color: var(--danger);">🔥 Hot or Not</h2>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <select id="hotornot-submit-select" style="padding: 8px; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid var(--danger); outline: none; margin: 0; max-width: 250px;">
+                                <option value="">Select your track...</option>
+                            </select>
+                            <button onclick="submitHotOrNotFromDropdown()" style="background: var(--danger); color: #fff; padding: 8px 15px;">Submit</button>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <select id="hotornot-filter" onchange="renderHotOrNot()" style="padding: 8px; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid var(--danger); outline: none;">
+                            <option value="vote">Vote Now</option>
+                            <option value="new">New Submissions</option>
+                            <option value="weekly">Weekly Hotlist</option>
+                            <option value="alltime">All-Time Hotlist</option>
+                        </select>
+                    </div>
+
+                    <div id="ui-hotornot-content" style="display: flex; flex-direction: column; gap: 15px;"></div>
+                </div>
+
+            </div>
+            <!-- RIGHT SIDEBAR (Discord style members list) -->
+            <div class="right-sidebar">
+                <div class="card" style="padding: 15px;" id="sidebar-tx-card">
+                    <h4 style="color: var(--text-muted); font-size: 12px; text-transform: uppercase; margin-bottom: 15px;">Recent Transactions</h4>
+                    <div class="tx-history-container" id="ui-sidebar-tx-history" style="max-height: 300px; overflow-y: auto; padding: 5px; border-radius: 8px; background: rgba(0,0,0,0.2);"></div>
+                </div>
+                <div class="card" style="padding: 15px;">
+                    <h4 id="ui-online-count" style="color: var(--text-muted); font-size: 12px; text-transform: uppercase; margin-bottom: 15px;">Online in Swarm — 0</h4>
+                    <div id="ui-online-users">
+                        <!-- Populated dynamically via JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pending Requests Modal -->
+        <div id="requests-modal" class="modal-overlay hidden" onclick="if(event.target===this) toggleModal('requests-modal')">
+            <div class="modal-content">
+                <div class="modal-header"><span>👥 Crew Requests</span><button class="secondary" style="padding: 2px 8px; width:auto; border-radius:6px;" onclick="toggleModal('requests-modal')">✖</button></div>
+                <div class="modal-body" id="ui-requests-list">
+                    <div style="color: var(--text-muted); font-size: 13px; text-align: center;">No pending requests.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         GLOBAL LISTEN-TO-EARN BANNER
+         ========================================== -->
+    <div class="stream-banner" id="app-footer-banner">
+        <div class="track-info">
+            <img class="track-art" id="global-track-art" src="https://api.dicebear.com/7.x/identicon/svg?seed=vod&backgroundColor=1f2833" alt="Art">
+            <div>
+                <h4 id="global-track-title" style="margin: 0 0 5px 0;">No Track Selected</h4>
+                <div style="font-size: 11px; margin-bottom: 5px; display: flex; align-items: center; gap: 10px;">
+                    <span>Uploader: <a id="global-track-artist-link" style="color: var(--primary); cursor: pointer;">Unknown</a></span>
+                    <select id="playlist-selector" onchange="changePlaylistContext(this.value)" style="padding: 2px 5px; font-size: 10px; background: #111; color: #fff; border: 1px solid var(--border); border-radius: 4px; width: 120px; outline: none; margin: 0;">
+                        <option value="global">Global Feed</option>
+                        <option value="profile">Current Profile</option>
+                    </select>
+                </div></div>
+                <span class="l2e-status" id="l2e-status-tracker">Awaiting playback...</span>
+            </div>
+        <div class="audio-controls" style="display: flex; gap: 15px; align-items: center; width: 600px;">
+            <!-- Source dynamically set by ledger data -->
+            <audio id="global-audio-player" controls style="flex-grow: 1; outline: none;"></audio>
+            <!-- Custom Persistent Volume Controls -->
+            <div style="display:flex; align-items:center; gap:8px; background: rgba(0,0,0,0.5); padding: 5px 15px; border-radius: 20px; border: 1px solid var(--border);">
+                <span id="btn-mute" style="cursor: pointer; font-size:16px; user-select:none;" title="Mute/Unmute">🔊</span>
+                <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1" style="width: 80px; margin:0; padding:0; height: 4px;">
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden container for remote WebRTC audio streams -->
+    <div id="voice-container" class="hidden"></div>
+
+    <!-- ==========================================
+         APPLICATION LOGIC
+         ========================================== -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBWB2HJSCROvCyD9SOcJouSJF5j3e1-HgA&libraries=geometry&v=beta" async defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/elliptic@6.5.4/dist/elliptic.min.js"></script>
+    <script src="/app.js"></script>
+</body>
+</html>
