@@ -132,12 +132,13 @@ class ProfileService {
                     }
                     if (rem > 0) shareDistribution[tx.data.audioHash][tx.sender] = (shareDistribution[tx.data.audioHash][tx.sender] || 0) + rem;
 
-                    profile._trackDetails[tx.data.audioHash] = { title: tx.data.trackTitle, creator: tx.sender, artist: tx.data.artist, coverHash: tx.data.coverHash };
+                    profile._trackDetails[tx.data.audioHash] = { title: tx.data.trackTitle, creator: tx.sender, artist: tx.data.artist, offPlatformCollaborator: tx.data.offPlatformCollaborator, coverHash: tx.data.coverHash };
                 }
                 if (tx.type === 'EDIT_SONG_METADATA') {
                     if (profile._trackDetails[tx.data.audioHash] && profile._trackDetails[tx.data.audioHash].creator === tx.sender) {
                         if (tx.data.title) profile._trackDetails[tx.data.audioHash].title = tx.data.title;
                         if (tx.data.artist) profile._trackDetails[tx.data.audioHash].artist = tx.data.artist;
+                        if (tx.data.offPlatformCollaborator !== undefined) profile._trackDetails[tx.data.audioHash].offPlatformCollaborator = tx.data.offPlatformCollaborator;
                     }
                 }
                 if (tx.type === 'BUY_SONG_SHARE') {
@@ -193,6 +194,7 @@ class ProfileService {
                         profile.uploadedTracks.push({
                             title: titleToUse,
                             artist: artistToUse,
+                            offPlatformCollaborator: tx.data.offPlatformCollaborator,
                             hash: tx.data.audioHash,
                             coverHash: tx.data.coverHash || null,
                             timestamp: tx.timestamp,
@@ -204,6 +206,7 @@ class ProfileService {
                         if (idx !== -1) {
                             if(tx.data.title) profile.uploadedTracks[idx].title = tx.data.title;
                             if(tx.data.artist) profile.uploadedTracks[idx].artist = tx.data.artist;
+                            if(tx.data.offPlatformCollaborator !== undefined) profile.uploadedTracks[idx].offPlatformCollaborator = tx.data.offPlatformCollaborator;
                             if(tx.data.coverHash) profile.uploadedTracks[idx].coverHash = tx.data.coverHash;
                         }
                     }
@@ -309,7 +312,7 @@ class ProfileService {
                     postOwners[block.hash] = tx.sender;
                 }
                 if (tx.type === 'SONG_UPLOAD') {
-                    trackMetadata[tx.data.audioHash] = { title: tx.data.trackTitle, artist: tx.data.artist, coverHash: tx.data.coverHash, creator: tx.sender };
+                    trackMetadata[tx.data.audioHash] = { title: tx.data.trackTitle, artist: tx.data.artist, offPlatformCollaborator: tx.data.offPlatformCollaborator, coverHash: tx.data.coverHash, creator: tx.sender };
                     shareDistribution[tx.data.audioHash] = {};
                     let rem = 100;
                     if (tx.data.collaborators) {
@@ -330,6 +333,7 @@ class ProfileService {
                     if (trackMetadata[tx.data.audioHash] && trackMetadata[tx.data.audioHash].creator === tx.sender) {
                         if (tx.data.title) trackMetadata[tx.data.audioHash].title = tx.data.title;
                         if (tx.data.artist) trackMetadata[tx.data.audioHash].artist = tx.data.artist;
+                        if (tx.data.offPlatformCollaborator !== undefined) trackMetadata[tx.data.audioHash].offPlatformCollaborator = tx.data.offPlatformCollaborator;
                         if (tx.data.coverHash) trackMetadata[tx.data.audioHash].coverHash = tx.data.coverHash;
                     }
                 }
@@ -418,6 +422,7 @@ class ProfileService {
                         if (trackMetadata[tx.data.audioHash]) {
                             feedItem.data.trackTitle = trackMetadata[tx.data.audioHash].title;
                             feedItem.data.artist = trackMetadata[tx.data.audioHash].artist;
+                            feedItem.data.offPlatformCollaborator = trackMetadata[tx.data.audioHash].offPlatformCollaborator;
                             feedItem.data.coverHash = trackMetadata[tx.data.audioHash].coverHash;
                         }
                     }

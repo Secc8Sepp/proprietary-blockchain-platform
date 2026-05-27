@@ -496,6 +496,18 @@ async function subscribeToPush(publicKey) {
         const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
 
         const subscription = await swRegistration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: convertedVapidKey });
+        let subscription;
+        try {
+            subscription = await swRegistration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: convertedVapidKey });
+        } catch (err) {
+            if (err.name === 'InvalidStateError') {
+                console.log('[PWA] VAPID key changed (Server restarted). Unsubscribing old push token...');
+                const oldSub = await swRegistration.pushManager.getSubscription();
+                if (oldSub) await oldSub.unsubscribe();
+                subscription = await swRegistration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: convertedVapidKey });
+            } else throw err;
+        }
+        
         await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ address: publicKey, subscription }) });
         console.log('[PWA] Subscribed to Web Push notifications.');
     } catch (e) { console.error('[PWA] Push subscription failed', e); }
@@ -575,7 +587,14 @@ async function uploadMediaAssetFile(fileObject) {
     formData.append('mediaAsset', fileObject);
     
     const response = await fetch('/api/feed/upload-file', { method: 'POST', body: formData });
-    const result = await response.json();
+    const text = await response.text();
+    let result;
+    try {
+        result = JSON.parse(text);
+    } catch (e) {
+        throw new Error(`Server returned invalid response (File may be too large or server timed out). Response: ${text.substring(0, 80)}...`);
+    }
+    
     if (!response.ok) throw new Error(result.error || "Upload failed.");
     return result.fileHash;
 }
@@ -603,9 +622,17 @@ async function sendSignedTransaction(type, receiver, data) {
         body: JSON.stringify(tx)
     });
 
-    if (!res.ok) throw new Error((await res.json()).error || "Ledger rejected transaction.");
-    
-    if (localDB) localDB.transaction('blocks', 'readwrite').objectStore('blocks').put(tx); // Optimistic local store
+    if (!res.ok) {
+        const text = await res.text();
+        let errStr = "Ledger rejected transaction.";
+        try {
+            const parsed = JSON.parse(text);
+            errStr = parsed.error || errStr;
+        } catch(e) {
+            errStr = `Server Error / Invalid Payload: ${text.substring(0, 80)}...`;
+        }
+        throw new Error(errStr);
+    }
 
     broadcastToMesh('P2P_BLOCK', tx);
     return tx;
@@ -642,7 +669,8 @@ async function handlePublishPost(isStory = false) {
                 data = { caption: textIn, videoHash: hash };
             }
         } else if (audFile) {
-            if (!textIn) throw new Error("Please provide a Track Title for the audio upload.");
+            const titleIn = document.getElementById('audio-meta-title').value.trim();
+            if (!titleIn) throw new Error("Please provide a Track Title for the audio upload.");
             const hash = await uploadMediaAssetFile(audFile);
             
             let coverHash = null;
@@ -650,6 +678,7 @@ async function handlePublishPost(isStory = false) {
             if (coverFile) coverHash = await uploadMediaAssetFile(coverFile);
             
             const artist = document.getElementById('audio-meta-artist').value.trim();
+            const offCollab = document.getElementById('audio-meta-off-collab').value.trim();
             const collabs = [];
             document.querySelectorAll('.collab-row').forEach(row => {
                 const addr = row.querySelector('.collab-address').value.trim();
@@ -666,7 +695,19 @@ async function handlePublishPost(isStory = false) {
             }
             
             type = 'SONG_UPLOAD';
-            data = { trackTitle: textIn, artist, audioHash: hash, coverHash, metadata: genre, forStake, sellPercentage, pricePerShare, collaborators: collabs };
+            data = { 
+                caption: textIn, 
+                trackTitle: titleIn, 
+                artist: artist, 
+                offPlatformCollaborator: offCollab, 
+                audioHash: hash, 
+                coverHash: coverHash, 
+                metadata: genre, 
+                forStake: forStake, 
+                sellPercentage: sellPercentage, 
+                pricePerShare: pricePerShare, 
+                collaborators: collabs 
+            };
         } else if (imgFile) {
             const hash = await uploadMediaAssetFile(imgFile);
             type = 'IMAGE_POST';
@@ -708,6 +749,8 @@ async function handlePublishPost(isStory = false) {
         if (true) { // Cleanup UI
             document.getElementById('composer-text').value = '';
             document.getElementById('composer-audio-upload').value = '';
+            document.getElementById('audio-meta-title').value = '';
+            document.getElementById('audio-meta-off-collab').value = '';
             document.getElementById('composer-image-upload').value = '';
             if (document.getElementById('composer-video-upload')) document.getElementById('composer-video-upload').value = '';
             if (document.getElementById('composer-zip-upload')) document.getElementById('composer-zip-upload').value = '';
@@ -904,6 +947,7 @@ function playNextTrackAdvanced() {
         pool = currentViewedProfile.uploadedTracks.map(t => ({
             title: t.title,
             artist: t.artist,
+            offPlatformCollaborator: t.offPlatformCollaborator,
             audioHash: t.hash,
             sender: currentViewedProfile.publicKey,
             timestamp: t.timestamp
@@ -914,6 +958,7 @@ function playNextTrackAdvanced() {
         pool = feedTracks.map(t => ({
             title: t.data.trackTitle,
             artist: t.data.artist,
+            offPlatformCollaborator: t.data.offPlatformCollaborator,
             audioHash: t.data.audioHash,
             sender: t.sender,
             timestamp: t.timestamp
@@ -938,7 +983,9 @@ function playNextTrackAdvanced() {
     let nextTrack = unplayedTracks[nextTrackIndex];
     
     if (nextTrack) {
-        playTrack(nextTrack.title, nextTrack.audioHash, nextTrack.sender, nextTrack.artist || resolveProfile(nextTrack.sender).username);
+        let artistName = nextTrack.artist || resolveProfile(nextTrack.sender).username;
+        if (nextTrack.offPlatformCollaborator) artistName += ` ft. ${nextTrack.offPlatformCollaborator}`;
+        playTrack(nextTrack.title, nextTrack.audioHash, nextTrack.sender, artistName);
     }
 }
 
@@ -1067,9 +1114,13 @@ function renderPostContent(item) {
         }
         let coverHtml = item.data.coverHash ? `<img src="/tracks/${item.data.coverHash}" style="width: 60px; height: 60px; border-radius: 6px; object-fit: cover;">` : '';
         let displayArtist = item.data.artist ? escapeHtml(item.data.artist) : resolveProfile(item.sender).username;
+        if (item.data.offPlatformCollaborator) {
+            displayArtist += ` ft. ${escapeHtml(item.data.offPlatformCollaborator)}`;
+        }
 
         return `
             <div class="audio-block" style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border: 1px solid rgba(69, 162, 158, 0.2);">
+                ${item.data.caption ? `<div style="margin-bottom: 10px; color: #fff;">${parseMentions(item.data.caption)}</div>` : ''}
                 <div style="display: flex; gap: 15px; margin-bottom: 10px;">
                     ${coverHtml}
                     <div>
@@ -1283,7 +1334,8 @@ async function promptEditSong(audioHash) {
     if (!userKeys.publicKey) return;
     const newTitle = prompt("Enter new track title:");
     const newArtist = prompt("Enter artist name:");
-    if (!newTitle && !newArtist) return;
+    const newOffCollab = prompt("Enter off-platform collaborator (optional):");
+    if (!newTitle && !newArtist && !newOffCollab) return;
 
     try {
         const msgData = { 
@@ -1293,6 +1345,7 @@ async function promptEditSong(audioHash) {
         };
         if (newTitle) msgData.data.title = newTitle;
         if (newArtist) msgData.data.artist = newArtist;
+        if (newOffCollab) msgData.data.offPlatformCollaborator = newOffCollab;
 
         const sig = await generateClientSignature(userKeys.privateKey, msgData);
         const txFields = { ...msgData, signature: sig };
@@ -1795,7 +1848,9 @@ function playProfileTrack(index) {
     if (!currentViewedProfile || !currentViewedProfile.uploadedTracks) return;
     const tracks = currentViewedProfile.uploadedTracks.slice().sort((a,b) => b.timestamp - a.timestamp);
     const track = tracks[index];
-    const artistName = track.artist || currentViewedProfile.username;
+    let artistName = track.artist || currentViewedProfile.username;
+    if (track.offPlatformCollaborator) artistName += ` ft. ${track.offPlatformCollaborator}`;
+    
     if (track) {
         const select = document.getElementById('playlist-selector');
         if (select) { select.value = 'profile'; currentPlaylistMode = 'profile'; }
@@ -2240,6 +2295,8 @@ function updateComposerPreview() {
     if(audFile) {
         preview.style.display = 'block';
         preview.innerText = `🎵 Ready: ${audFile.name}`;
+        const titleInput = document.getElementById('audio-meta-title');
+        if (titleInput && !titleInput.value) titleInput.value = audFile.name.replace(/\.[^/.]+$/, "");
         if(audioMeta) audioMeta.style.display = 'block';
     } else if (imgFile) {
         preview.style.display = 'block';
@@ -2796,12 +2853,20 @@ socket.on('webrtc_answer', async (data) => {
     if (peerConnections[data.sender]) {
         await peerConnections[data.sender].setRemoteDescription(data.sdp);
     }
+    try {
+        if (peerConnections[data.sender]) await peerConnections[data.sender].setRemoteDescription(data.sdp);
+    } catch(e) { console.warn("WebRTC Answer Error:", e.message); }
 });
 
 socket.on('webrtc_ice_candidate', async (data) => {
     if (peerConnections[data.sender]) {
         await peerConnections[data.sender].addIceCandidate(data.candidate);
     }
+    try {
+        if (peerConnections[data.sender] && peerConnections[data.sender].remoteDescription) {
+            await peerConnections[data.sender].addIceCandidate(data.candidate);
+        }
+    } catch(e) { console.warn("WebRTC ICE Error:", e.message); }
 });
 
 // ==========================================
@@ -2850,11 +2915,19 @@ socket.on('mesh_offer', async (data) => {
 socket.on('mesh_answer', async (data) => {
     if (isNodeBlocked(socketIdToAddress[data.sender])) return;
     if (meshConnections[data.sender]) await meshConnections[data.sender].setRemoteDescription(data.sdp);
+    try {
+        if (meshConnections[data.sender]) await meshConnections[data.sender].setRemoteDescription(data.sdp);
+    } catch(e) { console.warn("Mesh Answer Error:", e.message); }
 });
 
 socket.on('mesh_ice_candidate', async (data) => {
     if (isNodeBlocked(socketIdToAddress[data.sender])) return;
     if (meshConnections[data.sender]) await meshConnections[data.sender].addIceCandidate(data.candidate);
+    try {
+        if (meshConnections[data.sender] && meshConnections[data.sender].remoteDescription) {
+            await meshConnections[data.sender].addIceCandidate(data.candidate);
+        }
+    } catch(e) { console.warn("Mesh ICE Error:", e.message); }
 });
 
 function setupDataChannel(dc, id) {
@@ -2890,7 +2963,9 @@ function setupDataChannel(dc, id) {
         } else if (msg.type === 'P2P_BLOCK') {
             console.log('📦 [P2P MESH] Intercepted new block directly from peer!');
             if(msg.payload.type === 'PROFILE_UPDATE') socket.emit('request_profile_directory');
-            if(localDB) localDB.transaction('blocks', 'readwrite').objectStore('blocks').put(msg.payload);
+        if(localDB && msg.payload.hash) {
+            localDB.transaction('blocks', 'readwrite').objectStore('blocks').put(msg.payload);
+        }
             if(userKeys.publicKey) fetchUserProfile(userKeys.publicKey, true); 
             if(currentView === 'feed') loadMainGlobalFeed();
         }
