@@ -484,7 +484,10 @@ server.listen(PORT, () => {
             if (globalThis.fetch) {
                 fetch(`${peerUrl}/api/network/register`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'ngrok-skip-browser-warning': 'true'
+                    },
                     body: JSON.stringify({ peerUrl: `http://localhost:${PORT}` })
                 }).then(res => res.json()).then(data => {
                     if (data.chain && data.chain.length > blockchainService.getChain().length) {
@@ -508,7 +511,11 @@ async function extractAndSyncHashes(tx) {
         if (!fs.existsSync(filePath)) {
             for (const peer of PEERS) {
                 try {
-                    const response = await fetch(`${peer}/tracks/${hash}`);
+                    const response = await fetch(`${peer}/tracks/${hash}`, {
+                        headers: {
+                            'ngrok-skip-browser-warning': 'true'
+                        }
+                    });
                     if (response.ok) {
                         console.log(`📥 Swarm Sync: Downloaded missing asset ${hash} from ${peer}`);
                         const buffer = await response.arrayBuffer();
