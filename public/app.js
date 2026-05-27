@@ -2127,7 +2127,8 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                                 <textarea placeholder="Write a reply..."></textarea>
                                 <button style="padding: 5px 15px; font-size: 11px;" onclick="submitReply('${item.transactionHash}', '${item.sender}')">Post Reply</button>
                                 <div id="replies-list-${item.transactionHash}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
-                                    ${(item.replies || []).map(r => `<div style="font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 8px;"><strong>${resolveProfile(r.sender).username}:</strong> ${parseMentions(r.text)}</div>`).join('')}
+                                    ${renderThreadedReplies(item.replies, 0, item.transactionHash)}
+                                    ${renderThreadedReplies(item.replies, 0, item.transactionHash)}
                                 </div>
                             </div>
                         </div>
@@ -3053,24 +3054,25 @@ function toggleReplyBox(txHash) {
     if (box) box.style.display = box.style.display === 'block' ? 'none' : 'block';
 }
 
-async function submitReply(txHash, receiver) {
-    const box = document.getElementById(`reply-box-${txHash}`);
+async function submitReply(txHash, receiver, parentReplyId = null) {
+    const boxId = parentReplyId ? `reply-box-${parentReplyId}` : `reply-box-${txHash}`;
+    const box = document.getElementById(boxId);
+    if (!box) return;
     const text = box.querySelector('textarea').value;
     if (!text.trim()) return;
     
     detectMentionsAndEmit(text);
     
-    const list = document.getElementById(`replies-list-${txHash}`);
-    list.innerHTML += `<div style="font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 8px;"><strong>${resolveProfile(userKeys.publicKey).username}:</strong> ${parseMentions(text)}</div>`;
     box.querySelector('textarea').value = '';
-    socket.emit('reply_post', { txHash, address: userKeys.publicKey, text: text.trim() });
+    socket.emit('reply_post', { txHash, address: userKeys.publicKey, text: text.trim(), parentReplyId });
 
     try {
+        const replyId = Date.now() + '_' + userKeys.publicKey.substring(0, 10);
         const msgData = { 
             sender: userKeys.publicKey, 
             receiver: receiver || '0x00', 
             type: 'REPLY_POST', 
-            data: { txHash: txHash, text: text.trim() }, 
+            data: { txHash: txHash, text: text.trim(), parentReplyId, replyId }, 
             timestamp: Date.now() 
         };
         const sig = await generateClientSignature(userKeys.privateKey, msgData);
@@ -3079,6 +3081,26 @@ async function submitReply(txHash, receiver) {
     } catch (err) {
         console.error("Reply block failed:", err);
     }
+}
+
+function renderThreadedReplies(repliesArray, depthLevel, txHash) {
+    if (!repliesArray || repliesArray.length === 0) return '';
+    const marginLeft = depthLevel > 0 ? 20 : 0;
+    const borderLeft = depthLevel > 0 ? '2px solid rgba(69, 162, 158, 0.3)' : 'none';
+    
+    return repliesArray.map(r => `
+        <div style="font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 8px; margin-left: ${marginLeft}px; border-left: ${borderLeft}; margin-top: 5px;">
+            <strong>${resolveProfile(r.sender).username}:</strong> ${parseMentions(r.text)}
+            <div style="margin-top: 5px;">
+                <button class="interaction-btn" style="font-size: 10px;" onclick="toggleReplyBox('${r.id}')">💬 Reply</button>
+            </div>
+            <div class="reply-box" id="reply-box-${r.id}" style="margin-top: 5px;">
+                <textarea placeholder="Write a reply..."></textarea>
+                <button style="padding: 5px 15px; font-size: 11px;" onclick="submitReply('${txHash}', '${r.sender}', '${r.id}')">Post Reply</button>
+            </div>
+            ${r.replies && r.replies.length > 0 ? renderThreadedReplies(r.replies, depthLevel + 1, txHash) : ''}
+        </div>
+    `).join('');
 }
 
 // ==========================================

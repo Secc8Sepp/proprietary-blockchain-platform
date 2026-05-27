@@ -353,7 +353,15 @@ class ProfileService {
                 }
                 if (tx.type === 'REPLY_POST') {
                     if (!postReplies[tx.data.txHash]) postReplies[tx.data.txHash] = [];
-                    postReplies[tx.data.txHash].push({ sender: tx.sender, text: tx.data.text, timestamp: tx.timestamp });
+                    const replyId = tx.data.replyId || (tx.timestamp + '_' + tx.sender.substring(0, 10));
+                    postReplies[tx.data.txHash].push({ 
+                        id: replyId,
+                        sender: tx.sender, 
+                        text: tx.data.text, 
+                        timestamp: tx.timestamp,
+                        parentReplyId: tx.data.parentReplyId || null,
+                        replies: []
+                    });
                 }
                 if (tx.type === 'DELETE_POST') {
                     // Security check: Only the original creator can delete their post
@@ -389,7 +397,19 @@ class ProfileService {
                     };
 
                     feedItem.likeCount = likeCounts[block.hash] || 0;
-                    feedItem.replies = postReplies[block.hash] || [];
+                    
+                    const rawReplies = postReplies[block.hash] || [];
+                    const replyMap = {};
+                    const rootReplies = [];
+                    rawReplies.forEach(r => { r.replies = []; replyMap[r.id] = r; });
+                    rawReplies.forEach(r => {
+                        if (r.parentReplyId && replyMap[r.parentReplyId]) {
+                            replyMap[r.parentReplyId].replies.push(r);
+                        } else {
+                            rootReplies.push(r);
+                        }
+                    });
+                    feedItem.replies = rootReplies;
 
                     if (tx.type === 'SONG_UPLOAD') {
                         feedItem.playCount = playCounts[tx.data.audioHash] || 0;
