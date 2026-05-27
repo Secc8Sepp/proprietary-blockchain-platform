@@ -1,12 +1,14 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const EventEmitter = require('events');
 
 const Wallet = require('../core/wallet');
 const CHAIN_FILE = path.join(__dirname, '../chain.json');
 
-class BlockchainService {
+class BlockchainService extends EventEmitter {
     constructor() {
+        super();
         this.initializeChainFile();
     }
 
@@ -277,6 +279,7 @@ class BlockchainService {
         const newBlock = { index: nextIndex, timestamp: nextTimestamp, transactions, previousHash: latestBlock.hash, nonce, hash };
         chain.push(newBlock);
         this.saveChain(chain);
+        this.emit('new_block', newBlock);
         return newBlock;
     }
 }

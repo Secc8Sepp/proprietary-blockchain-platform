@@ -478,28 +478,47 @@ server.listen(PORT, () => {
     console.log(`🚀 VOD ENGINE ONLINE: http://localhost:${PORT}`);
     
     // Bootstrap initial connections to other Dedicated Servers/PCs
-    if (PEERS.length > 0) {
-        console.log("🌐 Bootstrapping to global Swarm...");
+    function bootstrapSwarm() {
+        if (PEERS.length > 0) {
+            console.log("🌐 Bootstrapping to global Swarm...");
+            PEERS.forEach(peerUrl => {
+                if (globalThis.fetch) {
+                    fetch(`${peerUrl}/api/network/register`, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'ngrok-skip-browser-warning': 'true'
+                        },
+                        body: JSON.stringify({ peerUrl: `http://localhost:${PORT}` })
+                    }).then(res => res.json()).then(data => {
+                        if (data.chain && data.chain.length > blockchainService.getChain().length) {
+                            console.log(`📥 Downloaded larger ledger from ${peerUrl}`);
+                            blockchainService.saveChain(data.chain);
+                            data.chain.forEach(block => block.transactions.forEach(extractAndSyncHashes));
+                        }
+                    }).catch(e => {
+                        console.log(`⚠️ Peer offline: ${peerUrl} - Retrying in 30s...`);
+                        setTimeout(bootstrapSwarm, 30000);
+                    });
+                }
+            });
+        }
+    }
+    bootstrapSwarm();
+
+    // Listen for new blocks and actively forward them to the cloud/PC
+    blockchainService.on('new_block', (block) => {
         PEERS.forEach(peerUrl => {
             if (globalThis.fetch) {
-                fetch(`${peerUrl}/api/network/register`, {
+                fetch(`${peerUrl}/api/network/block`, {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'ngrok-skip-browser-warning': 'true'
-                    },
-                    body: JSON.stringify({ peerUrl: `http://localhost:${PORT}` })
-                }).then(res => res.json()).then(data => {
-                    if (data.chain && data.chain.length > blockchainService.getChain().length) {
-                        console.log(`📥 Downloaded larger ledger from ${peerUrl}`);
-                        blockchainService.saveChain(data.chain);
-                        
-                        data.chain.forEach(block => block.transactions.forEach(extractAndSyncHashes));
-                    }
-                }).catch(e => console.log(`⚠️ Peer offline: ${peerUrl}`));
+                    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+                    body: JSON.stringify({ block })
+                }).catch(e => {});
             }
         });
-    }
+        block.transactions.forEach(extractAndSyncHashes);
+    });
 });
 
 async function extractAndSyncHashes(tx) {
