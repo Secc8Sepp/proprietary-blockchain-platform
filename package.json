@@ -2,6 +2,7 @@
   "name": "proprietary-blockchain-platform",
   "version": "1.0.0",
   "main": "server.js",
+  "bin": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"
@@ -12,5 +13,10 @@
     "socket.io": "^4.8.3",
     "ws": "^8.16.0",
     "web-push": "^3.6.7"
+  },
+  "pkg": {
+    "assets": [
+      "public/**/*"
+    ]
   }
 }

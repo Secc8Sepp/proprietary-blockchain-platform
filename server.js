@@ -14,7 +14,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-const IPFS_DIR = path.join(__dirname, 'mock_ipfs');
+const IPFS_DIR = path.join(process.cwd(), 'mock_ipfs');
 if (!fs.existsSync(IPFS_DIR)) {
     fs.mkdirSync(IPFS_DIR);
 }
@@ -77,7 +77,8 @@ app.set('socketio', io);
 // ==========================================
 // P2P FULL NODE SYNC (Backend Mesh)
 // ==========================================
-const PEERS = process.env.PEERS ? process.env.PEERS.split(',') : [];
+const defaultPeers = ['https://vod-net.onrender.com']; // The main gateway node
+const PEERS = process.env.PEERS ? process.env.PEERS.split(',') : defaultPeers;
 app.set('peers', PEERS);
 
 app.post('/api/network/register', (req, res) => {

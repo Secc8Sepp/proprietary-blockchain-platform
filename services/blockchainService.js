@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const EventEmitter = require('events');
 
 const Wallet = require('../core/wallet');
-const CHAIN_FILE = path.join(__dirname, '../chain.json');
+const CHAIN_FILE = path.join(process.cwd(), 'chain.json');
 
 class BlockchainService extends EventEmitter {
     constructor() {
