@@ -494,6 +494,8 @@ server.listen(PORT, () => {
                         if (data.chain && data.chain.length > blockchainService.getChain().length) {
                             console.log(`📥 Downloaded larger ledger from ${peerUrl}`);
                             blockchainService.saveChain(data.chain);
+                            profileCache = null; // Clear the blank memory cache
+                            io.emit('blockchain_update', { type: 'SYSTEM_SYNC' }); // Tell browsers to refresh!
                             data.chain.forEach(block => block.transactions.forEach(extractAndSyncHashes));
                         }
                     }).catch(e => {
