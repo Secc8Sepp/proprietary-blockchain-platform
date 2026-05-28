@@ -15,6 +15,39 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+const CHAT_DB_FILE = path.join(__dirname, 'chat_db.json');
+
+// Temporary Memory for Chat & Mining Sessions
+const dbMemory = {
+    servers: {
+        'vod-main': {
+            id: 'vod-main',
+            name: 'VOD Main Swarm',
+            owner: 'SYSTEM',
+            channels: {
+                'general': { id: 'general', name: 'general-scene', locked: false, messages: [] },
+                'beats': { id: 'beats', name: 'beat-ciphers', locked: false, messages: [] },
+                'whale': { id: 'whale', name: 'whale-lounge', locked: true, messages: [] }
+            }
+        }
+    },
+    l2eSessions: {},
+    connectedNodes: {},
+    zineArticles: [],
+    directMessages: []
+};
+
+if (fs.existsSync(CHAT_DB_FILE)) {
+    try {
+        const data = JSON.parse(fs.readFileSync(CHAT_DB_FILE, 'utf8'));
+        if (data.servers) dbMemory.servers = data.servers;
+        if (data.directMessages) dbMemory.directMessages = data.directMessages;
+        if (data.zineArticles) dbMemory.zineArticles = data.zineArticles;
+    } catch (e) {
+        console.error('Error loading DB file:', e);
+    }
+}
+
 const IPFS_DIR = path.join(__dirname, 'mock_ipfs');
 if (!fs.existsSync(IPFS_DIR)) {
     fs.mkdirSync(IPFS_DIR);
@@ -143,39 +176,6 @@ app.post('/api/network/block', (req, res) => {
 // ==========================================
 // 5. WEBSOCKETS (Chat & Anti-Cheat Mining)
 // ==========================================
-
-const CHAT_DB_FILE = path.join(__dirname, 'chat_db.json');
-
-// Temporary Memory for Chat & Mining Sessions
-const dbMemory = {
-    servers: {
-        'vod-main': {
-            id: 'vod-main',
-            name: 'VOD Main Swarm',
-            owner: 'SYSTEM',
-            channels: {
-                'general': { id: 'general', name: 'general-scene', locked: false, messages: [] },
-                'beats': { id: 'beats', name: 'beat-ciphers', locked: false, messages: [] },
-                'whale': { id: 'whale', name: 'whale-lounge', locked: true, messages: [] }
-            }
-        }
-    },
-    l2eSessions: {},
-    connectedNodes: {},
-    zineArticles: [],
-    directMessages: []
-};
-
-if (fs.existsSync(CHAT_DB_FILE)) {
-    try {
-        const data = JSON.parse(fs.readFileSync(CHAT_DB_FILE, 'utf8'));
-        if (data.servers) dbMemory.servers = data.servers;
-        if (data.directMessages) dbMemory.directMessages = data.directMessages;
-        if (data.zineArticles) dbMemory.zineArticles = data.zineArticles;
-    } catch (e) {
-        console.error('Error loading DB file:', e);
-    }
-}
 
 function saveDBMemory() {
     try {
