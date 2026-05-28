@@ -499,7 +499,7 @@
                     
                     <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); padding: 15px; border-radius: 12px; margin-top: 15px; border: 1px solid var(--border);">
                         <div style="display:flex; align-items:center; gap: 20px;">
-                            <input type="date" id="event-date-picker" class="event-calendar" onchange="loadEventsEngine()">
+                            <input type="date" id="event-date-picker" class="event-calendar" onchange="loadEvents()">
                             <button class="secondary" onclick="switchTab('feed')">Back to Feed</button>
                         </div>
                         <div style="display:flex; align-items:center; gap: 15px;">
@@ -676,12 +676,18 @@
             <!-- RIGHT SIDEBAR (Discord style members list) -->
             <div class="right-sidebar">
                 <div class="card" style="padding: 15px;" id="sidebar-tx-card">
-                    <h4 style="color: var(--text-muted); font-size: 12px; text-transform: uppercase; margin-bottom: 15px;">Recent Transactions</h4>
+                    <h4 style="color: var(--text-muted); font-size: 12px; text-transform: uppercase; margin-bottom: 15px;">Global Activity</h4>
                     <div class="tx-history-container" id="ui-sidebar-tx-history" style="max-height: 300px; overflow-y: auto; padding: 5px; border-radius: 8px; background: rgba(0,0,0,0.2);"></div>
                 </div>
                 <div class="card" style="padding: 15px;">
                     <h4 id="ui-online-count" style="color: var(--text-muted); font-size: 12px; text-transform: uppercase; margin-bottom: 15px;">Online in Swarm — 0</h4>
                     <div id="ui-online-users">
+                        <!-- Populated dynamically via JS -->
+                    </div>
+                </div>
+                <div class="card" style="padding: 15px;">
+                    <h4 style="color: var(--text-muted); font-size: 12px; text-transform: uppercase; margin-bottom: 15px;">New Network Nodes</h4>
+                    <div id="ui-new-users" style="display: flex; flex-direction: column; gap: 5px;">
                         <!-- Populated dynamically via JS -->
                     </div>
                 </div>
@@ -745,6 +751,11 @@
     <script src="https://cdn.jsdelivr.net/npm/elliptic@6.5.4/dist/elliptic.min.js"></script>
     <script src="/utils.js"></script>
     <script src="/crypto.js"></script>
+    <script src="/CoreEngine.js"></script>
+    <script src="/MeshEngine.js"></script>
+    <script src="/AudioEngine.js"></script>
+    <script src="/GlobalTagEngine.js"></script>
+    <script src="/BattleEngines.js"></script>
     <script src="/app.js"></script>
 </body>
 </html>

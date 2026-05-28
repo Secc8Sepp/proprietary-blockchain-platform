@@ -5,43 +5,25 @@
 const socket = io();
 
 // Core Application State
-let userKeys = { publicKey: '', privateKey: '' };
 let currentView = 'feed';
 let viewingUserPublicKey = ''; let eventsMap = null;
 
-// Proof-Of-Listen Mining State Engine
-let activeTrackHash = '';
-let activeTrackArtist = '';
-let listenTrackingInterval = null;
 let feedTracks = [];
-let playedTracks = new Set();
-let currentChatChannel = null;
-let currentChatServer = null;
-let serversData = [];
-let lastClientPing = 0;
-let currentPresence = { status: 'online', activity: null };
-let idleTimer = null;
-let networkProfiles = {};
-let dmHistory = {};
-let myMeshId = null; let meshConnections = {}; let dataChannels = {};
 let eventsState = { isPlacing: false, currentFile: null, hashes: new Set(), mapMarkers: [] };
 let marketDataCache = { items: [], bounties: [] };
 let myCustomTheme = '';
 let myFollowing = [];
 let feedFilterMode = 'global';
-let socketIdToAddress = {};
-let activeFeedTag = null;
-let zineArticles = [];
 let currentViewedProfile = null;
-let currentPlaylistMode = 'global';
-let hotOrNotData = [];
 let swRegistration = null;
 let localDB = null;
 let editedTop8 = [];
 
 document.addEventListener('DOMContentLoaded', () => { 
+    window.networkProfiles = {}; window.zineArticles = []; window.hotOrNotData = [];
     initializeApplicationListeners(); 
-    initializeAudioPlayerEngine(); 
+    window.MeshEngine.init(socket);
+    window.AudioEngine.init(socket);
     initLocalLedgerNode();
     
     if ('serviceWorker' in navigator) {
@@ -54,18 +36,16 @@ document.addEventListener('DOMContentLoaded', () => {
 function initializeApplicationListeners() {
     console.log('[INIT] Wiring up event listeners...');
     
-    socket.on('connect', () => { myMeshId = socket.id; });
-
     // Identity & Auth Flow
     const signupBtn = document.getElementById('btn-signup');
     if(signupBtn) {
-        signupBtn.addEventListener('click', handleSignup);
+        signupBtn.addEventListener('click', () => window.CoreEngine.handleSignup());
         console.log('[INIT] ✓ Signup button wired');
     } else console.warn('[INIT] ✗ btn-signup not found');
     
     const loginBtn = document.getElementById('btn-login-submit');
     if(loginBtn) {
-        loginBtn.addEventListener('click', handleLogin);
+        loginBtn.addEventListener('click', () => window.CoreEngine.handleLogin());
         console.log('[INIT] ✓ Login button wired');
     } else console.warn('[INIT] ✗ btn-login-submit not found');
     
@@ -122,7 +102,7 @@ function initializeApplicationListeners() {
     let draggedSection = null;
     document.addEventListener('dragstart', (e) => {
         if (e.target.classList.contains('profile-section') || e.target.classList.contains('playlist-item')) {
-            if(viewingUserPublicKey !== userKeys.publicKey) {
+            if(viewingUserPublicKey !== window.CoreEngine.userKeys.publicKey) {
                 e.preventDefault();
                 return;
             }
@@ -181,300 +161,18 @@ function getDragAfterElement(container, y, selector) {
 }
 
     // Presence Idle Detection
-    document.addEventListener('mousemove', resetIdleTimer);
-    document.addEventListener('keypress', resetIdleTimer);
+    document.addEventListener('mousemove', () => window.CoreEngine.resetIdleTimer());
+    document.addEventListener('keypress', () => window.CoreEngine.resetIdleTimer());
     
     const chatInput = document.getElementById('chat-input');
     if (chatInput) {
         chatInput.addEventListener('input', handleChatTyping);
     }
 
-    // Discord Chat Socket Listeners
-    socket.on('chat_history', (msgs) => {
-        const chatLog = document.getElementById('ui-chat-log');
-        if(chatLog) {
-            msgs.forEach(msg => appendChatMessage(msg));
-            chatLog.scrollTop = chatLog.scrollHeight;
-        }
-    });
-
-    socket.on('new_message', (msg) => {
-        appendChatMessage(msg);
-        const chatLog = document.getElementById('ui-chat-log');
-        if(chatLog) chatLog.scrollTop = chatLog.scrollHeight;
-    });
-
-    socket.on('chat_error', (data) => {
-        const chatLog = document.getElementById('ui-chat-log');
-        if(chatLog) {
-            chatLog.innerHTML = `
-                <div class="chat-msg">
-                    <div class="chat-avatar" style="background: var(--danger); display: flex; align-items: center; justify-content: center; font-size: 16px;">🛑</div>
-                    <div class="chat-content">
-                        <div><span class="sender" style="color: var(--danger);">Network Enforcer</span></div>
-                        <div style="color: var(--text-muted);">${escapeHtml(data.message)}</div>
-                    </div>
-                </div>
-            `;
-        }
-        const input = document.getElementById('chat-input');
-        if(input) { input.placeholder = 'Access Denied...'; input.disabled = true; }
-    });
-
-    socket.on('server_list', (servers) => {
-        serversData = servers;
-        renderServerList();
-        if(servers.length > 0 && !currentChatServer) {
-            switchServer(servers[0].id);
-        }
-    });
-
-    socket.on('profile_directory', (dir) => {
-        networkProfiles = dir;
-        if(currentView === 'feed') loadMainGlobalFeed();
-        renderServerList();
-        if(currentChatServer === '@dms') renderDMList();
-    });
-
-    // Request new directory if someone on the chain changes their identity
-    socket.on('blockchain_update', (payload) => {
-        if(payload && payload.type === 'PROFILE_UPDATE') socket.emit('request_profile_directory');
-        if(userKeys.publicKey) fetchUserProfile(userKeys.publicKey, true); 
-        if(currentView === 'feed') loadMainGlobalFeed();
-        if(currentView === 'profile' && viewingUserPublicKey) fetchUserProfile(viewingUserPublicKey, false);
-    });
-
-    socket.on('server_created', (server) => {
-        serversData.push(server);
-        renderServerList();
-    });
-
-    socket.on('channel_created', (data) => {
-        const { serverId, channel } = data;
-        const srv = serversData.find(s => s.id === serverId);
-        if (srv) {
-            srv.channels.push(channel);
-            if (currentChatServer === serverId) {
-                renderChannelList(srv);
-            }
-        }
-    });
-    
-    socket.on('user_typing', (data) => {
-        if (data.serverId !== currentChatServer || data.channelId !== currentChatChannel) return;
-        if (data.sender === userKeys.publicKey) return;
-
-        const chatLog = document.getElementById('ui-chat-log');
-        if (!chatLog) return;
-
-        let indicator = document.getElementById(`typing_${data.sender}`);
-        if (!indicator) {
-            indicator = document.createElement('div');
-            indicator.id = `typing_${data.sender}`;
-            indicator.className = 'chat-msg typing-indicator';
-            indicator.style.color = 'var(--text-muted)';
-            indicator.style.fontStyle = 'italic';
-            indicator.style.fontSize = '12px';
-            indicator.style.padding = '5px 10px';
-            indicator.innerText = `${resolveProfile(data.sender).username} is typing...`;
-            chatLog.appendChild(indicator);
-            chatLog.scrollTop = chatLog.scrollHeight;
-        }
-
-        clearTimeout(indicator.timeout);
-        indicator.timeout = setTimeout(() => {
-            indicator.remove();
-        }, 2000);
-    });
-
-    socket.on('message_read', (data) => {
-        const { from, time } = data;
-        if (dmHistory[from]) {
-            const msg = dmHistory[from].find(m => m.time === time && m.sender === userKeys.publicKey);
-            if (msg) {
-                msg.read = true;
-                const msgId = msg.time + '_' + msg.sender.substring(0, 5);
-                const msgEl = document.getElementById(`msg_${msgId}`);
-                if (msgEl) {
-                    const readReceipt = msgEl.querySelector('.read-receipt');
-                    if (readReceipt) {
-                        readReceipt.innerText = ' ✓✓';
-                        readReceipt.style.color = 'var(--primary)';
-                    }
-                }
-            }
-        }
-    });
-
-    socket.on('swarm_update', (nodes) => {
-        const countHeader = document.getElementById('ui-online-count');
-        const container = document.getElementById('ui-online-users');
-        
-        nodes.forEach(node => {
-            if (node.socketId) socketIdToAddress[node.socketId] = node.address;
-        });
-        // Auto-connect WebRTC Data Channels to form the P2P Browser Mesh
-        nodes.forEach(node => {
-            if (node.socketId && myMeshId && node.socketId !== myMeshId) {
-                if (myMeshId > node.socketId && !meshConnections[node.socketId]) connectToMeshNode(node.socketId);
-            }
-        });
-        
-        if (countHeader) countHeader.innerText = `Online in Swarm — ${nodes.length}`;
-        if (container) {
-            container.innerHTML = nodes.map(node => {
-                const isMe = node.address === userKeys.publicKey;
-                const displayName = isMe ? 'You' : resolveProfile(node.address).username;
-                const color = isMe ? 'var(--primary)' : '#fff';
-                const dotColor = node.status === 'idle' ? 'var(--warning)' : 'var(--success)';
-                const activityHtml = node.activity ? `<div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">🎧 ${escapeHtml(node.activity)}</div>` : '';
-                return `
-                    <div class="user-row" onclick="inspectTargetNode('${node.address}')">
-                        <div class="user-info">
-                            <img src="${getAvatarUrl(node.address)}" class="${isMe ? 'nft-avatar' : ''}">
-                            <div style="display: flex; flex-direction: column;">
-                                <span style="font-size: 14px; font-weight: bold; color: ${color};">${displayName}</span>
-                                ${activityHtml}
-                            </div>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            ${!isMe ? `<span style="font-size: 14px; cursor: pointer;" onclick="event.stopPropagation(); sendDM('${node.address}')" title="Direct Message">✉️</span>` : ''}
-                            <div class="status-dot" style="background: ${dotColor}; box-shadow: 0 0 5px ${dotColor};"></div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
-    });
-
-    socket.on('zine_update', (articles) => {
-        zineArticles = articles;
-        renderZine();
-    });
-
-    socket.on('article_purchased', (data) => {
-        alert("Curation Rights Acquired! Article added to your collection.");
-        fetchUserProfile(userKeys.publicKey, true); // Refresh balance
-    });
-
     // Request initial data
     socket.emit('get_servers');
     socket.emit('get_zine_data');
     console.log('[INIT] Event listeners initialized');
-}
-
-// ==========================================
-// 1. AUTHENTICATION & IDENTITY
-// ==========================================
-
-function setPresence(status, activity) {
-    let changed = false;
-    if (status !== undefined && currentPresence.status !== status) { currentPresence.status = status; changed = true; }
-    if (activity !== undefined && currentPresence.activity !== activity) { currentPresence.activity = activity; changed = true; }
-    if (changed && userKeys.publicKey) socket.emit('update_presence', currentPresence);
-}
-
-function resetIdleTimer() {
-    setPresence('online');
-    if (idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => setPresence('idle'), 300000); // 5 minute idle limit
-}
-
-async function handleSignup() {
-    try {
-        const username = document.getElementById('input-signup-username').value.trim();
-        const avatarFile = document.getElementById('input-signup-avatar').files[0];
-
-        if (!username || !avatarFile) {
-            return alert("A username and profile picture are required to mint an identity.");
-        }
-
-        const btn = document.getElementById('btn-signup');
-        btn.innerText = "Uploading Avatar...";
-        btn.disabled = true;
-        
-        const avatarHash = await uploadMediaAssetFile(avatarFile);
-        if (!avatarHash) throw new Error("Avatar upload failed. Please try again.");
-
-        btn.innerText = "Generating Keys...";
-        const res = await fetch('/api/auth/keygen', { method: 'POST' });
-        if (!res.ok) throw new Error("Server rejected keygen request.");
-        
-        userKeys = await res.json(); 
-        
-        btn.innerText = "Recording to Ledger...";
-        const txFields = { 
-            sender: userKeys.publicKey, 
-            receiver: userKeys.publicKey, 
-            type: 'PROFILE_UPDATE', 
-            data: { username: username, bio: "Active on the Vibe or Die Network.", avatarHash: avatarHash }, 
-            timestamp: Date.now() 
-        };
-        txFields.signature = await generateClientSignature(userKeys.privateKey, txFields);
-        
-        const actionRes = await fetch('/api/social/action', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify(txFields) 
-        });
-        if (!actionRes.ok) throw new Error("Ledger rejected initial identity block.");
-
-        promptKeyDownload(userKeys);
-        unlockApplication(userKeys.publicKey);
-    } catch (err) { 
-        console.error(err);
-        alert("Signup Error: " + err.message); 
-        const btn = document.getElementById('btn-signup');
-        btn.innerText = "Mint & Download Identity";
-        btn.disabled = false;
-    }
-}
-
-function promptKeyDownload(keys) {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(keys));
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", "vod_private_key.json");
-    document.body.appendChild(downloadAnchorNode);
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
-    alert("CRITICAL: Your VOD Credentials have been downloaded. Keep this file safe.");
-}
-
-function handleLogin() {
-    const keyStr = document.getElementById('input-login-key').value.trim();
-    if (!keyStr) return alert("Please paste your key JSON string.");
-
-    try {
-        const parsed = JSON.parse(keyStr);
-        if (parsed.publicKey && parsed.privateKey) {
-            userKeys = parsed;
-            unlockApplication(userKeys.publicKey);
-        } else {
-            throw new Error("Invalid format.");
-        }
-    } catch(err) {
-        alert("Invalid Key format. Paste the entire content of your vod_private_key.json.");
-    }
-}
-
-function unlockApplication(publicKey) {
-    document.getElementById('auth-screen').classList.add('hidden');
-    document.getElementById('app-screen').classList.remove('hidden');
-    
-    const avatar = document.getElementById('composer-avatar');
-    if(avatar) avatar.src = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(publicKey)}&backgroundColor=0b0c10`;
-    
-    const shortKey = publicKey.length > 20 ? publicKey.substring(0, 10) + "..." + publicKey.slice(-5) : publicKey;
-    const pubKeyDisplay = document.getElementById('ui-user-address');
-    if(pubKeyDisplay) pubKeyDisplay.innerText = shortKey;
-    
-    socket.emit('register_node', { address: publicKey });
-
-    loadMainGlobalFeed();
-    fetchUserProfile(publicKey, true); 
-    subscribeToPush(publicKey);
-    syncFullChain();
 }
 
 // ==========================================
@@ -541,7 +239,7 @@ async function handlePublishPost(isStory = false) {
 
         if (isStory && !imgFile && !vidFile) return alert("Stories must include an image or short video.");
         if (!isStory && !textIn && !audFile && !imgFile && !vidFile && !zipFile) return alert("Please provide some content to broadcast.");
-        if (!userKeys.publicKey) return alert("You must login first.");
+        if (!window.CoreEngine.userKeys.publicKey) return alert("You must login first.");
 
         btn.innerText = "Uploading...";
         btn.disabled = true;
@@ -617,7 +315,7 @@ async function handlePublishPost(isStory = false) {
                     if (title) {
                         const price = prompt("Enter a curation price in $VOD for others to publish this:", "5000");
                         if (price && !isNaN(price)) {
-                            socket.emit('publish_article', { title, body: textIn, price: parseFloat(price), author: userKeys.publicKey });
+                            socket.emit('publish_article', { title, body: textIn, price: parseFloat(price), author: window.CoreEngine.userKeys.publicKey });
                             alert("Masterpiece published to the swarm as an Article!");
                             document.getElementById('composer-text').value = '';
                             switchTab('zine');
@@ -630,7 +328,7 @@ async function handlePublishPost(isStory = false) {
             data = { content: textIn };
         }
 
-        await sendSignedTransaction(type, "0x00", data);
+        await window.CoreEngine.sendSignedTransaction(type, "0x00", data);
         detectMentionsAndEmit(textIn);
         
         console.log('[PUBLISH] ✓ Success!');
@@ -682,203 +380,6 @@ function addCollaboratorField() {
 // 3. MINING & AUDIO ENGINE
 // ==========================================
 
-function changePlaylistContext(mode) {
-    currentPlaylistMode = mode;
-    console.log(`[PLAYER] Playlist context changed to: ${mode}`);
-}
-
-function initializeAudioPlayerEngine() {
-    const player = document.getElementById('global-audio-player');
-    const volSlider = document.getElementById('volume-slider');
-    const muteBtn = document.getElementById('btn-mute');
-
-    if(!player) return;
-
-    // Volume Persistence
-    if (volSlider) {
-        const savedVol = localStorage.getItem('vod_volume');
-        if (savedVol !== null) { player.volume = savedVol; volSlider.value = savedVol; }
-        
-        volSlider.addEventListener('input', (e) => {
-            player.volume = e.target.value;
-            localStorage.setItem('vod_volume', e.target.value);
-            if(player.volume > 0) { player.muted = false; if(muteBtn) muteBtn.innerText = '🔊'; }
-        });
-    }
-    
-    if (muteBtn) {
-        muteBtn.addEventListener('click', () => {
-            player.muted = !player.muted;
-            muteBtn.innerText = player.muted ? '🔇' : '🔊';
-        });
-    }
-
-    player.addEventListener('play', () => {
-        if (!activeTrackHash || !userKeys.publicKey) return;
-        if (listenTrackingInterval) clearInterval(listenTrackingInterval);
-        
-        const now = Date.now();
-        if (now - lastClientPing > 5000) {
-            socket.emit('l2e_ping', { address: userKeys.publicKey, trackHash: activeTrackHash });
-            lastClientPing = now;
-        }
-
-        listenTrackingInterval = setInterval(() => {
-            if (!player.paused && !player.muted) {
-                socket.emit('l2e_ping', { address: userKeys.publicKey, trackHash: activeTrackHash });
-                lastClientPing = Date.now();
-            }
-        }, 5000); // Server expects 5s pings
-    });
-    
-    player.addEventListener('pause', () => stopPlaybackTrackingLoop(false));
-    player.addEventListener('ended', () => {
-        stopPlaybackTrackingLoop(true);
-        playNextTrackAdvanced();
-    });
-
-    socket.on('l2e_status', (data) => {
-        let indicator = document.getElementById('l2e-status-tracker');
-        if (indicator) {
-            if (data.error) {
-                indicator.innerHTML = `⚠️ ${data.error}`;
-                indicator.style.color = 'var(--danger)';
-            } else {
-                indicator.innerHTML = `🎧 Mining $VOD... (${data.pings}/${data.max})`;
-                indicator.style.color = 'var(--primary)';
-            }
-        }
-    });
-
-    socket.on('l2e_reward', (data) => {
-        let indicator = document.getElementById('l2e-status-tracker');
-        if (indicator) {
-            indicator.innerHTML = `💎 Proof-of-Listen Minted!`;
-            indicator.style.color = 'var(--success)';
-            
-            // Broadcast the actual transaction to the ledger
-            triggerProofOfListenMint();
-        }
-    });
-}
-
-function stopPlaybackTrackingLoop(resetCounter) {
-    if (listenTrackingInterval) { clearInterval(listenTrackingInterval); listenTrackingInterval = null; }
-    let indicator = document.getElementById('l2e-status-tracker');
-    if(indicator) {
-        indicator.innerHTML = `⏸️ Mining paused.`;
-        indicator.style.color = 'var(--text-muted)';
-    }
-    setPresence(undefined, null);
-}
-
-async function triggerProofOfListenMint() {
-    const msgToSign = { 
-        sender: userKeys.publicKey, 
-        receiver: activeTrackArtist, 
-        type: 'STREAM_COMPLETED', 
-        data: { audioHash: activeTrackHash }, 
-        timestamp: Date.now() 
-    };
-    try {
-        const signature = await generateClientSignature(userKeys.privateKey, msgToSign);
-        const txFields = { ...msgToSign, signature };
-        const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
-        
-        if (res.ok) {
-            // Refresh the UI to reflect your newly mined $VOD balance!
-            fetchUserProfile(userKeys.publicKey, true);
-            loadMainGlobalFeed();
-        } else {
-            console.error("Ledger rejected mining block:", await res.json());
-        }
-    } catch(err) { console.error("Mining rejected:", err); }
-}
-
-function playTrack(title, audioHash, artistPublicKey, artistName) {
-    stopPlaybackTrackingLoop(true);
-    activeTrackHash = audioHash; 
-    activeTrackArtist = artistPublicKey;
-    playedTracks.add(audioHash);
-    
-    setPresence(undefined, 'Listening: ' + title);
-
-    const player = document.getElementById('global-audio-player');
-    player.src = `/tracks/${audioHash}`;
-    
-    player.play().catch(error => {
-        console.error("Playback error:", error);
-        alert("Streaming Error: Track not found on network.");
-    });
-    
-    // Update Global Player UI
-    const titleEl = document.getElementById('global-track-title');
-    if (titleEl) titleEl.innerText = title;
-    
-    const artistLink = document.getElementById('global-track-artist-link');
-    if (artistLink) {
-        artistLink.innerText = artistName ? artistName : resolveProfile(artistPublicKey).username;
-        artistLink.onclick = () => inspectTargetNode(artistPublicKey);
-    }
-
-    const artEl = document.getElementById('global-track-art');
-    if (artEl) {
-        artEl.src = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(artistPublicKey)}&backgroundColor=1f2833`;
-    }
-    
-    if(document.getElementById('input-market-hash')) document.getElementById('input-market-hash').value = audioHash;
-    if(document.getElementById('input-market-seller')) document.getElementById('input-market-seller').value = artistPublicKey;
-}
-
-function playNextTrackAdvanced() {
-    let pool = [];
-    
-    if (currentPlaylistMode === 'profile' && currentViewedProfile && currentViewedProfile.uploadedTracks) {
-        pool = currentViewedProfile.uploadedTracks.map(t => ({
-            title: t.title,
-            artist: t.artist,
-            offPlatformCollaborator: t.offPlatformCollaborator,
-            audioHash: t.hash,
-            sender: currentViewedProfile.publicKey,
-            timestamp: t.timestamp
-        }));
-    }
-
-    if (pool.length === 0) {
-        pool = feedTracks.map(t => ({
-            title: t.data.trackTitle,
-            artist: t.data.artist,
-            offPlatformCollaborator: t.data.offPlatformCollaborator,
-            audioHash: t.data.audioHash,
-            sender: t.sender,
-            timestamp: t.timestamp
-        }));
-    }
-    
-    // 1. Filter out tracks we have already played
-    let unplayedTracks = pool.filter(t => !playedTracks.has(t.audioHash));
-    
-    // 2. If all tracks played, clear history to loop
-    if (unplayedTracks.length === 0) {
-        playedTracks.clear();
-        unplayedTracks = [...pool];
-    }
-    
-    // 3. Advanced Algorithm: Prioritize by recency + listen history logic
-    unplayedTracks.sort((a, b) => b.timestamp - a.timestamp);
-    let poolSize = Math.max(1, Math.floor(unplayedTracks.length * 0.5));
-    
-    // 4. Select a random track from the optimized pool
-    let nextTrackIndex = Math.floor(Math.random() * poolSize);
-    let nextTrack = unplayedTracks[nextTrackIndex];
-    
-    if (nextTrack) {
-        let artistName = nextTrack.artist || resolveProfile(nextTrack.sender).username;
-        if (nextTrack.offPlatformCollaborator) artistName += ` ft. ${nextTrack.offPlatformCollaborator}`;
-        playTrack(nextTrack.title, nextTrack.audioHash, nextTrack.sender, artistName);
-    }
-}
-
 // ==========================================
 // 4. RENDERING & UI NAVIGATION
 // ==========================================
@@ -888,6 +389,33 @@ async function loadMainGlobalFeed() {
         const res = await fetch('/api/feed');
         const data = await res.json();
         feedTracks = data.filter(item => item.type === 'SONG_UPLOAD');
+
+        // POPULATE SIDEBAR TRANSACTIONS GLOBALLY
+        const sidebarTx = document.getElementById('ui-sidebar-tx-history');
+        if (sidebarTx) {
+            sidebarTx.innerHTML = data.slice(0, 30).map(tx => {
+                const prof = resolveProfile(tx.sender);
+                let action = tx.type;
+                let color = 'var(--text-muted)';
+                
+                if (tx.type === 'SONG_UPLOAD') { action = 'Minted Track'; color = 'var(--primary)'; }
+                else if (tx.type === 'IMAGE_POST') { action = 'Minted Image'; color = 'var(--primary)'; }
+                else if (tx.type === 'PROFILE_UPDATE') { action = 'Updated Profile'; color = 'var(--warning)'; }
+                else if (tx.type === 'STREAM_COMPLETED') { action = 'Mined $VOD'; color = 'var(--success)'; }
+                else if (tx.type === 'FOLLOW_USER') { action = 'Locked Crew'; color = 'var(--primary)'; }
+                else if (tx.type === 'TEXT_POST') { action = 'Broadcasted Status'; color = '#fff'; }
+                else if (tx.type === 'LIKE_POST') { action = 'Liked Post'; color = 'var(--danger)'; }
+                else if (tx.type === 'REPLY_POST') { action = 'Replied'; color = '#fff'; }
+
+                return `<div style="display:flex; flex-direction: column; padding:8px; border-bottom:1px solid rgba(255,255,255,0.1); font-size:12px; cursor: pointer; transition: 0.2s;" onclick="inspectTargetNode('${tx.sender}')" onmouseover="this.style.background='rgba(102, 252, 241, 0.05)'" onmouseout="this.style.background='transparent'">
+                    <div style="display:flex; justify-content:space-between;">
+                        <span style="font-weight: bold; color: ${color};">${escapeHtml(prof.username)}</span>
+                        <span style="color:var(--text-muted); font-size: 10px;">${new Date(tx.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    <span style="color: var(--text-dark);">${action}</span>
+                </div>`;
+            }).join('');
+        }
         
         const container = document.getElementById('feed-container');
         if(!container) return;
@@ -919,14 +447,14 @@ async function loadMainGlobalFeed() {
 
         let filterHtml = `
             <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                <button id="btn-feed-global" class="secondary" style="${feedFilterMode === 'global' ? 'background: var(--primary); color: #000;' : ''}" onclick="feedFilterMode='global'; loadMainGlobalFeed();">Global Feed</button>
+                <button id="btn-feed-global" class="secondary" style="${feedFilterMode === 'global' ? 'background: var(--primary); color: #000;' : ''}" onclick="feedFilterMode='global'; window.loadMainGlobalFeed();">Global Feed</button>
                 <button id="btn-feed-following" class="secondary" style="${feedFilterMode === 'following' ? 'background: var(--primary); color: #000;' : ''}" onclick="feedFilterMode='following'; loadMainGlobalFeed();">Following</button>
             </div>
         `;
-        if (activeFeedTag) {
+        if (window.GlobalTagEngine && window.GlobalTagEngine.activeFeedTag) {
             filterHtml += `<div style="padding: 10px; background: rgba(102, 252, 241, 0.1); color: var(--primary); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
-                <span>Filtering by Tag: <strong>${escapeHtml(activeFeedTag)}</strong></span>
-                <button class="secondary" style="padding: 2px 8px; font-size: 11px;" onclick="activeFeedTag=null; loadMainGlobalFeed();">Clear Filter</button>
+                <span>Filtering by Tag: <strong>${escapeHtml(window.GlobalTagEngine.activeFeedTag)}</strong></span>
+                <button class="secondary" style="padding: 2px 8px; font-size: 11px;" onclick="window.GlobalTagEngine.filterFeedByTag(null); window.loadMainGlobalFeed();">Clear Filter</button>
             </div>`;
         }
         container.innerHTML = storiesHtml + filterHtml;
@@ -937,16 +465,16 @@ async function loadMainGlobalFeed() {
             if (isNodeBlocked(item.sender)) return false;
             
             if (feedFilterMode === 'following') {
-                if (item.sender !== userKeys.publicKey && !myFollowing.includes(item.sender)) return false;
+                if (item.sender !== window.CoreEngine.userKeys.publicKey && !myFollowing.includes(item.sender)) return false;
             }
             
-            if (activeFeedTag) {
+            if (window.GlobalTagEngine && window.GlobalTagEngine.activeFeedTag) {
                 if (item.type !== 'SONG_UPLOAD' || !item.data.metadata) return false;
                 const tags = item.data.metadata.split(',').map(t => {
                     let s = t.trim().toLowerCase();
                     return s.startsWith('#') ? s : '#' + s;
                 });
-                if (!tags.includes(activeFeedTag.toLowerCase())) return false;
+                if (!tags.includes(window.GlobalTagEngine.activeFeedTag.toLowerCase())) return false;
             }
 
             return ['SONG_UPLOAD', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'TEXT_POST', 'SHOUTBOX_POST'].includes(item.type);
@@ -957,7 +485,7 @@ async function loadMainGlobalFeed() {
             postEl.className = 'card post';
             const timeStr = new Date(item.timestamp).toLocaleString();
             const roles = item.roles || [];
-            const isOwner = item.sender === userKeys.publicKey;
+            const isOwner = item.sender === window.CoreEngine.userKeys.publicKey;
             const deleteBtn = isOwner ? `<button class="interaction-btn" onclick="deletePost('${item.transactionHash}')">🗑️ Delete</button>` : '';
             postEl.innerHTML = `
                 <div class="post-avatar" onclick="inspectTargetNode('${item.sender}')" style="cursor:pointer;"><img src="${getAvatarUrl(item.sender)}"></div>
@@ -1025,14 +553,14 @@ function renderPostContent(item) {
                     <div>
                         <div style="font-size:18px; color: var(--primary); font-weight: bold;">🎵 ${escapeHtml(item.data.trackTitle)}</div>
                         <div style="font-size:12px; color:var(--text-muted); margin-bottom: 2px;">By ${displayArtist}</div>
-                        ${item.data.metadata ? `<div style="font-size:12px; color:var(--text-muted);">${renderTags(item.data.metadata)}</div>` : ''}
+                        ${item.data.metadata && window.GlobalTagEngine ? `<div style="font-size:12px; color:var(--text-muted);">${window.GlobalTagEngine.renderTags(item.data.metadata)}</div>` : ''}
                         <div style="font-size:12px; color: var(--text-muted);">
                             🎧 ${playCount} Streams • 💎 Network Mines 25,000 $VOD per stream
                         </div>
                     </div>
                 </div>
                 <div style="display: flex; gap: 10px;">
-                    <button style="background:#66fcf1; color:#000; padding:8px 15px; flex: 1;" onclick="playTrack('${escapeJsArg(item.data.trackTitle)}', '${item.data.audioHash}', '${item.sender}', '${escapeJsArg(displayArtist)}')">
+                    <button style="background:#66fcf1; color:#000; padding:8px 15px; flex: 1;" onclick="window.AudioEngine.playTrack('${escapeJsArg(item.data.trackTitle)}', '${item.data.audioHash}', '${item.sender}', '${escapeJsArg(displayArtist)}')">
                         ▶ Play Track
                     </button>
                     ${listingHtml}
@@ -1107,29 +635,17 @@ function toggleBlockNode(publicKey) {
     if(currentView === 'feed') loadMainGlobalFeed();
 }
 
-function renderTags(metadata) {
-    if (!metadata) return '';
-    return metadata.split(',').map(tag => {
-        let t = tag.trim();
-        if (!t) return '';
-        if (!t.startsWith('#')) t = '#' + t;
-        return `<span style="color:var(--primary); cursor:pointer; margin-right: 5px;" onclick="filterFeedByTag('${escapeJsArg(t)}')">${escapeHtml(t)}</span>`;
-    }).join('');
-}
-
-function filterFeedByTag(tag) {
-    activeFeedTag = tag;
-    switchTab('feed', document.querySelector('.side-nav-item')); 
-    loadMainGlobalFeed();
-}
-
 function executeGlobalSearch(query) {
+    if (window.GlobalTagEngine) {
+        const tags = window.GlobalTagEngine.searchByTag(query);
+        if (tags.length > 0) return window.GlobalTagEngine.filterFeedByTag(tags[0]);
+    }
     const q = query.toLowerCase();
     for (let addr in networkProfiles) {
         if (addr.toLowerCase() === q || networkProfiles[addr].username.toLowerCase().includes(q)) return inspectTargetNode(addr);
     }
     const track = feedTracks.find(t => (t.data.trackTitle && t.data.trackTitle.toLowerCase().includes(q)) || (t.data.artist && t.data.artist.toLowerCase().includes(q)));
-    if (track) return playTrack(track.data.trackTitle, track.data.audioHash, track.sender, track.data.artist);
+    if (track && window.AudioEngine) return window.AudioEngine.playTrack(track.data.trackTitle, track.data.audioHash, track.sender, track.data.artist);
     const article = zineArticles.find(a => (a.title && a.title.toLowerCase().includes(q)) || (a.body && a.body.toLowerCase().includes(q)));
     if (article) return switchTab('zine');
     if (marketDataCache && marketDataCache.items) {
@@ -1154,43 +670,26 @@ function inspectTargetNode(publicKey) {
 async function deletePost(txHash) {
     if (!confirm("Are you sure you want to delete this post?")) return;
     try {
-        const msgData = {
-            sender: userKeys.publicKey,
-            receiver: '0x00',
-            type: 'DELETE_POST',
-            data: { txHash },
-            timestamp: Date.now()
-        };
-        const sig = await generateClientSignature(userKeys.privateKey, msgData);
-        const txFields = { ...msgData, signature: sig };
-        const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
-        if (res.ok) {
-            alert("Post deleted.");
-            loadMainGlobalFeed();
-            if (currentView === 'profile') fetchUserProfile(viewingUserPublicKey || userKeys.publicKey, false);
-        } else {
-            throw new Error((await res.json()).error);
-        }
+        await window.CoreEngine.sendSignedTransaction('DELETE_POST', '0x00', { txHash });
+        alert("Post deleted.");
+        loadMainGlobalFeed();
+        if (currentView === 'profile') fetchUserProfile(viewingUserPublicKey || window.CoreEngine.userKeys.publicKey, false);
     } catch (err) {
         alert("Failed to delete: " + err.message);
     }
 }
 
 async function requestSongShare(hash, seller) {
-    if (seller === userKeys.publicKey) return alert("You already own this track's equity.");
+    if (seller === window.CoreEngine.userKeys.publicKey) return alert("You already own this track's equity.");
     const count = prompt("How many shares (percentage) do you want to request?");
     if (!count || isNaN(count)) return;
     const price = prompt(`What price per share in $VOD are you offering for these ${count}%?`);
     if (!price || isNaN(price)) return;
     
     try {
-        const msgData = { sender: userKeys.publicKey, receiver: seller, type: 'REQUEST_SONG_SHARE', data: { audioHash: hash, shareCount: parseInt(count), pricePerShare: parseFloat(price) }, timestamp: Date.now() };
-        const sig = await generateClientSignature(userKeys.privateKey, msgData);
-        const txFields = { ...msgData, signature: sig };
-        const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
-        if (!res.ok) throw new Error((await res.json()).error);
+        await window.CoreEngine.sendSignedTransaction('REQUEST_SONG_SHARE', seller, { audioHash: hash, shareCount: parseInt(count), pricePerShare: parseFloat(price) });
         alert(`Stake Request sent to the creator for ${count}% at ${price} $VOD each!`);
-        fetchUserProfile(userKeys.publicKey, false);
+        fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
     } catch(err) { alert(err.message); }
 }
 
@@ -1198,52 +697,36 @@ async function buySongShareDirect(hash, seller, price) {
     const count = prompt("How many available shares (percentage) do you want to buy?");
     if (!count || isNaN(count)) return;
     try {
-        const msgData = { sender: userKeys.publicKey, receiver: seller, type: 'BUY_SONG_SHARE', data: { audioHash: hash, shareCount: parseInt(count), pricePerShare: parseFloat(price) }, timestamp: Date.now() };
-        const sig = await generateClientSignature(userKeys.privateKey, msgData);
-        const txFields = { ...msgData, signature: sig };
-        const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
-        if (!res.ok) throw new Error((await res.json()).error);
+        await window.CoreEngine.sendSignedTransaction('BUY_SONG_SHARE', seller, { audioHash: hash, shareCount: parseInt(count), pricePerShare: parseFloat(price) });
         alert(`Successfully purchased ${count}% stake!`);
         loadMainGlobalFeed();
-        fetchUserProfile(userKeys.publicKey, false);
+        fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
     } catch(err) { alert(err.message); }
 }
 
 async function respondToStakeRequest(requestId, type) {
     if (!confirm(`Are you sure you want to ${type === 'ACCEPT_SHARE_REQUEST' ? 'accept' : 'decline'} this request?`)) return;
     try {
-        const msgData = { sender: userKeys.publicKey, receiver: '0x00', type: type, data: { requestId }, timestamp: Date.now() };
-        const sig = await generateClientSignature(userKeys.privateKey, msgData);
-        const txFields = { ...msgData, signature: sig };
-        const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
-        if (!res.ok) throw new Error((await res.json()).error);
+        await window.CoreEngine.sendSignedTransaction(type, '0x00', { requestId });
         alert("Request processed successfully.");
-        fetchUserProfile(userKeys.publicKey, false);
+        fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
     } catch(err) { alert(err.message); }
 }
 
 async function promptEditSong(audioHash) {
-    if (!userKeys.publicKey) return;
+    if (!window.CoreEngine.userKeys.publicKey) return;
     const newTitle = prompt("Enter new track title:");
     const newArtist = prompt("Enter artist name:");
     const newOffCollab = prompt("Enter off-platform collaborator (optional):");
     if (!newTitle && !newArtist && !newOffCollab) return;
 
     try {
-        const msgData = { 
-            sender: userKeys.publicKey, receiver: '0x00', type: 'EDIT_SONG_METADATA', 
-            data: { audioHash: audioHash }, 
-            timestamp: Date.now() 
-        };
-        if (newTitle) msgData.data.title = newTitle;
-        if (newArtist) msgData.data.artist = newArtist;
-        if (newOffCollab) msgData.data.offPlatformCollaborator = newOffCollab;
-
-        const sig = await generateClientSignature(userKeys.privateKey, msgData);
-        const txFields = { ...msgData, signature: sig };
-        const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
-        if (!res.ok) throw new Error((await res.json()).error);
-        alert("Metadata updated!"); fetchUserProfile(userKeys.publicKey, false); loadMainGlobalFeed();
+        let data = { audioHash: audioHash };
+        if (newTitle) data.title = newTitle;
+        if (newArtist) data.artist = newArtist;
+        if (newOffCollab) data.offPlatformCollaborator = newOffCollab;
+        await window.CoreEngine.sendSignedTransaction('EDIT_SONG_METADATA', '0x00', data);
+        alert("Metadata updated!"); fetchUserProfile(window.CoreEngine.userKeys.publicKey, false); loadMainGlobalFeed();
     } catch(err) { alert("Failed to edit: " + err.message); }
 }
 
@@ -1298,26 +781,26 @@ function switchTab(tabName, element, targetKey = null) {
             viewingUserPublicKey = targetKey;
             fetchUserProfile(targetKey, false);
         } else {
-            viewingUserPublicKey = userKeys.publicKey; // Instantly snap state to the current user
-            fetchUserProfile(userKeys.publicKey, false);
+            viewingUserPublicKey = window.CoreEngine.userKeys.publicKey; // Instantly snap state to the current user
+            fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
         }
     }
-    if (tabName === 'market') loadMarketplace();
+    if (tabName === 'market') window.loadMarketplace();
     if (tabName === 'zine') renderZine();
-    if (tabName === 'hotornot') loadHotOrNot();
+    if (tabName === 'hotornot') window.BattleEngines.loadHotOrNot();
 }
 
 function renderServerList() {
     const list = document.getElementById('ui-server-list');
     if (!list) return;
     
-    const dmActive = currentChatServer === '@dms' ? 'active' : '';
+    const dmActive = window.MeshEngine.currentChatServer === '@dms' ? 'active' : '';
     const dmBtn = `<div class="server-icon ${dmActive}" onclick="switchServer('@dms')" title="Direct Messages" style="background: var(--primary); color: #000;">💬</div>`;
     const addBtnHTML = `<div class="server-icon" onclick="promptCreateServer()" style="background: rgba(102, 252, 241, 0.1); color: var(--text-muted); font-size: 24px;" title="Create Server">+</div>`;
     
     let html = '';
-    serversData.forEach(srv => {
-        const isActive = srv.id === currentChatServer ? 'active' : '';
+    window.MeshEngine.serversData.forEach(srv => {
+        const isActive = srv.id === window.MeshEngine.currentChatServer ? 'active' : '';
         const seed = encodeURIComponent(srv.id);
         html += `<div class="server-icon ${isActive}" onclick="switchServer('${srv.id}')" title="${escapeHtml(srv.name)}">
             <img src="https://api.dicebear.com/7.x/identicon/svg?seed=${seed}&backgroundColor=1f2833">
@@ -1333,7 +816,7 @@ function switchServer(serverId) {
     const newDmBtn = document.getElementById('btn-new-dm');
 
     if (serverId === '@dms') {
-        currentChatServer = '@dms';
+        window.MeshEngine.currentChatServer = '@dms';
         renderServerList();
         document.getElementById('ui-active-server-name').innerHTML = `💬 Direct Messages`;
         
@@ -1342,10 +825,10 @@ function switchServer(serverId) {
         if(newDmBtn) newDmBtn.style.display = 'inline-block';
         
         renderDMList();
-        const firstDm = Object.keys(dmHistory)[0];
+        const firstDm = Object.keys(window.MeshEngine.dmHistory)[0];
         if (firstDm) switchDMChannel(firstDm);
         else {
-            currentChatChannel = null;
+            window.MeshEngine.currentChatChannel = null;
             document.getElementById('ui-chat-log').innerHTML = '<div style="padding:15px; color:var(--text-muted);">No active conversations. Start a DM from the Swarm or Profile.</div>';
             document.getElementById('chat-input').disabled = true;
             document.getElementById('chat-input').placeholder = "No conversation selected...";
@@ -1353,14 +836,14 @@ function switchServer(serverId) {
         return;
     }
 
-    currentChatServer = serverId;
+    window.MeshEngine.currentChatServer = serverId;
     renderServerList();
     
     if(voiceBtn) voiceBtn.style.display = 'inline-block';
     if(addChBtn) addChBtn.style.display = 'inline-block';
     if(newDmBtn) newDmBtn.style.display = 'none';
 
-    const srv = serversData.find(s => s.id === serverId);
+    const srv = window.MeshEngine.serversData.find(s => s.id === serverId);
     if (!srv) return;
     
     document.getElementById('ui-active-server-name').innerText = srv.name;
@@ -1369,7 +852,7 @@ function switchServer(serverId) {
     if (srv.channels && srv.channels.length > 0) {
         switchChannel(srv.id, srv.channels[0].id);
     } else {
-        currentChatChannel = null;
+        window.MeshEngine.currentChatChannel = null;
         document.getElementById('ui-channel-list').innerHTML = '';
         document.getElementById('ui-chat-log').innerHTML = '';
         const input = document.getElementById('chat-input');
@@ -1384,7 +867,7 @@ function renderChannelList(srv) {
     
     let html = '';
     srv.channels.forEach(ch => {
-        const isActive = ch.id === currentChatChannel ? 'active' : '';
+        const isActive = ch.id === window.MeshEngine.currentChatChannel ? 'active' : '';
         const icon = ch.locked ? '🔒' : '#';
         const classNames = `channel-tab ${isActive} ${ch.locked ? 'locked' : ''}`;
         html += `<div class="${classNames}" onclick="switchChannel('${srv.id}', '${ch.id}')">
@@ -1398,8 +881,8 @@ function renderDMList() {
     const list = document.getElementById('ui-channel-list');
     if (!list) return;
     let html = '';
-    for (const addr of Object.keys(dmHistory)) {
-        const isActive = addr === currentChatChannel ? 'active' : '';
+    for (const addr of Object.keys(window.MeshEngine.dmHistory)) {
+        const isActive = addr === window.MeshEngine.currentChatChannel ? 'active' : '';
         const prof = resolveProfile(addr);
         html += `<div class="channel-tab ${isActive}" onclick="switchDMChannel('${addr}')" style="display:flex; align-items:center; gap:8px;">
             <img src="${getAvatarUrl(addr)}" style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;">
@@ -1410,8 +893,8 @@ function renderDMList() {
 }
 
 function switchDMChannel(address) {
-    currentChatServer = '@dms';
-    currentChatChannel = address;
+    window.MeshEngine.currentChatServer = '@dms';
+    window.MeshEngine.currentChatChannel = address;
     renderDMList();
     
     const prof = resolveProfile(address);
@@ -1426,7 +909,7 @@ function switchDMChannel(address) {
     const chatLog = document.getElementById('ui-chat-log');
     chatLog.innerHTML = `<div class="chat-msg"><div class="chat-content"><div style="color: var(--primary);">Secure DM channel started with ${escapeHtml(prof.username)}.</div></div></div>`;
     
-    (dmHistory[address] || []).forEach(msg => appendChatMessage(msg));
+    (window.MeshEngine.dmHistory[address] || []).forEach(msg => appendChatMessage(msg));
     chatLog.scrollTop = chatLog.scrollHeight;
     
     const input = document.getElementById('chat-input');
@@ -1435,10 +918,10 @@ function switchDMChannel(address) {
 }
 
 function switchChannel(serverId, channelId) {
-    currentChatServer = serverId;
-    currentChatChannel = channelId;
+    window.MeshEngine.currentChatServer = serverId;
+    window.MeshEngine.currentChatChannel = channelId;
     
-    const srv = serversData.find(s => s.id === serverId);
+    const srv = window.MeshEngine.serversData.find(s => s.id === serverId);
     if (!srv) return;
     
     renderChannelList(srv); 
@@ -1465,18 +948,18 @@ function switchChannel(serverId, channelId) {
 
 function handleChatEnter(e) {
     if (e.key === 'Enter' && e.target.value.trim() !== '') {
-        if(!userKeys.publicKey) return alert("Please unlock your identity to chat.");
-        if(!currentChatServer || !currentChatChannel) return;
+        if(!window.CoreEngine.userKeys.publicKey) return alert("Please unlock your identity to chat.");
+        if(!window.MeshEngine.currentChatServer || !window.MeshEngine.currentChatChannel) return;
         
         const text = e.target.value.trim();
         const time = Date.now();
 
-        if (currentChatServer === '@dms') {
-            socket.emit('send_direct_message', { to: currentChatChannel, text });
-            broadcastToMesh('P2P_CHAT', { sender: userKeys.publicKey, to: currentChatChannel, text, time });
+        if (window.MeshEngine.currentChatServer === '@dms') {
+            socket.emit('send_direct_message', { to: window.MeshEngine.currentChatChannel, text });
+            window.MeshEngine.broadcastToMesh('P2P_CHAT', { sender: window.CoreEngine.userKeys.publicKey, to: window.MeshEngine.currentChatChannel, text, time });
         } else {
-            socket.emit('send_message', { serverId: currentChatServer, channelId: currentChatChannel, address: userKeys.publicKey, text });
-            broadcastToMesh('P2P_CHAT', { serverId: currentChatServer, channelId: currentChatChannel, sender: userKeys.publicKey, text, time });
+            socket.emit('send_message', { serverId: window.MeshEngine.currentChatServer, channelId: window.MeshEngine.currentChatChannel, address: window.CoreEngine.userKeys.publicKey, text });
+            window.MeshEngine.broadcastToMesh('P2P_CHAT', { serverId: window.MeshEngine.currentChatServer, channelId: window.MeshEngine.currentChatChannel, sender: window.CoreEngine.userKeys.publicKey, text, time });
         }
         detectMentionsAndEmit(text);
         e.target.value = '';
@@ -1485,9 +968,9 @@ function handleChatEnter(e) {
 
 let typingTimer = null;
 function handleChatTyping() {
-    if (!userKeys.publicKey || !currentChatServer || !currentChatChannel) return;
+    if (!window.CoreEngine.userKeys.publicKey || !window.MeshEngine.currentChatServer || !window.MeshEngine.currentChatChannel) return;
     if (!typingTimer) {
-        socket.emit('user_typing', { serverId: currentChatServer, channelId: currentChatChannel, sender: userKeys.publicKey });
+        socket.emit('user_typing', { serverId: window.MeshEngine.currentChatServer, channelId: window.MeshEngine.currentChatChannel, sender: window.CoreEngine.userKeys.publicKey });
         typingTimer = setTimeout(() => {
             typingTimer = null;
         }, 1500);
@@ -1495,21 +978,21 @@ function handleChatTyping() {
 }
 
 function promptCreateServer() {
-    if(!userKeys.publicKey) return alert("Please unlock your identity to create a server.");
+    if(!window.CoreEngine.userKeys.publicKey) return alert("Please unlock your identity to create a server.");
     const serverName = prompt("Enter new Server Name:");
     if (serverName && serverName.trim()) {
-        socket.emit('create_server', { serverName: serverName.trim(), address: userKeys.publicKey });
+        socket.emit('create_server', { serverName: serverName.trim(), address: window.CoreEngine.userKeys.publicKey });
     }
 }
 
 function promptCreateChannel() {
-    if(!userKeys.publicKey) return alert("Please unlock your identity to create a channel.");
-    if(!currentChatServer) return alert("Please select a server first.");
+    if(!window.CoreEngine.userKeys.publicKey) return alert("Please unlock your identity to create a channel.");
+    if(!window.MeshEngine.currentChatServer) return alert("Please select a server first.");
     const channelName = prompt("Enter new Channel Name:");
     if (channelName && channelName.trim()) {
         const isLocked = confirm("Make this a Token-Gated Backroom? (Requires 10,000 $VOD to enter)");
         const safeName = channelName.trim().replace(/[\s#]/g, '-').toLowerCase();
-        socket.emit('create_channel', { serverId: currentChatServer, channelName: safeName, address: userKeys.publicKey, locked: isLocked });
+        socket.emit('create_channel', { serverId: window.MeshEngine.currentChatServer, channelName: safeName, address: window.CoreEngine.userKeys.publicKey, locked: isLocked });
     }
 }
 
@@ -1665,10 +1148,7 @@ function cleanUpCoveredFlyers() {
 
 async function silentDeletePost(txHash) {
     try {
-        const msgData = { sender: userKeys.publicKey, receiver: '0x00', type: 'DELETE_POST', data: { txHash }, timestamp: Date.now() };
-        const sig = await generateClientSignature(userKeys.privateKey, msgData);
-        const txFields = { ...msgData, signature: sig };
-        await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
+        await window.CoreEngine.sendSignedTransaction('DELETE_POST', '0x00', { txHash });
     } catch (err) {}
 }
 
@@ -1725,7 +1205,7 @@ async function handleBulletinBoardClick(e) {
     eventsState.isPlacing = false; document.body.style.cursor = 'default'; document.getElementById('ui-flyer-cursor').style.display = 'none';
     try {
         const hash = await uploadMediaAssetFile(eventsState.currentFile);
-        await sendSignedTransaction('IMAGE_POST', "0x00", { imageHash: hash, isFlyer: true, localHash: eventsState.currentFile.localHash, x, y, rotation: rot, lat, lng });
+        await window.CoreEngine.sendSignedTransaction('IMAGE_POST', "0x00", { imageHash: hash, isFlyer: true, localHash: eventsState.currentFile.localHash, x, y, rotation: rot, lat, lng });
         loadEvents();
     } catch (err) { alert(err.message); }
     eventsState.currentFile = null;
@@ -1739,12 +1219,12 @@ function appendChatMessage(msg) {
     el.className = 'chat-msg';
     const msgId = msg.time + '_' + msg.sender.substring(0, 5); // Unique ID for reactions
     el.id = 'msg_' + msgId;
-    const isMe = msg.sender === userKeys.publicKey;
+    const isMe = msg.sender === window.CoreEngine.userKeys.publicKey;
     const senderName = isMe ? 'You' : resolveProfile(msg.sender).username;
     const timeStr = new Date(msg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     
     let readReceiptHtml = '';
-    if (currentChatServer === '@dms' && isMe) {
+    if (window.MeshEngine.currentChatServer === '@dms' && isMe) {
         readReceiptHtml = msg.read ? `<span class="read-receipt" style="color: var(--primary); font-size: 10px;"> ✓✓</span>` : `<span class="read-receipt" style="color: var(--text-muted); font-size: 10px;"> ✓</span>`;
     }
 
@@ -1783,8 +1263,8 @@ function playProfileTrack(index) {
     
     if (track) {
         const select = document.getElementById('playlist-selector');
-        if (select) { select.value = 'profile'; currentPlaylistMode = 'profile'; }
-        playTrack(track.title, track.hash, currentViewedProfile.publicKey, artistName);
+        if (select) { select.value = 'profile'; window.AudioEngine.changePlaylistContext('profile'); }
+        window.AudioEngine.playTrack(track.title, track.hash, currentViewedProfile.publicKey, artistName);
     }
 }
 
@@ -1822,7 +1302,7 @@ function handleTop8Search() {
     
     let matches = [];
     for (let addr in networkProfiles) {
-        if (addr === userKeys.publicKey || editedTop8.includes(addr)) continue;
+        if (addr === window.CoreEngine.userKeys.publicKey || editedTop8.includes(addr)) continue;
         if (networkProfiles[addr].username.toLowerCase().includes(q)) {
             matches.push({ address: addr, ...networkProfiles[addr] });
         }
@@ -1857,13 +1337,13 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
         const response = await fetch(`/api/social/profile?publicKey=${encodeURIComponent(publicKey)}`);
         const profile = await response.json();
         
-        if(profile.publicKey === userKeys.publicKey) {
+        if(profile.publicKey === window.CoreEngine.userKeys.publicKey) {
             const balDisp = document.getElementById('ui-balance-display');
             if(balDisp) balDisp.innerText = profile.balance.toLocaleString();
         }
 
         // Always update the composer avatar if it's our profile
-        if (profile.publicKey === userKeys.publicKey) {
+        if (profile.publicKey === window.CoreEngine.userKeys.publicKey) {
             const adminPanel = document.getElementById('ui-admin-panel');
             if (adminPanel) {
                 if (profile.isAdmin) adminPanel.classList.remove('hidden');
@@ -1873,7 +1353,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             myCustomTheme = profile.customCss || '';
             
             // Immediately apply personal theme if browsing global views
-            if (currentView !== 'profile' || viewingUserPublicKey === userKeys.publicKey || !viewingUserPublicKey) {
+            if (currentView !== 'profile' || viewingUserPublicKey === window.CoreEngine.userKeys.publicKey || !viewingUserPublicKey) {
                 const dynamicStyle = document.getElementById('ui-dynamic-user-theme');
                 if (dynamicStyle) dynamicStyle.innerHTML = myCustomTheme;
             }
@@ -1917,21 +1397,21 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
 
         const toggleBtn = document.getElementById('btn-toggle-edit');
         if (toggleBtn) {
-            toggleBtn.style.display = viewingUserPublicKey === userKeys.publicKey ? 'block' : 'none';
+            toggleBtn.style.display = viewingUserPublicKey === window.CoreEngine.userKeys.publicKey ? 'block' : 'none';
         }
 
         const messageBtn = document.getElementById('btn-profile-message');
         if (messageBtn) {
-            messageBtn.style.display = viewingUserPublicKey === userKeys.publicKey ? 'none' : 'block';
+            messageBtn.style.display = viewingUserPublicKey === window.CoreEngine.userKeys.publicKey ? 'none' : 'block';
         }
 
         const followBtn = document.getElementById('btn-profile-follow');
         if (followBtn) {
-            if (viewingUserPublicKey === userKeys.publicKey) {
+            if (viewingUserPublicKey === window.CoreEngine.userKeys.publicKey) {
                 followBtn.style.display = 'none';
             } else {
                 followBtn.style.display = 'block';
-                if (profile.followers && profile.followers.includes(userKeys.publicKey)) {
+                if (profile.followers && profile.followers.includes(window.CoreEngine.userKeys.publicKey)) {
                     followBtn.innerText = "Crew Locked 🤝";
                     followBtn.disabled = true;
                 } else {
@@ -2011,8 +1491,8 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
         const recContainer = document.getElementById('ui-profile-recommended');
         if (recContainer) {
             let html = '';
-            if (viewingUserPublicKey !== userKeys.publicKey) {
-                const isMutual = profile.following.includes(userKeys.publicKey);
+            if (viewingUserPublicKey !== window.CoreEngine.userKeys.publicKey) {
+                const isMutual = profile.following.includes(window.CoreEngine.userKeys.publicKey);
                 if (isMutual) {
                     html += `<div style="background: rgba(31, 188, 115, 0.1); border: 1px solid var(--success); color: var(--success); padding: 10px; border-radius: 8px; font-size: 12px; margin-bottom: 10px; text-align: center;">🤝 You and ${profile.username} are mutuals!</div>`;
                 }
@@ -2057,13 +1537,12 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
         }
 
         // Render Transaction History
-        const historyContainers = [document.getElementById('ui-tx-history'), document.getElementById('ui-sidebar-tx-history')];
+        const historyContainers = [document.getElementById('ui-tx-history')];
         historyContainers.forEach(historyContainer => {
             if (historyContainer) {
-                if (historyContainer.id === 'ui-sidebar-tx-history' && profile.publicKey !== userKeys.publicKey) return; // Only show personal tx in sidebar
                 const txListToRender = profile.transactions;
                 historyContainer.innerHTML = txListToRender.map(tx => {
-                let isSender = tx.sender === userKeys.publicKey;
+                let isSender = tx.sender === window.CoreEngine.userKeys.publicKey;
                 let sign = isSender ? '-' : '+';
                 let color = isSender ? 'var(--warning)' : 'var(--success)';
                 let amount = tx.amount;
@@ -2098,7 +1577,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
         const commContainer = document.getElementById('ui-active-commissions');
         if (commContainer) {
             commContainer.innerHTML = profile.activeCommissions.map(c => {
-                const isCreator = c.creator === userKeys.publicKey;
+                const isCreator = c.creator === window.CoreEngine.userKeys.publicKey;
                 const actionBtn = isCreator ? `<button style="padding: 4px 10px; font-size: 11px; background:var(--success); color:#fff;" onclick="fulfillCommission('${c.id}')">Upload Asset to Fulfill</button>` : `<span style="font-size: 11px; color: var(--warning);">Awaiting Delivery</span>`;
                 return `<div style="background: rgba(102, 252, 241, 0.05); border: 1px solid var(--border); padding: 12px; border-radius: 8px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
@@ -2113,7 +1592,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
 
         // Render Incoming Stake Requests
         const stakeReqContainer = document.getElementById('ui-wallet-stake-requests');
-        if (stakeReqContainer && profile.publicKey === userKeys.publicKey) {
+        if (stakeReqContainer && profile.publicKey === window.CoreEngine.userKeys.publicKey) {
             if (profile.shareRequestsReceived && profile.shareRequestsReceived.length > 0) {
                 stakeReqContainer.innerHTML = profile.shareRequestsReceived.map(r => `
                     <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--primary); padding: 12px; border-radius: 8px;">
@@ -2165,7 +1644,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                     postEl.style.padding = "15px 0";
                     const timeStr = new Date(item.timestamp).toLocaleString();
                     const roles = item.roles || [];
-                    const isOwner = item.sender === userKeys.publicKey;
+                    const isOwner = item.sender === window.CoreEngine.userKeys.publicKey;
                     const deleteBtn = isOwner ? `<button class="interaction-btn" onclick="deletePost('${item.transactionHash}')">🗑️ Delete</button>` : '';
                     postEl.innerHTML = `
                         <div class="post-avatar" onclick="inspectTargetNode('${item.sender}')" style="cursor:pointer;"><img src="${getAvatarUrl(item.sender)}"></div>
@@ -2214,14 +1693,14 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                     });
                 }
                 playlistContainer.innerHTML = sortedTracks.map((track, idx) => `
-                    <div class="playlist-item" data-hash="${track.hash}" draggable="${viewingUserPublicKey === userKeys.publicKey ? 'true' : 'false'}" style="background: rgba(0,0,0,0.8); border: 1px solid var(--border); padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 15px; margin-bottom: 5px;">
-                        ${viewingUserPublicKey === userKeys.publicKey ? '<div style="cursor:grab; font-size:16px;">☰</div>' : ''}
+                    <div class="playlist-item" data-hash="${track.hash}" draggable="${viewingUserPublicKey === window.CoreEngine.userKeys.publicKey ? 'true' : 'false'}" style="background: rgba(0,0,0,0.8); border: 1px solid var(--border); padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 15px; margin-bottom: 5px;">
+                        ${viewingUserPublicKey === window.CoreEngine.userKeys.publicKey ? '<div style="cursor:grab; font-size:16px;">☰</div>' : ''}
                         <div class="anthem-play-btn" style="width:30px; height:30px; font-size:14px;" onclick="playProfileTrack(${idx})">▶</div>
                         <div style="flex: 1;">
                             <div style="font-size: 14px; font-weight: bold; color: #fff;">${escapeHtml(track.title)}</div>
                             <div style="font-size: 11px; color: var(--text-muted);">${track.playCount || 0} Streams</div>
                         </div>
-                        ${viewingUserPublicKey === userKeys.publicKey ? `<button class="secondary" style="padding: 4px 8px; font-size: 10px;" onclick="promptEditSong('${track.hash}')">Edit</button>` : ''}
+                        ${viewingUserPublicKey === window.CoreEngine.userKeys.publicKey ? `<button class="secondary" style="padding: 4px 8px; font-size: 10px;" onclick="promptEditSong('${track.hash}')">Edit</button>` : ''}
                     </div>
                 `).join('');
             } else {
@@ -2279,6 +1758,36 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
         }
 
     } catch (err) { console.error("Profile Fetch Error:", err); }
+}
+
+function renderNewUsers() {
+    const container = document.getElementById('ui-new-users');
+    if (!container || !window.networkProfiles) return;
+    
+    const users = Object.entries(window.networkProfiles).map(([addr, prof]) => ({
+        address: addr,
+        ...prof
+    })).sort((a, b) => (b.joined || 0) - (a.joined || 0)).slice(0, 10);
+    
+    container.innerHTML = users.map(user => {
+        const onlineNode = window.MeshEngine.onlineNodes ? window.MeshEngine.onlineNodes.find(n => n.address === user.address) : null;
+        const isOnline = onlineNode && onlineNode.status === 'online';
+        const dotColor = isOnline ? 'var(--success)' : (onlineNode && onlineNode.status === 'idle' ? 'var(--warning)' : 'transparent');
+        const dotHtml = dotColor !== 'transparent' ? `<div class="status-dot" style="background: ${dotColor}; box-shadow: 0 0 5px ${dotColor};"></div>` : '';
+        
+        return `<div class="user-row" onclick="inspectTargetNode('${user.address}')">
+            <div class="user-info">
+                <img src="${getAvatarUrl(user.address)}">
+                <div style="display: flex; flex-direction: column;">
+                    <span style="font-size: 14px; font-weight: bold; color: #fff;">${escapeHtml(user.username)}</span>
+                    <span style="font-size: 10px; color: var(--text-muted);">Joined ${new Date(user.joined || Date.now()).toLocaleDateString()}</span>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                ${dotHtml}
+            </div>
+        </div>`;
+    }).join('');
 }
 
 // ==========================================
@@ -2359,61 +1868,43 @@ async function saveInlineEdit() {
             right: Array.from(document.getElementById('profile-col-right').children).map(c => c.id)
         };
         
-        let msgData = { sender: userKeys.publicKey, receiver: userKeys.publicKey, type: 'PROFILE_UPDATE', data: {}, timestamp: Date.now() };
-        if(userIn) msgData.data.username = userIn;
-        msgData.data.bio = bioIn; // Included unconditionally so users can clear their bio
-        if(finalAvatarHash) msgData.data.avatarHash = finalAvatarHash;
-        if(finalBannerHash) msgData.data.bannerHash = finalBannerHash;
-        if(finalSectionBgHash) msgData.data.sectionImages = finalSectionBgHash;
-        if(playlistOrder) msgData.data.playlistOrder = playlistOrder;
-        msgData.data.layoutOrder = layoutOrder;
+        let profileData = {};
+        if(userIn) profileData.username = userIn;
+        profileData.bio = bioIn; // Included unconditionally so users can clear their bio
+        if(finalAvatarHash) profileData.avatarHash = finalAvatarHash;
+        if(finalBannerHash) profileData.bannerHash = finalBannerHash;
+        if(finalSectionBgHash) profileData.sectionImages = finalSectionBgHash;
+        if(playlistOrder) profileData.playlistOrder = playlistOrder;
+        profileData.layoutOrder = layoutOrder;
         
-        if(Object.keys(msgData.data).length > 0) {
-            const sig = await generateClientSignature(userKeys.privateKey, msgData);
-            const txFields = { ...msgData, signature: sig };
-            await fetch('/api/social/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
+        if(Object.keys(profileData).length > 0) {
+            await window.CoreEngine.sendSignedTransaction('PROFILE_UPDATE', window.CoreEngine.userKeys.publicKey, profileData);
         }
 
-        let cssMsg = { sender: userKeys.publicKey, receiver: userKeys.publicKey, type: 'THEME_UPDATE', data: { customCss: cssIn }, timestamp: Date.now() };
-        const cssSig = await generateClientSignature(userKeys.privateKey, cssMsg);
-        let cssTx = { ...cssMsg, signature: cssSig };
-        await fetch('/api/social/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cssTx) });
+        await window.CoreEngine.sendSignedTransaction('THEME_UPDATE', window.CoreEngine.userKeys.publicKey, { customCss: cssIn });
         myCustomTheme = cssIn;
         document.getElementById('ui-dynamic-user-theme').innerHTML = cssIn; 
 
-        let top8Msg = { sender: userKeys.publicKey, receiver: userKeys.publicKey, type: 'SET_TOP_8', data: { top8Keys: editedTop8 }, timestamp: Date.now() };
-        const top8Sig = await generateClientSignature(userKeys.privateKey, top8Msg);
-        let top8Tx = { ...top8Msg, signature: top8Sig };
-        await fetch('/api/social/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(top8Tx) });
+        await window.CoreEngine.sendSignedTransaction('SET_TOP_8', window.CoreEngine.userKeys.publicKey, { top8Keys: editedTop8 });
         
         alert("Identity and Theme blocks successfully deployed to the ledger.");
         document.getElementById('input-edit-avatar').value = '';
         document.getElementById('input-edit-banner').value = '';
-        fetchUserProfile(userKeys.publicKey, false);
+        fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
         toggleInlineEdit();
     } catch (err) { alert("Update failed: " + err.message); }
 }
 
 async function executeTargetFollow(targetPeerPublicKey) {
     if(!targetPeerPublicKey) return;
-    if (userKeys.publicKey === targetPeerPublicKey) return alert("Cannot connect to your own node.");
-    
-    const msgData = { 
-        sender: userKeys.publicKey, 
-        receiver: targetPeerPublicKey, 
-        type: 'FOLLOW_USER', 
-        data: {}, 
-        timestamp: Date.now() 
-    };
+    if (window.CoreEngine.userKeys.publicKey === targetPeerPublicKey) return alert("Cannot connect to your own node.");
     try {
-        const sig = await generateClientSignature(userKeys.privateKey, msgData);
-        const txFields = { ...msgData, signature: sig };
-        await fetch('/api/social/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
+        await window.CoreEngine.sendSignedTransaction('FOLLOW_USER', targetPeerPublicKey, {});
         alert("Crew connection established.");
         
         // Refresh profiles to immediately update the button UI and feed priorities
         fetchUserProfile(targetPeerPublicKey, false);
-        fetchUserProfile(userKeys.publicKey, true);
+        fetchUserProfile(window.CoreEngine.userKeys.publicKey, true);
     } catch (err) { alert(err.message); }
 }
 
@@ -2423,23 +1914,14 @@ async function createCommission() {
     const terms = document.getElementById('input-comm-terms').value.trim();
     
     if(!recipient || !amount || !terms) return alert("Recipient, amount, and terms are required to start an escrow contract.");
-    if(recipient === userKeys.publicKey) return alert("You cannot commission yourself.");
+    if(recipient === window.CoreEngine.userKeys.publicKey) return alert("You cannot commission yourself.");
     
     try {
-        const msgData = { 
-            sender: userKeys.publicKey, receiver: recipient, type: 'CREATE_COMMISSION', 
-            data: { amount: parseFloat(amount), terms: terms }, 
-            timestamp: Date.now() 
-        };
-        const sig = await generateClientSignature(userKeys.privateKey, msgData);
-        const txFields = { ...msgData, signature: sig };
-        
-        const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
-        if(!res.ok) throw new Error((await res.json()).error);
+        await window.CoreEngine.sendSignedTransaction('CREATE_COMMISSION', recipient, { amount: parseFloat(amount), terms: terms });
         
         alert(`Escrow Successful: Locked ${amount} $VOD in a smart contract.`);
         document.getElementById('input-comm-amount').value = ''; document.getElementById('input-comm-terms').value = '';
-        fetchUserProfile(userKeys.publicKey, false);
+        fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
     } catch (err) { alert("Escrow failed: " + err.message); }
 }
 
@@ -2452,132 +1934,17 @@ function fulfillCommission(commId) {
         if (!file) return;
         try {
             const hash = await uploadMediaAssetFile(file);
-            const msgData = { sender: userKeys.publicKey, receiver: '0x00', type: 'FULFILL_COMMISSION', data: { commissionId: commId, assetHash: hash }, timestamp: Date.now() };
-            const sig = await generateClientSignature(userKeys.privateKey, msgData);
-            const txFields = { ...msgData, signature: sig };
-            const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
-            if (res.ok) {
-                alert("Commission fulfilled! Escrow funds have been successfully released to your wallet.");
-                
-                const activeComms = currentViewedProfile ? currentViewedProfile.activeCommissions : [];
-                const c = activeComms.find(x => x.id === commId);
-                if(c) socket.emit('trigger_push', { target: c.buyer, payload: { title: 'Commission Fulfilled! 📦', body: `${resolveProfile(userKeys.publicKey).username} uploaded the asset for your escrow.` } });
+            await window.CoreEngine.sendSignedTransaction('FULFILL_COMMISSION', '0x00', { commissionId: commId, assetHash: hash });
+            alert("Commission fulfilled! Escrow funds have been successfully released to your wallet.");
+            
+            const activeComms = currentViewedProfile ? currentViewedProfile.activeCommissions : [];
+            const c = activeComms.find(x => x.id === commId);
+            if(c) socket.emit('trigger_push', { target: c.buyer, payload: { title: 'Commission Fulfilled! 📦', body: `${resolveProfile(window.CoreEngine.userKeys.publicKey).username} uploaded the asset for your escrow.` } });
 
-                fetchUserProfile(userKeys.publicKey, false);
-            }
+            fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
         } catch(err) { alert("Fulfillment failed: " + err.message); }
     };
     input.click();
-}
-
-// ==========================================
-// DIGITAL MARKETPLACE & BOUNTIES
-// ==========================================
-
-async function loadMarketplace() {
-    try {
-        const res = await fetch('/api/social/market');
-        marketDataCache = await res.json();
-        renderMarketplace();
-    } catch (e) { console.error("Market error:", e); }
-}
-
-function switchMarketTab(tabName) {
-    document.getElementById('market-sec-commission').classList.add('hidden');
-    document.getElementById('market-sec-buy').classList.add('hidden');
-    document.getElementById('market-sec-sell').classList.add('hidden');
-    
-    document.getElementById('tab-btn-commission').className = 'secondary';
-    document.getElementById('tab-btn-buy').className = 'secondary';
-    document.getElementById('tab-btn-sell').className = 'secondary';
-    
-    document.getElementById('tab-btn-commission').style = 'padding: 10px 20px;';
-    document.getElementById('tab-btn-buy').style = 'padding: 10px 20px;';
-    document.getElementById('tab-btn-sell').style = 'padding: 10px 20px;';
-
-    document.getElementById(`market-sec-${tabName}`).classList.remove('hidden');
-    const activeBtn = document.getElementById(`tab-btn-${tabName}`);
-    activeBtn.className = '';
-    activeBtn.style.background = 'var(--primary)';
-    activeBtn.style.color = '#000';
-    activeBtn.style.padding = '10px 20px;';
-}
-
-function renderMarketplace() {
-    // --- 1. Render Buy Tab ---
-    const buySearch = document.getElementById('buy-search-filter').value.toLowerCase();
-    const buySort = document.getElementById('buy-sort-filter').value;
-    let items = [...marketDataCache.items];
-    
-    if (buySearch) items = items.filter(i => i.title.toLowerCase().includes(buySearch) || resolveProfile(i.seller).username.toLowerCase().includes(buySearch));
-    
-    if (buySort === 'newest') items.sort((a,b) => b.timestamp - a.timestamp);
-    else if (buySort === 'price-low') items.sort((a,b) => a.price - b.price);
-    else if (buySort === 'price-high') items.sort((a,b) => b.price - a.price);
-    else if (buySort === 'popular') items.sort((a,b) => b.sales - a.sales);
-        
-    const itemsContainer = document.getElementById('ui-market-items');
-    if (itemsContainer) {
-        itemsContainer.innerHTML = items.map(item => `
-            <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); padding: 15px; border-radius: 8px;">
-                <div style="font-size: 12px; color: var(--warning); font-weight: bold; margin-bottom: 4px; text-transform: uppercase;">${item.itemType || 'Digital Asset'}</div>
-                <div style="font-size: 16px; font-weight: bold; color: var(--primary); margin-bottom: 5px;">${escapeHtml(item.title)}</div>
-                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Seller: <span style="cursor:pointer;" onclick="inspectTargetNode('${item.seller}')">${resolveProfile(item.seller).username}</span> | Sales: ${item.sales}</div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <strong style="color: var(--success);">${item.price} $VOD</strong>
-                    <button style="padding: 5px 12px; font-size: 11px;" onclick="buyDigitalItem('${item.id}', '${item.price}', '${item.seller}')">Buy & Download</button>
-                </div>
-            </div>
-        `).join('') || '<div style="color:var(--text-muted); grid-column: span 2;">No digital goods found matching criteria.</div>';
-    }
-
-    // --- 2. Render Commissions Tab ---
-    const commOrder = document.getElementById('comm-order-filter').value;
-    const commSort = document.getElementById('comm-sort-filter').value;
-    let bounties = [...marketDataCache.bounties];
-    
-    if (commSort === 'newest') bounties.sort((a,b) => b.timestamp - a.timestamp);
-    else if (commSort === 'oldest') bounties.sort((a,b) => a.timestamp - b.timestamp);
-    else if (commSort === 'highest') bounties.sort((a,b) => b.amount - a.amount);
-
-    let myBounties = bounties.filter(b => b.creator === userKeys.publicKey);
-    let otherBounties = bounties.filter(b => b.creator !== userKeys.publicKey);
-    let finalBounties = commOrder === 'yours-first' ? [...myBounties, ...otherBounties] : [...otherBounties, ...myBounties];
-
-    const bountiesContainer = document.getElementById('ui-market-bounties');
-    if (bountiesContainer) {
-        bountiesContainer.innerHTML = finalBounties.map(b => {
-            let subsHtml = b.submissions.map(s => `
-                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; margin-top: 5px;">
-                    <div style="font-size: 12px;"><strong style="color: var(--primary); cursor: pointer;" onclick="inspectTargetNode('${s.sender}')">${resolveProfile(s.sender).username}:</strong> ${escapeHtml(s.message)}</div>
-                    <div style="display: flex; gap: 8px;">
-                        <button class="secondary" style="padding: 2px 8px; font-size: 10px;" onclick="window.open('/tracks/${s.assetHash}', '_blank')">Preview</button>
-                        ${b.creator === userKeys.publicKey && !b.awarded ? `<button style="padding: 2px 8px; font-size: 10px; background: var(--success); color: #fff;" onclick="awardBounty('${b.id}', '${s.sender}')">Award Winner</button>` : ''}
-                    </div>
-                </div>
-            `).join('');
-            
-            const statusBadge = b.awarded ? `<span style="color: var(--warning); font-size: 11px; border: 1px solid var(--warning); padding: 2px 6px; border-radius: 4px;">Awarded to ${resolveProfile(b.winner).username}</span>` : `<span style="color: var(--success); font-size: 11px; border: 1px solid var(--success); padding: 2px 6px; border-radius: 4px;">Open</span>`;
-            const submitBtn = !b.awarded ? `<button style="padding: 5px 12px; font-size: 11px;" onclick="submitToBounty('${b.id}')">Submit Entry</button>` : '';
-            const yoursLabel = b.creator === userKeys.publicKey ? `<span style="background: var(--myspace-blue); color: #fff; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 10px;">Your Bounty</span>` : '';
-
-            return `
-            <div style="background: rgba(102, 252, 241, 0.05); border: 1px solid rgba(102, 252, 241, 0.2); padding: 15px; border-radius: 8px;">
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
-                    <div>
-                        <div style="font-size: 16px; font-weight: bold; color: #fff; margin-bottom: 4px;">${b.amount} $VOD Bounty ${yoursLabel}</div>
-                        <div style="font-size: 12px; color: var(--text-muted); cursor:pointer;" onclick="inspectTargetNode('${b.creator}')">Posted by ${resolveProfile(b.creator).username}</div>
-                    </div>
-                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 10px;">
-                        ${statusBadge}
-                        ${submitBtn}
-                    </div>
-                </div>
-                <div style="font-size: 14px; color: #ccc; margin-bottom: 15px;">${escapeHtml(b.description)}</div>
-                ${subsHtml ? `<div style="border-top: 1px solid var(--border); padding-top: 10px; margin-top: 10px;"><strong style="font-size: 12px; color: var(--text-muted);">Submissions:</strong>${subsHtml}</div>` : ''}
-            </div>`;
-        }).join('') || '<div style="color:var(--text-muted);">No open bounties found matching criteria.</div>';
-    }
 }
 
 async function executeSellItem() {
@@ -2592,32 +1959,25 @@ async function executeSellItem() {
 
     try {
         const hash = await uploadMediaAssetFile(fileInput.files[0]);
-        const msgData = { sender: userKeys.publicKey, receiver: '0x00', type: 'LIST_ITEM', data: { title: title, itemType: itemType, price: parseFloat(price), assetHash: hash }, timestamp: Date.now() };
-        const txFields = { ...msgData, signature: await generateClientSignature(userKeys.privateKey, msgData) };
-        const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
-        if (res.ok) { 
-            alert("Asset listed in the Marketplace!"); 
-            document.getElementById('sell-title-input').value = '';
-            document.getElementById('sell-price-input').value = '';
-            fileInput.value = '';
-            loadMarketplace(); 
-            fetchUserProfile(userKeys.publicKey, false); 
-            switchMarketTab('buy');
-        } else throw new Error((await res.json()).error);
+        await window.CoreEngine.sendSignedTransaction('LIST_ITEM', '0x00', { title: title, itemType: itemType, price: parseFloat(price), assetHash: hash });
+        alert("Asset listed in the Marketplace!"); 
+        document.getElementById('sell-title-input').value = '';
+        document.getElementById('sell-price-input').value = '';
+        fileInput.value = '';
+        window.loadMarketplace(); 
+        fetchUserProfile(window.CoreEngine.userKeys.publicKey, false); 
+        window.switchMarketTab('buy');
     } catch(err) { alert("Listing failed: " + err.message); }
 }
 
 async function buyDigitalItem(itemId, price, seller) {
-    if (seller === userKeys.publicKey) return alert("You cannot buy your own item.");
+    if (seller === window.CoreEngine.userKeys.publicKey) return alert("You cannot buy your own item.");
     if (!confirm(`Purchase this asset for ${price} $VOD?`)) return;
     try {
-        const msgData = { sender: userKeys.publicKey, receiver: seller, type: 'BUY_ITEM', data: { itemId, price }, timestamp: Date.now() };
-        const txFields = { ...msgData, signature: await generateClientSignature(userKeys.privateKey, msgData) };
-        const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
-        if (!res.ok) throw new Error((await res.json()).error);
+        await window.CoreEngine.sendSignedTransaction('BUY_ITEM', seller, { itemId, price });
         alert("Purchase successful! You can now view this asset in your Wallet.");
-        loadMarketplace();
-        fetchUserProfile(userKeys.publicKey, false);
+        window.loadMarketplace();
+        fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
     } catch(err) { alert("Purchase failed: " + err.message); }
 }
 
@@ -2627,13 +1987,10 @@ async function createOpenBounty() {
     const desc = prompt("Describe what you want (e.g., 'Need a 16-bar verse for this track'):");
     if (!desc) return;
     try {
-        const msgData = { sender: userKeys.publicKey, receiver: '0x00', type: 'CREATE_BOUNTY', data: { amount: parseFloat(amount), description: desc }, timestamp: Date.now() };
-        const txFields = { ...msgData, signature: await generateClientSignature(userKeys.privateKey, msgData) };
-        const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
-        if (!res.ok) throw new Error((await res.json()).error);
+        await window.CoreEngine.sendSignedTransaction('CREATE_BOUNTY', '0x00', { amount: parseFloat(amount), description: desc });
         alert("Bounty posted securely to the ledger!");
-        loadMarketplace();
-        fetchUserProfile(userKeys.publicKey, false);
+        window.loadMarketplace();
+        fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
     } catch(err) { alert("Bounty failed: " + err.message); }
 }
 
@@ -2647,10 +2004,8 @@ function submitToBounty(bountyId) {
         if (!file) return;
         try {
             const hash = await uploadMediaAssetFile(file);
-            const msgData = { sender: userKeys.publicKey, receiver: '0x00', type: 'SUBMIT_BOUNTY', data: { bountyId, message, assetHash: hash }, timestamp: Date.now() };
-            const txFields = { ...msgData, signature: await generateClientSignature(userKeys.privateKey, msgData) };
-            const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
-            if (res.ok) { alert("Submission received by the smart contract!"); loadMarketplace(); }
+            await window.CoreEngine.sendSignedTransaction('SUBMIT_BOUNTY', '0x00', { bountyId, message, assetHash: hash });
+            alert("Submission received by the smart contract!"); window.loadMarketplace();
         } catch(err) { alert("Submission failed: " + err.message); }
     };
     input.click();
@@ -2659,184 +2014,10 @@ function submitToBounty(bountyId) {
 async function awardBounty(bountyId, winnerAddress) {
     if(!confirm(`Award this bounty to Node_${winnerAddress.substring(0,6)}? The funds will be released to their wallet permanently.`)) return;
     try {
-        const msgData = { sender: userKeys.publicKey, receiver: '0x00', type: 'AWARD_BOUNTY', data: { bountyId, winner: winnerAddress }, timestamp: Date.now() };
-        const txFields = { ...msgData, signature: await generateClientSignature(userKeys.privateKey, msgData) };
-        const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
-        if (!res.ok) throw new Error((await res.json()).error);
+        await window.CoreEngine.sendSignedTransaction('AWARD_BOUNTY', '0x00', { bountyId, winner: winnerAddress });
         alert("Bounty awarded successfully!");
-        loadMarketplace();
+        window.loadMarketplace();
     } catch(err) { alert("Award failed: " + err.message); }
-}
-
-async function loadHotOrNot() {
-    try {
-        const res = await fetch('/api/social/hotornot');
-        hotOrNotData = await res.json();
-        populateHotOrNotDropdown();
-        renderHotOrNot();
-    } catch(err) { console.error("HotOrNot Error:", err); }
-}
-
-async function populateHotOrNotDropdown() {
-    const select = document.getElementById('hotornot-submit-select');
-    const catSelect = document.getElementById('hotornot-category-select');
-    if (!select || !catSelect) return;
-    if (!userKeys.publicKey) {
-        select.innerHTML = '<option value="">Login to submit</option>';
-        return;
-    }
-    try {
-        const response = await fetch(`/api/social/profile?publicKey=${encodeURIComponent(userKeys.publicKey)}`);
-        const profile = await response.json();
-        
-        catSelect.onchange = () => {
-            const category = catSelect.value;
-            if (category === 'music') {
-                const myTracks = profile.uploadedTracks || [];
-                if (myTracks.length === 0) {
-                    select.innerHTML = '<option value="">No tracks uploaded</option>';
-                } else {
-                    select.innerHTML = '<option value="">Select your track...</option>' + 
-                        myTracks.map(t => `<option value="${t.hash}">${escapeHtml(t.title)}</option>`).join('');
-                }
-            } else if (category === 'looks') {
-                const myImages = profile.uploadedImages || [];
-                let options = '<option value="">Select your image...</option>';
-                if (profile.avatarHash) options += `<option value="${profile.avatarHash}">Current Avatar</option>`;
-                if (myImages.length > 0) {
-                    options += myImages.map(img => `<option value="${img.hash}">Gallery Image (${new Date(img.timestamp).toLocaleDateString()})</option>`).join('');
-                }
-                if (!profile.avatarHash && myImages.length === 0) options = '<option value="">No images uploaded</option>';
-                select.innerHTML = options;
-            }
-        };
-        catSelect.onchange();
-    } catch(e) {
-        select.innerHTML = '<option value="">Error loading tracks</option>';
-    }
-}
-
-function renderHotOrNot() {
-    const filter = document.getElementById('hotornot-filter').value;
-    const categoryFilter = document.getElementById('hotornot-view-category').value;
-    const container = document.getElementById('ui-hotornot-content');
-    if (!container) return;
-
-    let items = [...hotOrNotData].filter(i => (i.category || 'music') === categoryFilter);
-    const now = Date.now();
-    const oneWeek = 7 * 24 * 60 * 60 * 1000;
-    
-    if (filter === 'weekly') {
-        items = items.filter(i => (now - i.timestamp) < oneWeek).sort((a,b) => b.upvotes - a.upvotes);
-    } else if (filter === 'alltime') {
-        items.sort((a,b) => b.upvotes - a.upvotes);
-    } else if (filter === 'new') {
-        items.sort((a,b) => b.timestamp - a.timestamp);
-    } else if (filter === 'vote') {
-        items = items.filter(i => !i.votes[userKeys.publicKey]).sort(() => Math.random() - 0.5).slice(0, 1);
-    }
-
-    if (items.length === 0) {
-        container.innerHTML = '<div style="color:var(--text-muted);">No entries found in this category.</div>';
-        return;
-    }
-
-    container.innerHTML = items.map(item => {
-        let voteHtml = '';
-        if (filter === 'vote') {
-            voteHtml = `
-                <div style="display: flex; gap: 15px; margin-top: 15px;">
-                    <button style="flex:1; background: var(--danger); color: #fff;" onclick="castHotOrNotVote('${item.id}', '${item.submitter}', 1, '${item.targetHash}')">🔥 HOT</button>
-                    <button class="secondary" style="flex:1; border-color: var(--danger); color: var(--danger);" onclick="castHotOrNotVote('${item.id}', '${item.submitter}', -1, '${item.targetHash}')">🧊 NOT</button>
-                </div>
-            `;
-        } else {
-            voteHtml = `<div style="font-size:12px; color:var(--text-muted); margin-top: 10px;">🔥 ${item.upvotes} Hot | 🧊 ${item.downvotes} Not</div>`;
-        }
-
-        if (categoryFilter === 'music') {
-            let displayArtist = item.trackDetails && item.trackDetails.artist ? escapeHtml(item.trackDetails.artist) : resolveProfile(item.submitter).username;
-            let title = item.trackDetails ? item.trackDetails.title : "Unknown Track";
-            let coverHtml = item.trackDetails && item.trackDetails.coverHash ? `<img src="/tracks/${item.trackDetails.coverHash}" style="width: 80px; height: 80px; border-radius: 6px; object-fit: cover;">` : `<div style="width:80px; height:80px; border-radius:6px; background:var(--bg-darker); display:flex; align-items:center; justify-content:center; border:1px solid var(--border);">🎵</div>`;
-
-            return `
-                <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--danger); padding: 15px; border-radius: 8px;">
-                    <div style="display: flex; gap: 15px;">
-                        ${coverHtml}
-                        <div style="flex:1;">
-                            <div style="font-size: 18px; font-weight: bold; color: #fff;">${escapeHtml(title)}</div>
-                            <div style="font-size: 12px; color: var(--primary); margin-bottom: 5px;">By ${displayArtist}</div>
-                            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Submitted by @${resolveProfile(item.submitter).username}</div>
-                            <button style="padding: 5px 15px; font-size: 12px; background: var(--danger); color: #fff;" onclick="playTrack('${escapeJsArg(title)}', '${item.targetHash}', '${item.submitter}', '${escapeJsArg(displayArtist)}')">▶ Play Track</button>
-                        </div>
-                    </div>
-                    ${voteHtml}
-                </div>
-            `;
-        } else {
-            let imgHtml = item.targetHash ? `<img src="/tracks/${item.targetHash}" style="max-width: 100%; max-height: 400px; border-radius: 8px; object-fit: contain; border: 1px solid var(--danger); margin-top: 10px;">` : '';
-            return `
-                <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--danger); padding: 15px; border-radius: 8px; text-align: center;">
-                    <div style="font-size: 18px; font-weight: bold; color: var(--primary); margin-bottom: 5px;">@${resolveProfile(item.submitter).username}</div>
-                    <div style="font-size: 11px; color: var(--text-muted);">Looks Battle</div>
-                    ${imgHtml}
-                    ${voteHtml}
-                </div>
-            `;
-        }
-    }).join('');
-}
-
-async function castHotOrNotVote(submissionId, submitter, vote, targetHash) {
-    if (!userKeys.publicKey) return alert("Must be logged in to vote.");
-    try {
-        const msgData = { sender: userKeys.publicKey, receiver: submitter, type: 'VOTE_HOT_OR_NOT', data: { submissionId, vote, targetHash }, timestamp: Date.now() };
-        const txFields = { ...msgData, signature: await generateClientSignature(userKeys.privateKey, msgData) };
-        const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
-        if (!res.ok) throw new Error((await res.json()).error);
-        alert(`Voted! You mined 100 $VOD.`);
-        fetchUserProfile(userKeys.publicKey, true); 
-        loadHotOrNot();
-    } catch(err) { alert("Vote failed: " + err.message); }
-}
-
-async function submitHotOrNotFromDropdown() {
-    if (!userKeys.publicKey) return alert("Must be logged in.");
-    const select = document.getElementById('hotornot-submit-select');
-    const catSelect = document.getElementById('hotornot-category-select');
-    let targetHash = select.value;
-    const originalHash = targetHash;
-    const category = catSelect ? catSelect.value : 'music';
-    if (!targetHash) return alert("Please select a valid item to submit.");
-
-    try {
-        let msgData = { sender: userKeys.publicKey, receiver: '0x00', type: 'SUBMIT_HOT_OR_NOT', data: { category: category, targetHash: targetHash, originalHash: originalHash }, timestamp: Date.now() };
-
-        if (category === 'music') {
-            const btn = document.querySelector('button[onclick="submitHotOrNotFromDropdown()"]');
-            const originalText = btn.innerText;
-            btn.innerText = "Formatting MP3...";
-            btn.disabled = true;
-            
-            try {
-                const procRes = await fetch('/api/feed/process-hotornot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetHash }) });
-                if (procRes.ok) {
-                    const procData = await procRes.json();
-                    msgData.data.targetHash = procData.formattedHash || targetHash;
-                    msgData.data.audioHash = msgData.data.targetHash;
-                }
-            } catch (e) { console.error("Formatting error:", e); }
-            
-            btn.innerText = originalText;
-            btn.disabled = false;
-        }
-
-        const txFields = { ...msgData, signature: await generateClientSignature(userKeys.privateKey, msgData) };
-        const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
-        if (!res.ok) throw new Error((await res.json()).error);
-        alert("Item submitted to Hot or Not!");
-        loadHotOrNot();
-    } catch(err) { alert("Submission failed: " + err.message); }
 }
 
 // ==========================================
@@ -2848,10 +2029,10 @@ let peerConnections = {};
 const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
 async function joinActiveVoiceChannel() {
-    if(!currentChatServer || !currentChatChannel) return alert("Select a text channel first to join its linked Voice Room.");
+    if(!window.MeshEngine.currentChatServer || !window.MeshEngine.currentChatChannel) return alert("Select a text channel first to join its linked Voice Room.");
     try {
         localVoiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        socket.emit('webrtc_join_voice', { serverId: currentChatServer, channelId: currentChatChannel, address: userKeys.publicKey });
+        socket.emit('webrtc_join_voice', { serverId: window.MeshEngine.currentChatServer, channelId: window.MeshEngine.currentChatChannel, address: window.CoreEngine.userKeys.publicKey });
         document.getElementById('ui-active-server-name').innerText += " (🎙️ Voice Connected)";
     } catch (err) { 
         console.error("Mic access denied:", err);
@@ -2859,7 +2040,7 @@ async function joinActiveVoiceChannel() {
     }
 }
 
-socket.on('webrtc_user_joined', async (data) => {
+window.webrtcUserJoined = async (data) => {
     const pc = new RTCPeerConnection(rtcConfig);
     peerConnections[data.socketId] = pc;
     localVoiceStream.getTracks().forEach(track => pc.addTrack(track, localVoiceStream));
@@ -2874,9 +2055,9 @@ socket.on('webrtc_user_joined', async (data) => {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     socket.emit('webrtc_offer', { target: data.socketId, sdp: pc.localDescription });
-});
+};
 
-socket.on('webrtc_offer', async (data) => {
+window.webrtcOffer = async (data) => {
     const pc = new RTCPeerConnection(rtcConfig);
     peerConnections[data.sender] = pc;
     localVoiceStream.getTracks().forEach(track => pc.addTrack(track, localVoiceStream));
@@ -2892,18 +2073,18 @@ socket.on('webrtc_offer', async (data) => {
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     socket.emit('webrtc_answer', { target: data.sender, sdp: pc.localDescription });
-});
+};
 
-socket.on('webrtc_answer', async (data) => {
+window.webrtcAnswer = async (data) => {
     if (peerConnections[data.sender]) {
         await peerConnections[data.sender].setRemoteDescription(data.sdp);
     }
     try {
         if (peerConnections[data.sender]) await peerConnections[data.sender].setRemoteDescription(data.sdp);
     } catch(e) { console.warn("WebRTC Answer Error:", e.message); }
-});
+};
 
-socket.on('webrtc_ice_candidate', async (data) => {
+window.webrtcIceCandidate = async (data) => {
     if (peerConnections[data.sender]) {
         await peerConnections[data.sender].addIceCandidate(data.candidate);
     }
@@ -2912,18 +2093,18 @@ socket.on('webrtc_ice_candidate', async (data) => {
             await peerConnections[data.sender].addIceCandidate(data.candidate);
         }
     } catch(e) { console.warn("WebRTC ICE Error:", e.message); }
-});
+};
 
 // ==========================================
 // P2P DATA MESH (DECENTRALIZED BROWSER NODES)
 // ==========================================
 
 function connectToMeshNode(targetSocketId) {
-    if (isNodeBlocked(socketIdToAddress[targetSocketId])) return;
+    if (isNodeBlocked(window.MeshEngine.socketIdToAddress[targetSocketId])) return;
     const pc = new RTCPeerConnection(rtcConfig);
-    meshConnections[targetSocketId] = pc;
+    window.MeshEngine.meshConnections[targetSocketId] = pc;
     const dc = pc.createDataChannel('vod_data_mesh');
-    dataChannels[targetSocketId] = dc;
+    window.MeshEngine.dataChannels[targetSocketId] = dc;
     
     setupDataChannel(dc, targetSocketId);
 
@@ -2937,13 +2118,13 @@ function connectToMeshNode(targetSocketId) {
     });
 }
 
-socket.on('mesh_offer', async (data) => {
-    if (isNodeBlocked(socketIdToAddress[data.sender])) return;
+window.meshOffer = async (data) => {
+    if (isNodeBlocked(window.MeshEngine.socketIdToAddress[data.sender])) return;
     const pc = new RTCPeerConnection(rtcConfig);
-    meshConnections[data.sender] = pc;
+    window.MeshEngine.meshConnections[data.sender] = pc;
 
     pc.ondatachannel = event => {
-        dataChannels[data.sender] = event.channel;
+        window.MeshEngine.dataChannels[data.sender] = event.channel;
         setupDataChannel(event.channel, data.sender);
     };
 
@@ -2955,25 +2136,25 @@ socket.on('mesh_offer', async (data) => {
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     socket.emit('mesh_answer', { target: data.sender, sdp: pc.localDescription });
-});
+};
 
-socket.on('mesh_answer', async (data) => {
-    if (isNodeBlocked(socketIdToAddress[data.sender])) return;
-    if (meshConnections[data.sender]) await meshConnections[data.sender].setRemoteDescription(data.sdp);
+window.meshAnswer = async (data) => {
+    if (isNodeBlocked(window.MeshEngine.socketIdToAddress[data.sender])) return;
+    if (window.MeshEngine.meshConnections[data.sender]) await window.MeshEngine.meshConnections[data.sender].setRemoteDescription(data.sdp);
     try {
-        if (meshConnections[data.sender]) await meshConnections[data.sender].setRemoteDescription(data.sdp);
+        if (window.MeshEngine.meshConnections[data.sender]) await window.MeshEngine.meshConnections[data.sender].setRemoteDescription(data.sdp);
     } catch(e) { console.warn("Mesh Answer Error:", e.message); }
-});
+};
 
-socket.on('mesh_ice_candidate', async (data) => {
-    if (isNodeBlocked(socketIdToAddress[data.sender])) return;
-    if (meshConnections[data.sender]) await meshConnections[data.sender].addIceCandidate(data.candidate);
+window.meshIceCandidate = async (data) => {
+    if (isNodeBlocked(window.MeshEngine.socketIdToAddress[data.sender])) return;
+    if (window.MeshEngine.meshConnections[data.sender]) await window.MeshEngine.meshConnections[data.sender].addIceCandidate(data.candidate);
     try {
-        if (meshConnections[data.sender] && meshConnections[data.sender].remoteDescription) {
-            await meshConnections[data.sender].addIceCandidate(data.candidate);
+        if (window.MeshEngine.meshConnections[data.sender] && window.MeshEngine.meshConnections[data.sender].remoteDescription) {
+            await window.MeshEngine.meshConnections[data.sender].addIceCandidate(data.candidate);
         }
     } catch(e) { console.warn("Mesh ICE Error:", e.message); }
-});
+};
 
 function setupDataChannel(dc, id) {
     dc.onopen = () => console.log(`🌐 [P2P MESH] Connected directly to browser node: ${id}`);
@@ -2985,20 +2166,20 @@ function setupDataChannel(dc, id) {
             
             if (payload.to) {
                  // DM P2P
-                 if (!dmHistory[payload.sender]) dmHistory[payload.sender] = [];
-                 const exists = dmHistory[payload.sender].find(m => m.time === payload.time);
+                 if (!window.MeshEngine.dmHistory[payload.sender]) window.MeshEngine.dmHistory[payload.sender] = [];
+                 const exists = window.MeshEngine.dmHistory[payload.sender].find(m => m.time === payload.time);
                  if (!exists) {
-                     dmHistory[payload.sender].push(payload);
-                     if (currentChatServer === '@dms' && currentChatChannel === payload.sender) appendChatMessage(payload);
+                     window.MeshEngine.dmHistory[payload.sender].push(payload);
+                     if (window.MeshEngine.currentChatServer === '@dms' && window.MeshEngine.currentChatChannel === payload.sender) appendChatMessage(payload);
                      else {
                          const badge = document.getElementById('ui-inbox-badge');
                          if (badge) { badge.innerText = parseInt(badge.innerText) + 1; badge.classList.remove('hidden'); }
                      }
-                     if (currentChatServer === '@dms') renderDMList();
+                     if (window.MeshEngine.currentChatServer === '@dms') renderDMList();
                  }
             } else {
                 // Server Channel Chat P2P
-                if (currentChatServer === payload.serverId && currentChatChannel === payload.channelId) {
+                if (window.MeshEngine.currentChatServer === payload.serverId && window.MeshEngine.currentChatChannel === payload.channelId) {
                     const chatLog = document.getElementById('ui-chat-log');
                     if (!chatLog.innerHTML.includes(payload.time + '_' + payload.sender.substring(0, 5))) {
                         appendChatMessage(payload);
@@ -3011,17 +2192,10 @@ function setupDataChannel(dc, id) {
         if(localDB && msg.payload.hash) {
             localDB.transaction('blocks', 'readwrite').objectStore('blocks').put(msg.payload);
         }
-            if(userKeys.publicKey) fetchUserProfile(userKeys.publicKey, true); 
+            if(window.CoreEngine.userKeys.publicKey) fetchUserProfile(window.CoreEngine.userKeys.publicKey, true); 
             if(currentView === 'feed') loadMainGlobalFeed();
         }
     };
-}
-
-function broadcastToMesh(type, payload) {
-    const dataStr = JSON.stringify({ type, payload });
-    Object.values(dataChannels).forEach(dc => {
-        if (dc.readyState === 'open') dc.send(dataStr);
-    });
 }
 
 function playRemoteVoiceStream(stream, id) {
@@ -3036,58 +2210,58 @@ function playRemoteVoiceStream(stream, id) {
 }
 
 function sendDM(targetAddress) {
-    if (!userKeys.publicKey) return alert("Must be logged in to send DMs.");
-    if (targetAddress === userKeys.publicKey) return alert("You cannot DM yourself.");
-    if (!dmHistory[targetAddress]) dmHistory[targetAddress] = [];
+    if (!window.CoreEngine.userKeys.publicKey) return alert("Must be logged in to send DMs.");
+    if (targetAddress === window.CoreEngine.userKeys.publicKey) return alert("You cannot DM yourself.");
+    if (!window.MeshEngine.dmHistory[targetAddress]) window.MeshEngine.dmHistory[targetAddress] = [];
     switchServer('@dms');
     switchDMChannel(targetAddress);
     document.getElementById('chat-input').focus();
 }
 
-socket.on('direct_message', (msg) => {
-    const otherAddr = msg.sender === userKeys.publicKey ? msg.to : msg.sender;
-    if (!dmHistory[otherAddr]) dmHistory[otherAddr] = [];
+window.handleDirectMessage = (msg) => {
+    const otherAddr = msg.sender === window.CoreEngine.userKeys.publicKey ? msg.to : msg.sender;
+    if (!window.MeshEngine.dmHistory[otherAddr]) window.MeshEngine.dmHistory[otherAddr] = [];
     msg.roles = msg.roles || [];
 
-    const exists = dmHistory[otherAddr].find(m => m.time === msg.time && m.sender === msg.sender);
+    const exists = window.MeshEngine.dmHistory[otherAddr].find(m => m.time === msg.time && m.sender === msg.sender);
     if (!exists) {
-        dmHistory[otherAddr].push(msg);
+        window.MeshEngine.dmHistory[otherAddr].push(msg);
     }
 
-    if (currentChatServer === '@dms' && currentChatChannel === otherAddr) {
+    if (window.MeshEngine.currentChatServer === '@dms' && window.MeshEngine.currentChatChannel === otherAddr) {
         if (!exists) {
             appendChatMessage(msg);
             const chatLog = document.getElementById('ui-chat-log');
             chatLog.scrollTop = chatLog.scrollHeight;
         }
-        if (msg.sender !== userKeys.publicKey) {
+        if (msg.sender !== window.CoreEngine.userKeys.publicKey) {
             socket.emit('message_read', { to: msg.sender, time: msg.time });
         }
     } else {
         if (!exists) {
             const badge = document.getElementById('ui-inbox-badge');
-            if (badge && msg.sender !== userKeys.publicKey) { 
+            if (badge && msg.sender !== window.CoreEngine.userKeys.publicKey) { 
                 badge.innerText = parseInt(badge.innerText) + 1; 
                 badge.classList.remove('hidden'); 
             }
         }
     }
-    if (currentChatServer === '@dms') renderDMList();
-});
+    if (window.MeshEngine.currentChatServer === '@dms') renderDMList();
+};
 
 function sendReaction(msgId) {
     const emoji = prompt("Enter an emoji to react with:");
-    if (emoji && currentChatServer && currentChatChannel) {
-        socket.emit('add_message_reaction', { serverId: currentChatServer, channelId: currentChatChannel, msgId, emoji });
+    if (emoji && window.MeshEngine.currentChatServer && window.MeshEngine.currentChatChannel) {
+        socket.emit('add_message_reaction', { serverId: window.MeshEngine.currentChatServer, channelId: window.MeshEngine.currentChatChannel, msgId, emoji });
     }
 }
 
-socket.on('new_reaction', (data) => {
+window.handleNewReaction = (data) => {
     const reactionContainer = document.getElementById(`reactions_${data.msgId}`);
     if (reactionContainer) {
         reactionContainer.innerHTML += `<span style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 8px; border: 1px solid var(--border);">${escapeHtml(data.emoji)}</span>`;
     }
-});
+};
 
 // ==========================================
 // 9. NEW SOCIAL FEATURES (Badges, Mentions, Modals)
@@ -3105,18 +2279,18 @@ function detectMentionsAndEmit(text) {
                     targetAddr = addr; break;
                 }
             }
-            if (targetAddr) socket.emit('notify_mention', { target: targetAddr, from: userKeys.publicKey });
+            if (targetAddr) socket.emit('notify_mention', { target: targetAddr, from: window.CoreEngine.userKeys.publicKey });
         });
     }
 }
 
-socket.on('mention_notification', (data) => {
+window.handleMentionNotification = (data) => {
     const badge = document.getElementById('ui-notif-badge');
     if (badge) {
         badge.innerText = parseInt(badge.innerText) + 1;
         badge.classList.remove('hidden');
     }
-});
+};
 
 function resetNotifBadge() {
     const badge = document.getElementById('ui-notif-badge');
@@ -3143,20 +2317,11 @@ async function toggleLike(txHash, receiver) {
     const countEl = document.getElementById(`like-count-${txHash}`);
     if (countEl) {
         countEl.innerText = parseInt(countEl.innerText) + 1;
-        socket.emit('like_post', { txHash, address: userKeys.publicKey });
+        socket.emit('like_post', { txHash, address: window.CoreEngine.userKeys.publicKey });
     }
 
     try {
-        const msgData = { 
-            sender: userKeys.publicKey, 
-            receiver: receiver || '0x00', 
-            type: 'LIKE_POST', 
-            data: { txHash: txHash }, 
-            timestamp: Date.now() 
-        };
-        const sig = await generateClientSignature(userKeys.privateKey, msgData);
-        const txFields = { ...msgData, signature: sig };
-        await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
+        await window.CoreEngine.sendSignedTransaction('LIKE_POST', receiver || '0x00', { txHash: txHash });
     } catch (err) {
         console.error("Like block failed:", err);
     }
@@ -3177,20 +2342,11 @@ async function submitReply(txHash, receiver, parentReplyId = null) {
     detectMentionsAndEmit(text);
     
     box.querySelector('textarea').value = '';
-    socket.emit('reply_post', { txHash, address: userKeys.publicKey, text: text.trim(), parentReplyId });
+    socket.emit('reply_post', { txHash, address: window.CoreEngine.userKeys.publicKey, text: text.trim(), parentReplyId });
 
     try {
         const replyId = Date.now() + '_' + userKeys.publicKey.substring(0, 10);
-        const msgData = { 
-            sender: userKeys.publicKey, 
-            receiver: receiver || '0x00', 
-            type: 'REPLY_POST', 
-            data: { txHash: txHash, text: text.trim(), parentReplyId, replyId }, 
-            timestamp: Date.now() 
-        };
-        const sig = await generateClientSignature(userKeys.privateKey, msgData);
-        const txFields = { ...msgData, signature: sig };
-        await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
+        await window.CoreEngine.sendSignedTransaction('REPLY_POST', receiver || '0x00', { txHash: txHash, text: text.trim(), parentReplyId, replyId });
     } catch (err) {
         console.error("Reply block failed:", err);
     }
@@ -3241,9 +2397,9 @@ async function handlePublishArticle() {
     const price = document.getElementById('zine-publish-price').value.trim();
 
     if(!title || !body || !price) return alert("Title, body, and price are required to publish.");
-    if(!userKeys.publicKey) return alert("Identity required.");
+    if(!window.CoreEngine.userKeys.publicKey) return alert("Identity required.");
 
-    socket.emit('publish_article', { title, body, price: parseFloat(price), author: userKeys.publicKey });
+    socket.emit('publish_article', { title, body, price: parseFloat(price), author: window.CoreEngine.userKeys.publicKey });
 
     document.getElementById('zine-publish-title').value = '';
     document.getElementById('zine-publish-body').value = '';
@@ -3256,7 +2412,7 @@ function renderZine() {
     const ownedContainer = document.getElementById('ui-zine-owned');
     if(!marketContainer || !ownedContainer) return;
 
-    const myAddr = userKeys.publicKey;
+    const myAddr = window.CoreEngine.userKeys.publicKey;
     
     marketContainer.innerHTML = zineArticles.map(art => {
         const isOwner = art.ownersList.includes(myAddr) || art.author === myAddr;
@@ -3289,36 +2445,25 @@ function renderZine() {
 }
 
 function purchaseArticleRights(articleId) {
-    if(!userKeys.publicKey) return alert("Please login.");
+    if(!window.CoreEngine.userKeys.publicKey) return alert("Please login.");
     socket.emit('purchase_article_rights', articleId);
 }
 
 function likeArticle(articleId) {
-    if (!userKeys.publicKey) return alert("Must be logged in to like.");
+    if (!window.CoreEngine.userKeys.publicKey) return alert("Must be logged in to like.");
     socket.emit('like_article', articleId);
 }
 
 async function tipArticle(articleId, author) {
-    if (!userKeys.publicKey) return alert("Must be logged in to tip.");
-    if (author === userKeys.publicKey) return alert("You cannot tip your own article.");
+    if (!window.CoreEngine.userKeys.publicKey) return alert("Must be logged in to tip.");
+    if (author === window.CoreEngine.userKeys.publicKey) return alert("You cannot tip your own article.");
     const amount = prompt("How much $VOD would you like to tip the author?");
     if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) return;
     
     try {
-        const msgData = { 
-            sender: userKeys.publicKey, 
-            receiver: author, 
-            type: 'TRANSFER_COIN', 
-            data: { amount: parseFloat(amount) }, 
-            timestamp: Date.now() 
-        };
-        const sig = await generateClientSignature(userKeys.privateKey, msgData);
-        const txFields = { ...msgData, signature: sig };
+        await window.CoreEngine.sendSignedTransaction('TRANSFER_COIN', author, { amount: parseFloat(amount) });
         
-        const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
-        if(!res.ok) throw new Error((await res.json()).error);
-        
-        socket.emit('trigger_push', { target: author, payload: { title: 'Tip Received! 💸', body: `You received ${amount} $VOD from ${resolveProfile(userKeys.publicKey).username} for your Zine Article!` } });
+        socket.emit('trigger_push', { target: author, payload: { title: 'Tip Received! 💸', body: `You received ${amount} $VOD from ${resolveProfile(window.CoreEngine.userKeys.publicKey).username} for your Zine Article!` } });
 
         alert(`Successfully tipped ${amount} $VOD to the author!`);
     } catch (err) { alert("Tip failed: " + err.message); }

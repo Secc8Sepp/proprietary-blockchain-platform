@@ -178,7 +178,7 @@ function getProfileDirectory() {
 
 function updateProfileCache(tx) {
     if (!profileCache) profileCache = {};
-    if (!profileCache[tx.sender]) profileCache[tx.sender] = { username: `Node_${tx.sender.substring(0,6)}`, avatarHash: '' };
+    if (!profileCache[tx.sender]) profileCache[tx.sender] = { username: `Node_${tx.sender.substring(0,6)}`, avatarHash: '', joined: tx.timestamp };
     if (tx.data.username) profileCache[tx.sender].username = tx.data.username;
     if (tx.data.avatarHash) profileCache[tx.sender].avatarHash = tx.data.avatarHash;
 }
@@ -297,6 +297,7 @@ io.on('connection', (socket) => {
         if (node) {
             if (data.status !== undefined) node.status = data.status;
             if (data.activity !== undefined) node.activity = data.activity;
+            if (data.track !== undefined) node.track = data.track;
             broadcastSwarmUpdate();
         }
     });
