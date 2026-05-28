@@ -44,6 +44,25 @@ function sendPushNotification(address, payload) {
     subs.forEach(sub => webpush.sendNotification(sub, JSON.stringify(payload)).catch(e => console.error('Push Error:', e)));
 }
 
+// ==========================================
+// SYSTEM DIAGNOSTIC TOOL (For Server Debugging)
+// ==========================================
+app.get('/api/debug/system', (req, res) => {
+    const ledgerPath = path.join(__dirname, 'ledger-data', 'chain.json');
+    let chainStatus = "Not Found";
+    let chainLength = 0;
+    if (fs.existsSync(ledgerPath)) {
+        try {
+            const parsed = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
+            chainStatus = "Valid JSON";
+            chainLength = parsed.length;
+        } catch (e) {
+            chainStatus = "INVALID JSON ERROR: " + e.message;
+        }
+    }
+    res.json({ appRoot: __dirname, expectedChainPath: ledgerPath, chainStatus, chainLength });
+});
+
 // 1. API ROUTES
 app.use('/api/auth', authRoutes);
 app.use('/api/social', socialRoutes);
@@ -164,11 +183,15 @@ function saveDBMemory() {
 }
 
 let profileCache = null;
+let lastCachedChainLength = 0;
+
 function getProfileDirectory() {
-    if (profileCache) return profileCache;
-    // Initial build only happens once or on reset
+    const chain = blockchainService.getChain();
+    if (profileCache && chain.length === lastCachedChainLength) return profileCache;
+    
     profileCache = {}; 
-    blockchainService.getChain().forEach(block => {
+    lastCachedChainLength = chain.length;
+    chain.forEach(block => {
         block.transactions.forEach(tx => {
             if (tx.type === 'PROFILE_UPDATE') updateProfileCache(tx);
         });

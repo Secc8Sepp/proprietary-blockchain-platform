@@ -172,6 +172,17 @@ function getDragAfterElement(container, y, selector) {
     // Request initial data
     socket.emit('get_servers');
     socket.emit('get_zine_data');
+    
+    socket.on('profile_directory', (directory) => {
+        window.networkProfiles = directory;
+        renderNewUsers();
+        
+        if (currentView === 'feed') loadMainGlobalFeed();
+        if (window.MeshEngine && window.MeshEngine.currentChatServer) {
+            if (window.MeshEngine.currentChatServer === '@dms') renderDMList();
+            else switchChannel(window.MeshEngine.currentChatServer, window.MeshEngine.currentChatChannel);
+        }
+    });
     console.log('[INIT] Event listeners initialized');
 }
 
