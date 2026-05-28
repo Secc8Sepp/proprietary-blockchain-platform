@@ -448,6 +448,58 @@ function promptPublishZineArticle(bodyText) {
     toggleModal('form-modal');
 }
 
+function showKeyModal(keys, callback) {
+    const modalTitle = document.getElementById('form-modal-title');
+    const modalBody = document.getElementById('form-modal-body');
+    
+    modalTitle.innerText = '✅ Identity Minted! Save Your Key';
+    
+    const keyJSON = JSON.stringify(keys, null, 2);
+
+    modalBody.innerHTML = `
+        <p style="font-size: 13px; color: var(--text-muted);">
+            <b>CRITICAL:</b> This is your new identity. It's like a password.
+            You MUST save it to log back in. We cannot recover it for you.
+        </p>
+        <p style="font-size: 13px; color: var(--text-muted);">
+            Copy the text below and save it in a secure place, or download the key file.
+        </p>
+        <textarea id="key-display-textarea" readonly style="width: 100%; height: 120px; font-family: monospace; font-size: 12px; resize: none; margin-bottom: 10px; background: #0b0c10; border-color: var(--border); color: #fff;">${escapeHtml(keyJSON)}</textarea>
+        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <button id="form-modal-copy-key" style="flex: 1;">Copy Key</button>
+            <button id="form-modal-download-key" class="secondary" style="flex: 1;">Download File</button>
+        </div>
+        <button id="form-modal-submit" style="width: 100%;">I Have Saved My Key. Continue →</button>
+    `;
+
+    document.getElementById('form-modal-copy-key').onclick = () => {
+        const textarea = document.getElementById('key-display-textarea');
+        textarea.select();
+        navigator.clipboard.writeText(textarea.value).then(() => {
+            alert('Key copied to clipboard!');
+        }).catch(err => {
+            alert('Failed to copy key. Please copy it manually.');
+        });
+    };
+
+    document.getElementById('form-modal-download-key').onclick = () => {
+        if (window.CoreEngine && typeof window.CoreEngine.promptKeyDownload === 'function') {
+            window.CoreEngine.promptKeyDownload(keys);
+        }
+    };
+
+    const submitBtn = document.getElementById('form-modal-submit');
+    submitBtn.onclick = () => {
+        toggleModal('form-modal');
+        if (callback && typeof callback === 'function') {
+            callback();
+        }
+    };
+
+    toggleModal('form-modal');
+}
+window.showKeyModal = showKeyModal;
+
 // ==========================================
 // 3. MINING & AUDIO ENGINE
 // ==========================================
@@ -2615,6 +2667,65 @@ async function submitReply(txHash, receiver, parentReplyId = null) {
     } catch (err) {
         console.error("Reply block failed:", err);
     }
+}
+
+async function submitShout() {
+    if (!window.CoreEngine.userKeys.publicKey) return alert("You must be logged in to post a shout.");
+    if (!viewingUserPublicKey) return;
+
+    const input = document.getElementById('shoutbox-input');
+    const message = input.value.trim();
+    if (!message) return;
+
+    try {
+        await window.CoreEngine.sendSignedTransaction('SHOUTBOX_POST', viewingUserPublicKey, { message });
+        input.value = '';
+        alert("Shout posted to the ledger!");
+        // Refresh the profile to show the new shout
+        fetchUserProfile(viewingUserPublicKey, false);
+    } catch (err) {
+        alert("Failed to post shout: " + err.message);
+    }
+}
+
+window.renderCrewRequests = function() {
+    const list = document.getElementById('ui-requests-list');
+    if (!list) return;
+    if (window.pendingCrewRequests.length === 0) {
+        list.innerHTML = '<div style="color: var(--text-muted); font-size: 13px; text-align: center;">No pending requests.</div>';
+        const badge = document.getElementById('ui-requests-badge');
+        if (badge) {
+            badge.innerText = '0';
+            badge.classList.add('hidden');
+        }
+        return;
+    }
+    list.innerHTML = window.pendingCrewRequests.map(req => {
+        const prof = resolveProfile(req.from);
+        return `
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:10px; border-bottom: 1px solid rgba(69,162,158,0.2);">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <img src="${getAvatarUrl(req.from)}" style="width:35px; height:35px; border-radius:50%;">
+                    <span style="color: #fff;"><strong>${escapeHtml(prof.username)}</strong> wants to lock in.</span>
+                </div>
+                <div style="display:flex; gap: 8px;">
+                    <button onclick="acceptCrewRequest('${req.from}')" style="padding: 5px 10px; font-size: 11px;">Accept</button>
+                    <button class="secondary" onclick="declineCrewRequest('${req.from}')" style="padding: 5px 10px; font-size: 11px;">Decline</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function acceptCrewRequest(fromAddress) {
+    window.executeTargetFollow(fromAddress, true); // The 'true' prevents sending a request back
+    window.pendingCrewRequests = window.pendingCrewRequests.filter(r => r.from !== fromAddress);
+    window.renderCrewRequests();
+}
+
+function declineCrewRequest(fromAddress) {
+    window.pendingCrewRequests = window.pendingCrewRequests.filter(r => r.from !== fromAddress);
+    window.renderCrewRequests();
 }
 
 function renderThreadedReplies(repliesArray, depthLevel, txHash) {

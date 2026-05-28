@@ -41,8 +41,14 @@ window.CoreEngine = {
             btn.innerText = "Recording to Ledger...";
             await this.sendSignedTransaction('PROFILE_UPDATE', this.userKeys.publicKey, { username: username, bio: "Active on the Vibe or Die Network.", avatarHash: avatarHash });
 
-            this.promptKeyDownload(this.userKeys);
-            this.unlockApplication(this.userKeys.publicKey);
+            if (typeof window.showKeyModal === 'function') {
+                window.showKeyModal(this.userKeys, () => {
+                    this.unlockApplication(this.userKeys.publicKey);
+                });
+            } else {
+                this.promptKeyDownload(this.userKeys);
+                this.unlockApplication(this.userKeys.publicKey);
+            }
         } catch (err) { 
             console.error(err); alert("Signup Error: " + err.message); 
             const btn = document.getElementById('btn-signup');
