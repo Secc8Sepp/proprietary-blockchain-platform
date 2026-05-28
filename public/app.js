@@ -19,6 +19,8 @@ let swRegistration = null;
 let localDB = null;
 let editedTop8 = [];
 let pendingCrewRequests = [];
+window.activeWaveform = null;
+window.waveformInstances = {};
 
 document.addEventListener('DOMContentLoaded', () => { 
     window.networkProfiles = {}; window.zineArticles = []; window.hotOrNotData = [];
@@ -38,6 +40,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initializeApplicationListeners() {
     console.log('[INIT] Wiring up event listeners...');
+
+    // Dynamically load WaveSurfer.js and regions plugin
+    const wsScript = document.createElement('script');
+    wsScript.src = 'https://unpkg.com/wavesurfer.js';
+    document.head.appendChild(wsScript);
+    wsScript.onload = () => {
+        const regionsScript = document.createElement('script');
+        regionsScript.src = 'https://unpkg.com/wavesurfer.js/dist/plugin/wavesurfer.regions.min.js';
+        document.head.appendChild(regionsScript);
+        regionsScript.onload = () => console.log('[INIT] ✓ Waveform Engine ready.');
+    };
     
     // Identity & Auth Flow
     const signupBtn = document.getElementById('btn-signup');
@@ -465,7 +478,132 @@ async function loadMainGlobalFeed() {
 function renderPostContent(item) {
     if(item.type === 'SONG_UPLOAD') {
         const playCount = item.playCount || 0;
-        
+        const audioHash = item.data.audioHash;
+        const transactionHash = item.transactionHash;
+
+        // Defer rendering until WaveSurfer is loaded
+        setTimeout(() => {
+            if (!window.WaveSurfer || !window.WaveSurfer.regions) return; // Not loaded yet
+            
+            const waveformContainer = document.getElementById(`waveform-${audioHash}`);
+            if (!waveformContainer || waveformContainer.childElementCount > 0) return; // Already initialized
+
+            const wavesurfer = WaveSurfer.create({
+                container: waveformContainer,
+                waveColor: 'rgba(102, 252, 241, 0.5)',
+                progressColor: 'var(--primary)',
+                cursorColor: '#fff',
+                barWidth: 2,
+                barRadius: 3,
+                barGap: 2,
+                height: 80,
+                plugins: [
+                    WaveSurfer.regions.create({
+                        regionsMinLength: 0.1,
+                        dragSelection: false,
+                        color: 'rgba(255, 255, 255, 0.2)',
+                    })
+                ]
+            });
+            
+            window.waveformInstances[audioHash] = wavesurfer;
+
+            wavesurfer.load(`/tracks/${audioHash}`);
+
+            const playButton = document.getElementById(`play-btn-${audioHash}`);
+            if (playButton) {
+                playButton.onclick = () => {
+                    if (window.activeWaveform && window.activeWaveform !== wavesurfer) {
+                        window.activeWaveform.pause();
+                    }
+                    wavesurfer.playPause();
+                    window.activeWaveform = wavesurfer;
+                };
+            }
+
+            wavesurfer.on('play', () => {
+                if (playButton) playButton.innerText = '⏸️ Pause';
+                const globalPlayer = document.getElementById('global-audio-player');
+                if (globalPlayer && !globalPlayer.paused && window.AudioEngine.activeTrackHash !== audioHash) {
+                    globalPlayer.pause();
+                }
+                window.AudioEngine.activeTrackHash = audioHash;
+            });
+
+            wavesurfer.on('pause', () => {
+                if (playButton) playButton.innerText = '▶ Play';
+                if (window.activeWaveform === wavesurfer) {
+                    window.activeWaveform = null;
+                }
+            });
+
+            const timedComments = item.timedComments || [];
+            const commentsOverlayContainer = document.getElementById(`comments-overlay-${audioHash}`);
+            
+            timedComments.forEach(comment => {
+                wavesurfer.addRegion({
+                    start: comment.audioTimestamp,
+                    end: comment.audioTimestamp + 0.1,
+                    color: 'rgba(255, 170, 0, 0.3)',
+                    attributes: {
+                        'data-comment-text': comment.text,
+                        'data-comment-sender': comment.sender
+                    }
+                });
+            });
+
+            wavesurfer.on('region-in', (region) => {
+                const sender = region.attributes['data-comment-sender'];
+                const text = region.attributes['data-comment-text'];
+                if (!sender || !text || !commentsOverlayContainer) return;
+
+                const profile = resolveProfile(sender);
+                const commentEl = document.createElement('div');
+                commentEl.className = 'timed-comment-popup';
+                commentEl.style = `
+                    position: absolute;
+                    top: 0;
+                    right: 0;
+                    background: rgba(0,0,0,0.8);
+                    border: 1px solid var(--primary);
+                    padding: 8px;
+                    border-radius: 8px;
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    z-index: 10;
+                    max-width: 250px;
+                    opacity: 0;
+                    transition: opacity 0.3s;
+                `;
+                commentEl.innerHTML = `
+                    <img src="${getAvatarUrl(sender)}" style="width: 30px; height: 30px; border-radius: 50%;">
+                    <div>
+                        <strong style="color: var(--primary); font-size: 12px;">${escapeHtml(profile.username)}</strong>
+                        <p style="color: #fff; font-size: 12px; margin: 2px 0 0 0;">${parseMentions(text)}</p>
+                    </div>
+                `;
+                commentsOverlayContainer.innerHTML = '';
+                commentsOverlayContainer.appendChild(commentEl);
+                setTimeout(() => commentEl.style.opacity = 1, 10);
+            });
+
+            wavesurfer.on('region-out', (region) => {
+                const el = commentsOverlayContainer.querySelector('.timed-comment-popup');
+                if (el) {
+                    el.style.opacity = 0;
+                    setTimeout(() => el.remove(), 300);
+                }
+            });
+
+        }, 500);
+
+        let coverHtml = item.data.coverHash ? `<img src="/tracks/${item.data.coverHash}" style="width: 60px; height: 60px; border-radius: 6px; object-fit: cover;">` : '';
+        let displayArtist = item.data.artist ? escapeHtml(item.data.artist) : resolveProfile(item.sender).username;
+        if (item.data.offPlatformCollaborator) {
+            displayArtist += ` ft. ${escapeHtml(item.data.offPlatformCollaborator)}`;
+        }
+
         let sharesHtml = '';
         if (item.shares) {
             sharesHtml = `<div style="font-size: 11px; margin-top: 15px; color: var(--text-muted); border-top: 1px solid rgba(69, 162, 158, 0.2); padding-top: 10px;"><strong>Shareholders:</strong> `;
@@ -485,30 +623,34 @@ function renderPostContent(item) {
                 </button>
             `;
         }
-        let coverHtml = item.data.coverHash ? `<img src="/tracks/${item.data.coverHash}" style="width: 60px; height: 60px; border-radius: 6px; object-fit: cover;">` : '';
-        let displayArtist = item.data.artist ? escapeHtml(item.data.artist) : resolveProfile(item.sender).username;
-        if (item.data.offPlatformCollaborator) {
-            displayArtist += ` ft. ${escapeHtml(item.data.offPlatformCollaborator)}`;
-        }
 
         return `
-            <div class="audio-block" style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border: 1px solid rgba(69, 162, 158, 0.2);">
+            <div class="audio-post-v2" style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border: 1px solid rgba(69, 162, 158, 0.2);">
                 ${item.data.caption ? `<div style="margin-bottom: 10px; color: #fff;">${parseMentions(item.data.caption)}</div>` : ''}
                 <div style="display: flex; gap: 15px; margin-bottom: 10px;">
                     ${coverHtml}
-                    <div>
+                    <div style="flex: 1;">
                         <div style="font-size:18px; color: var(--primary); font-weight: bold;">🎵 ${escapeHtml(item.data.trackTitle)}</div>
                         <div style="font-size:12px; color:var(--text-muted); margin-bottom: 2px;">By ${displayArtist}</div>
                         ${item.data.metadata && window.GlobalTagEngine ? `<div style="font-size:12px; color:var(--text-muted);">${window.GlobalTagEngine.renderTags(item.data.metadata)}</div>` : ''}
-                        <div style="font-size:12px; color: var(--text-muted);">
-                            🎧 ${playCount} Streams • 💎 Network Mines 25,000 $VOD per stream
-                        </div>
                     </div>
                 </div>
-                <div style="display: flex; gap: 10px;">
-                    <button style="background:#66fcf1; color:#000; padding:8px 15px; flex: 1;" onclick="window.AudioEngine.playTrack('${escapeJsArg(item.data.trackTitle)}', '${item.data.audioHash}', '${item.sender}', '${escapeJsArg(displayArtist)}')">
-                        ▶ Play Track
+
+                <div style="position: relative; margin-bottom: 10px;">
+                    <div id="waveform-${audioHash}"></div>
+                    <div id="comments-overlay-${audioHash}" style="position: absolute; top: -10px; right: 0; width: 250px; height: calc(100% + 20px); pointer-events: none; z-index: 5;"></div>
+                </div>
+
+                <div style="display: flex; gap: 10px; margin-bottom: 10px; align-items: center;">
+                    <button id="play-btn-${audioHash}" style="background:#66fcf1; color:#000; padding:8px 15px;">
+                        ▶ Play
                     </button>
+                    <input type="text" id="timed-comment-input-${audioHash}" placeholder="Comment at current time..." style="flex: 1; margin: 0; padding: 8px; font-size: 12px;">
+                    <button class="secondary" style="padding:8px 15px; font-size: 12px;" onclick="window.ActionEngine.submitTimedComment('${transactionHash}', '${audioHash}')">
+                        💬 Post
+                    </button>
+                </div>
+                <div style="display: flex; gap: 10px;">
                     ${listingHtml}
                     <button class="secondary" style="padding:8px 15px; font-size: 12px;" onclick="window.ActionEngine.requestSongShare('${item.data.audioHash}', '${item.sender}')">
                         📈 Request Stake

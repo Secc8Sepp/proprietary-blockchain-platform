@@ -806,5 +806,27 @@ window.ActionEngine = {
         } catch (err) {
             alert("Failed to repost: " + err.message);
         }
+    },
+
+    async submitTimedComment(txHash, audioHash) {
+        if (!window.CoreEngine.userKeys.publicKey) return alert("You must login first.");
+
+        const input = document.getElementById(`timed-comment-input-${audioHash}`);
+        const text = input.value.trim();
+        if (!text) return;
+
+        const wavesurfer = window.waveformInstances ? window.waveformInstances[audioHash] : null;
+        if (!wavesurfer) return alert("Waveform not initialized.");
+
+        const audioTimestamp = wavesurfer.getCurrentTime();
+
+        try {
+            await window.CoreEngine.sendSignedTransaction('TIMED_COMMENT', '0x00', { txHash, text, audioTimestamp });
+            alert("Timed comment posted!");
+            input.value = '';
+            loadMainGlobalFeed(); // Reload to see the new comment
+        } catch (err) {
+            alert("Failed to post comment: " + err.message);
+        }
     }
 };

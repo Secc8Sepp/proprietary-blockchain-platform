@@ -384,6 +384,7 @@ class ProfileService {
         const deletedPosts = new Set();
         const songListings = {};
         const trackMetadata = {};
+        const timedComments = {};
         const postMetadata = {};
 
         // Pass 1: Gather metric aggregates from the ledger
@@ -460,6 +461,15 @@ class ProfileService {
                         replies: []
                     });
                 }
+                if (tx.type === 'TIMED_COMMENT') {
+                    if (!timedComments[tx.data.txHash]) timedComments[tx.data.txHash] = [];
+                    timedComments[tx.data.txHash].push({
+                        sender: tx.sender,
+                        text: tx.data.text,
+                        audioTimestamp: tx.data.audioTimestamp,
+                        timestamp: tx.timestamp
+                    });
+                }
                 if (tx.type === 'DELETE_POST') {
                     // Security check: Only the original creator can delete their post
                     // or the reposter can delete their repost
@@ -524,6 +534,9 @@ class ProfileService {
                         feedItem.shares = shareDistribution[assetHash] || {};
                         feedItem.listing = songListings[assetHash];
                         if (trackMetadata[assetHash]) {
+                            if (tx.type === 'SONG_UPLOAD') {
+                                feedItem.timedComments = (timedComments[block.hash] || []).sort((a,b) => a.audioTimestamp - b.audioTimestamp);
+                            }
                             feedItem.data.trackTitle = trackMetadata[assetHash].title;
                             feedItem.data.artist = trackMetadata[assetHash].artist;
                             feedItem.data.offPlatformCollaborator = trackMetadata[assetHash].offPlatformCollaborator;
