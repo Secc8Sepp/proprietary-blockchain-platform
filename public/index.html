@@ -106,6 +106,16 @@
         .chat-input-wrapper { display: flex; border-top: 1px solid rgba(69,162,158,0.3); background: var(--bg-card); padding: 10px; }
         .chat-input-wrapper input { margin: 0; border: none; background: var(--bg-darker); border-radius: 8px; flex: 1; font-size: 13px; padding: 10px; }
 
+        /* Fullscreen Discord Chat Mode */
+        .container.chat-mode { grid-template-columns: 1fr; max-width: 1600px; height: calc(100vh - 100px); }
+        .container.chat-mode > *:not(.side-nav) { display: none !important; }
+        .container.chat-mode .side-nav { position: static; height: 100%; top: auto; display: flex; flex-direction: column; }
+        .container.chat-mode .side-nav > *:not(.chat-module) { display: none !important; }
+        .container.chat-mode .chat-module { height: 100%; margin: 0; border-radius: 12px; flex: 1; }
+
+        .chat-module-close-btn { display: none; }
+        .container.chat-mode .chat-module-close-btn { display: inline-block; color: var(--danger); cursor: pointer; font-size: 12px; margin-left: auto; font-weight: bold; }
+
         /* ==========================================
            Center Content (Feed & Profile)
            ========================================== */
@@ -245,7 +255,7 @@
         
         <!-- Navbar -->
         <div class="navbar">
-            <div class="nav-logo">VOD Social</div>
+            <div class="nav-logo" style="cursor: pointer;" onclick="switchTab('feed', document.querySelector('.side-nav-item'))">VOD Social</div>
             <div class="nav-search">
                 <div style="display: flex; align-items: center; gap: 15px;">
                     <a onclick="switchTab('hotornot')" style="white-space: nowrap; font-weight: 900; font-size: 13px; color: var(--danger); text-shadow: 0 0 10px var(--danger); cursor:pointer;">🔥 HOT OR NOT</a>
@@ -258,7 +268,7 @@
                     <div class="nav-icon" onclick="toggleModal('requests-modal')" title="Friend Requests">
                         👥 <span class="badge-counter hidden" id="ui-requests-badge">0</span>
                     </div>
-                    <div class="nav-icon" onclick="switchServer('@dms'); resetInboxBadge()" title="Direct Messages">
+                    <div class="nav-icon" onclick="toggleDMPane()" title="Direct Messages">
                         💬 <span class="badge-counter hidden" id="ui-inbox-badge">0</span>
                     </div>
                     <div class="nav-icon" onclick="resetNotifBadge()" title="Notifications">
@@ -293,8 +303,10 @@
                     <div class="chat-main">
                         <div class="chat-header">
                             <span id="ui-active-server-name">📡 Select a Server</span>
+                            <span id="btn-new-dm" style="color: var(--primary); cursor: pointer; font-size: 12px; margin-left: 10px; display: none;" onclick="promptNewDM()" title="New DM">➕ New DM</span>
                             <span style="color: var(--success); cursor: pointer; font-size: 11px; margin-left: 10px;" onclick="joinActiveVoiceChannel()" title="Join Voice Room">🎙️ Connect Voice</span>
                             <span style="color: var(--primary); cursor: pointer; font-size: 12px;" onclick="promptCreateChannel()" title="Create Channel">➕ Add Channel</span>
+                            <span class="chat-module-close-btn" onclick="document.querySelector('.container').classList.remove('chat-mode')">✖ Close Fullscreen</span>
                         </div>
                         <div class="chat-channels" id="ui-channel-list">
                             <!-- Populated dynamically via JS -->
@@ -392,6 +404,7 @@
                             <label id="btn-edit-avatar" class="hidden" style="position:absolute; bottom:0; left:0; width:100%; text-align:center; background:rgba(0,0,0,0.7); cursor:pointer; color:#fff; font-size:11px; padding:4px 0;">📷 Change<input type="file" id="input-edit-avatar" hidden accept="image/*"></label>
                         </div>
                         <div class="profile-actions">
+                        <button class="secondary" id="btn-profile-message" style="display: none;" onclick="sendDM(viewingUserPublicKey)">💬 Message</button>
                             <button class="secondary" id="btn-toggle-edit" onclick="toggleInlineEdit()">⚙️ Edit Profile</button>
                             <button id="btn-profile-follow">Lock In Crew</button>
                         </div>
@@ -410,7 +423,12 @@
                                 <h4 style="margin-bottom: 10px; color: var(--primary);">Edit Identity & Theme</h4>
                                 <input id="input-edit-username" placeholder="Display name" style="margin-bottom: 8px;" />
                                 <textarea id="input-edit-bio" rows="2" placeholder="Profile bio" style="margin-bottom: 8px;"></textarea>
-                                <input id="input-edit-top8" placeholder="Top 8 public keys, comma separated" style="margin-bottom: 8px;" />
+                                <div style="margin-bottom: 15px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; border: 1px solid rgba(69, 162, 158, 0.2);">
+                                    <label style="font-size: 11px; display:block; margin-bottom: 8px; color: var(--text-muted); text-transform: uppercase;">Manage Top 8 Crew</label>
+                                    <div id="top8-selected-list" style="display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px;"></div>
+                                    <input id="top8-search-input" placeholder="Search for friends by username..." style="margin-bottom: 4px;" onkeyup="handleTop8Search()" />
+                                    <div id="top8-search-results" style="max-height: 120px; overflow-y: auto; border-radius: 8px;"></div>
+                                </div>
                                 <div style="display: flex; gap: 15px; margin-bottom: 15px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
                                     <div><label style="font-size: 11px; display:block;">Primary</label><input type="color" id="input-color-primary" style="padding:0; width:40px; height:30px; cursor:pointer; border:none; background:none;"></div>
                                     <div><label style="font-size: 11px; display:block;">Background</label><input type="color" id="input-color-bg" style="padding:0; width:40px; height:30px; cursor:pointer; border:none; background:none;"></div>
@@ -422,7 +440,7 @@
                                 </div>
                                 <textarea id="input-edit-css" rows="3" placeholder="Advanced: Inject custom CSS here..."></textarea>
                                 <div style="display:flex; gap:10px; margin-top: 10px;">
-                                    <button onclick="handleProfileUpdateSubmission()">💾 Save & Deploy to Ledger</button>
+                                    <button onclick="saveInlineEdit()">💾 Save & Deploy to Ledger</button>
                                     <button class="secondary" onclick="toggleInlineEdit()">Cancel</button>
                                 </div>
                             </div>
@@ -725,6 +743,8 @@
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBWB2HJSCROvCyD9SOcJouSJF5j3e1-HgA&libraries=geometry&v=beta" async defer></script>
     <script src="https://cdn.jsdelivr.net/npm/elliptic@6.5.4/dist/elliptic.min.js"></script>
+    <script src="/utils.js"></script>
+    <script src="/crypto.js"></script>
     <script src="/app.js"></script>
 </body>
 </html>

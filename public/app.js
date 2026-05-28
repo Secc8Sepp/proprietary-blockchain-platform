@@ -27,6 +27,8 @@ let myMeshId = null; let meshConnections = {}; let dataChannels = {};
 let eventsState = { isPlacing: false, currentFile: null, hashes: new Set(), mapMarkers: [] };
 let marketDataCache = { items: [], bounties: [] };
 let myCustomTheme = '';
+let myFollowing = [];
+let feedFilterMode = 'global';
 let socketIdToAddress = {};
 let activeFeedTag = null;
 let zineArticles = [];
@@ -35,6 +37,7 @@ let currentPlaylistMode = 'global';
 let hotOrNotData = [];
 let swRegistration = null;
 let localDB = null;
+let editedTop8 = [];
 
 document.addEventListener('DOMContentLoaded', () => { 
     initializeApplicationListeners(); 
@@ -105,7 +108,6 @@ function initializeApplicationListeners() {
     // Settings & Social Actions
     const updateProfileBtn = document.getElementById('btn-update-profile');
     if(updateProfileBtn) {
-        updateProfileBtn.addEventListener('click', handleProfileUpdateSubmission);
         updateProfileBtn.addEventListener('click', saveInlineEdit);
         console.log('[INIT] ✓ Update profile button wired');
     } else console.warn('[INIT] ✗ btn-update-profile not found');
@@ -365,15 +367,6 @@ function getDragAfterElement(container, y, selector) {
 // 1. AUTHENTICATION & IDENTITY
 // ==========================================
 
-function resolveProfile(address) {
-    return networkProfiles[address] || { username: `Node_${address.substring(0,6)}`, avatarHash: '' };
-}
-
-function getAvatarUrl(address) {
-    const p = resolveProfile(address);
-    return p.avatarHash ? `/tracks/${p.avatarHash}` : `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(address)}&backgroundColor=1f2833`;
-}
-
 function setPresence(status, activity) {
     let changed = false;
     if (status !== undefined && currentPresence.status !== status) { currentPresence.status = status; changed = true; }
@@ -512,15 +505,6 @@ async function subscribeToPush(publicKey) {
     } catch (e) { console.error('[PWA] Push subscription failed', e); }
 }
 
-function urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
-    return outputArray;
-}
-
 function initLocalLedgerNode() {
     const req = indexedDB.open('VOD_Local_Node', 1);
     req.onupgradeneeded = (e) => { localDB = e.target.result; localDB.createObjectStore('blocks', { keyPath: 'hash' }); };
@@ -543,99 +527,6 @@ async function syncFullChain() {
 // ==========================================
 // 2. MEDIA & CRYPTO ENGINE
 // ==========================================
-
-async function ensureCryptoEngine() {
-    if (typeof window.elliptic !== 'undefined') return;
-    return new Promise((resolve, reject) => {
-        console.log("[SYSTEM] Dynamically injecting Elliptic Curve engine...");
-        const script = document.createElement('script');
-        script.src = "https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js";
-        script.onload = resolve;
-        script.onerror = () => reject(new Error("Failed to load cryptography engine. Check your connection or ad-blocker."));
-        document.head.appendChild(script);
-    });
-}
-
-// NOTE: This function requires the 'elliptic' library for secp256k1 signing,
-// which matches the backend key generation.
-async function generateClientSignature(privateKeyHex, messageObject) {
-    await ensureCryptoEngine();
-    const EC = window.elliptic.ec;
-    const ec = new EC('secp256k1');
-
-    // Create key object from private key hex
-    const key = ec.keyFromPrivate(privateKeyHex);
-
-    // The backend verifier expects to verify the SHA256 hash of the message
-    const msgStr = JSON.stringify(messageObject);
-
-    // Use Web Crypto API to hash the message
-    const hashBuffer = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(msgStr));
-
-    // Convert buffer to array of bytes
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-
-    // Sign the hash and return signature in DER format as a hex string
-    const signature = key.sign(hashArray);
-    return signature.toDER('hex');
-}
-
-async function uploadMediaAssetFile(fileObject) {
-    if (!fileObject) return null;
-    const formData = new FormData();
-    formData.append('mediaAsset', fileObject);
-    
-    const response = await fetch('/api/feed/upload-file', { method: 'POST', body: formData });
-    const text = await response.text();
-    let result;
-    try {
-        result = JSON.parse(text);
-    } catch (e) {
-        throw new Error(`Server returned invalid response (File may be too large or server timed out). Response: ${text.substring(0, 80)}...`);
-    }
-    
-    if (!response.ok) throw new Error(result.error || "Upload failed.");
-    return result.fileHash;
-}
-
-/**
- * Core utility to wrap data, sign it with the private key, and broadcast to the ledger.
- */
-async function sendSignedTransaction(type, receiver, data) {
-    if (!userKeys.publicKey || !userKeys.privateKey) throw new Error("Identity locked.");
-    
-    const msgToSign = {
-        sender: userKeys.publicKey,
-        receiver: receiver || "0x00",
-        type: type,
-        data: data,
-        timestamp: Date.now()
-    };
-
-    const signature = await generateClientSignature(userKeys.privateKey, msgToSign);
-    const tx = { ...msgToSign, signature };
-
-    const res = await fetch('/api/feed/interact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(tx)
-    });
-
-    if (!res.ok) {
-        const text = await res.text();
-        let errStr = "Ledger rejected transaction.";
-        try {
-            const parsed = JSON.parse(text);
-            errStr = parsed.error || errStr;
-        } catch(e) {
-            errStr = `Server Error / Invalid Payload: ${text.substring(0, 80)}...`;
-        }
-        throw new Error(errStr);
-    }
-
-    broadcastToMesh('P2P_BLOCK', tx);
-    return tx;
-}
 
 async function handlePublishPost(isStory = false) {
     if (typeof isStory !== 'boolean') isStory = false;
@@ -714,7 +605,7 @@ async function handlePublishPost(isStory = false) {
         } else if (vidFile) {
             const hash = await uploadMediaAssetFile(vidFile);
             type = 'VIDEO_POST';
-            data = { caption: textIn, videoHash: hash };
+            data = { caption: textIn, videoHash: hash, fileSize: vidFile.size };
         } else if (zipFile) {
             const hash = await uploadMediaAssetFile(zipFile);
             type = 'PROJECT_FILE_POST';
@@ -1026,9 +917,14 @@ async function loadMainGlobalFeed() {
             window.currentActiveStories = storiesByUser;
         }
 
-        let filterHtml = '';
+        let filterHtml = `
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <button id="btn-feed-global" class="secondary" style="${feedFilterMode === 'global' ? 'background: var(--primary); color: #000;' : ''}" onclick="feedFilterMode='global'; loadMainGlobalFeed();">Global Feed</button>
+                <button id="btn-feed-following" class="secondary" style="${feedFilterMode === 'following' ? 'background: var(--primary); color: #000;' : ''}" onclick="feedFilterMode='following'; loadMainGlobalFeed();">Following</button>
+            </div>
+        `;
         if (activeFeedTag) {
-            filterHtml = `<div style="padding: 10px; background: rgba(102, 252, 241, 0.1); color: var(--primary); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+            filterHtml += `<div style="padding: 10px; background: rgba(102, 252, 241, 0.1); color: var(--primary); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
                 <span>Filtering by Tag: <strong>${escapeHtml(activeFeedTag)}</strong></span>
                 <button class="secondary" style="padding: 2px 8px; font-size: 11px;" onclick="activeFeedTag=null; loadMainGlobalFeed();">Clear Filter</button>
             </div>`;
@@ -1039,6 +935,10 @@ async function loadMainGlobalFeed() {
         const displayablePosts = data.filter(item => {
             if (item.type === 'IMAGE_POST' && item.data && item.data.isFlyer) return false; // Hide Flyers from Global Feed
             if (isNodeBlocked(item.sender)) return false;
+            
+            if (feedFilterMode === 'following') {
+                if (item.sender !== userKeys.publicKey && !myFollowing.includes(item.sender)) return false;
+            }
             
             if (activeFeedTag) {
                 if (item.type !== 'SONG_UPLOAD' || !item.data.metadata) return false;
@@ -1207,12 +1107,6 @@ function toggleBlockNode(publicKey) {
     if(currentView === 'feed') loadMainGlobalFeed();
 }
 
-function isNodeBlocked(publicKey) {
-    if (!publicKey) return false;
-    let blocks = JSON.parse(localStorage.getItem('vod_blocked_nodes') || '[]');
-    return blocks.includes(publicKey);
-}
-
 function renderTags(metadata) {
     if (!metadata) return '';
     return metadata.split(',').map(tag => {
@@ -1254,8 +1148,7 @@ function executeGlobalSearch(query) {
 function inspectTargetNode(publicKey) {
     if (!publicKey) return;
     const profileTabItem = Array.from(document.querySelectorAll('.side-nav-item')).find(el => el.innerText.toLowerCase().includes('profile') || el.innerText.includes('Profile'));
-    switchTab('profile', profileTabItem);
-    fetchUserProfile(publicKey, false);
+    switchTab('profile', profileTabItem, publicKey);
 }
 
 async function deletePost(txHash) {
@@ -1354,8 +1247,11 @@ async function promptEditSong(audioHash) {
     } catch(err) { alert("Failed to edit: " + err.message); }
 }
 
-function switchTab(tabName, element) {
+function switchTab(tabName, element, targetKey = null) {
     currentView = tabName;
+    const container = document.querySelector('.container');
+    if (container) container.classList.remove('chat-mode'); // Auto-close fullscreen chat when navigating
+
     document.getElementById('view-feed').classList.add('hidden');
     document.getElementById('view-profile').classList.add('hidden');
     const walletView = document.getElementById('view-wallet');
@@ -1379,14 +1275,33 @@ function switchTab(tabName, element) {
         viewingUserPublicKey = '';
     }
 
-    const container = document.querySelector('.container');
     if (tabName === 'events') {
         container.classList.add('flyer-mode');
     } else {
         container.classList.remove('flyer-mode');
     }
     if (tabName === 'events') { loadEvents(); setTimeout(initEventsMap, 600); }
-    if (tabName === 'profile') fetchUserProfile(userKeys.publicKey, false);
+    if (tabName === 'profile') {
+        // Reset to display mode when navigating to a profile
+        const displayMode = document.getElementById('profile-display-mode');
+        const editMode = document.getElementById('profile-edit-mode');
+        const btnAvatar = document.getElementById('btn-edit-avatar');
+        const btnBanner = document.getElementById('btn-edit-banner');
+        const toggleBtn = document.getElementById('btn-toggle-edit');
+        if (displayMode) displayMode.classList.remove('hidden');
+        if (editMode) editMode.classList.add('hidden');
+        if (btnAvatar) btnAvatar.classList.add('hidden');
+        if (btnBanner) btnBanner.classList.add('hidden');
+        if (toggleBtn) toggleBtn.classList.remove('hidden');
+
+        if (targetKey && typeof targetKey === 'string') {
+            viewingUserPublicKey = targetKey;
+            fetchUserProfile(targetKey, false);
+        } else {
+            viewingUserPublicKey = userKeys.publicKey; // Instantly snap state to the current user
+            fetchUserProfile(userKeys.publicKey, false);
+        }
+    }
     if (tabName === 'market') loadMarketplace();
     if (tabName === 'zine') renderZine();
     if (tabName === 'hotornot') loadHotOrNot();
@@ -1413,15 +1328,18 @@ function renderServerList() {
 }
 
 function switchServer(serverId) {
+    const voiceBtn = document.querySelector('span[onclick="joinActiveVoiceChannel()"]');
+    const addChBtn = document.querySelector('span[onclick="promptCreateChannel()"]');
+    const newDmBtn = document.getElementById('btn-new-dm');
+
     if (serverId === '@dms') {
         currentChatServer = '@dms';
         renderServerList();
-        document.getElementById('ui-active-server-name').innerText = "💬 Direct Messages";
+        document.getElementById('ui-active-server-name').innerHTML = `💬 Direct Messages`;
         
-        const voiceBtn = document.querySelector('span[onclick="joinActiveVoiceChannel()"]');
         if(voiceBtn) voiceBtn.style.display = 'none';
-        const addChBtn = document.querySelector('span[onclick="promptCreateChannel()"]');
         if(addChBtn) addChBtn.style.display = 'none';
+        if(newDmBtn) newDmBtn.style.display = 'inline-block';
         
         renderDMList();
         const firstDm = Object.keys(dmHistory)[0];
@@ -1438,10 +1356,9 @@ function switchServer(serverId) {
     currentChatServer = serverId;
     renderServerList();
     
-    const voiceBtn = document.querySelector('span[onclick="joinActiveVoiceChannel()"]');
     if(voiceBtn) voiceBtn.style.display = 'inline-block';
-    const addChBtn = document.querySelector('span[onclick="promptCreateChannel()"]');
     if(addChBtn) addChBtn.style.display = 'inline-block';
+    if(newDmBtn) newDmBtn.style.display = 'none';
 
     const srv = serversData.find(s => s.id === serverId);
     if (!srv) return;
@@ -1483,7 +1400,11 @@ function renderDMList() {
     let html = '';
     for (const addr of Object.keys(dmHistory)) {
         const isActive = addr === currentChatChannel ? 'active' : '';
-        html += `<div class="channel-tab ${isActive}" onclick="switchDMChannel('${addr}')">@ ${resolveProfile(addr).username}</div>`;
+        const prof = resolveProfile(addr);
+        html += `<div class="channel-tab ${isActive}" onclick="switchDMChannel('${addr}')" style="display:flex; align-items:center; gap:8px;">
+            <img src="${getAvatarUrl(addr)}" style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;">
+            <span>${escapeHtml(prof.username)}</span>
+        </div>`;
     }
     list.innerHTML = html;
 }
@@ -1492,16 +1413,24 @@ function switchDMChannel(address) {
     currentChatServer = '@dms';
     currentChatChannel = address;
     renderDMList();
-    document.getElementById('ui-active-server-name').innerText = "@ " + resolveProfile(address).username;
+    
+    const prof = resolveProfile(address);
+    
+    document.getElementById('ui-active-server-name').innerHTML = `
+        <span style="display:inline-flex; align-items:center; gap:10px;">
+            <img src="${getAvatarUrl(address)}" style="width: 24px; height: 24px; border-radius: 50%; object-fit: cover;">
+            <span>@ ${escapeHtml(prof.username)}</span>
+        </span>
+    `;
     
     const chatLog = document.getElementById('ui-chat-log');
-    chatLog.innerHTML = `<div class="chat-msg"><div class="chat-content"><div style="color: var(--primary);">Secure DM channel started with ${resolveProfile(address).username}.</div></div></div>`;
+    chatLog.innerHTML = `<div class="chat-msg"><div class="chat-content"><div style="color: var(--primary);">Secure DM channel started with ${escapeHtml(prof.username)}.</div></div></div>`;
     
     (dmHistory[address] || []).forEach(msg => appendChatMessage(msg));
     chatLog.scrollTop = chatLog.scrollHeight;
     
     const input = document.getElementById('chat-input');
-    input.placeholder = `Message @${resolveProfile(address).username}...`;
+    input.placeholder = `Message @${escapeHtml(prof.username)}...`;
     input.disabled = false;
 }
 
@@ -1831,7 +1760,9 @@ function appendChatMessage(msg) {
                 <span class="chat-react-trigger" onclick="sendReaction('${msgId}')" title="Add Reaction">➕😀</span>
             </div>
             <div style="color: #fff; margin-top: 4px;">${parseMentions(msg.text)}</div>
-            <div id="reactions_${msgId}" style="display:flex; gap: 5px; font-size: 14px; margin-top: 6px;"></div>
+            <div id="reactions_${msgId}" style="display:flex; gap: 5px; font-size: 14px; margin-top: 6px;">
+                ${(msg.reactions || []).map(emoji => `<span style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 8px; border: 1px solid var(--border);">${escapeHtml(emoji)}</span>`).join('')}
+            </div>
         </div>
     `;
     
@@ -1871,6 +1802,56 @@ function toggleInlineEdit() {
     toggleBtn.classList.toggle('hidden');
 }
 
+function renderEditedTop8() {
+    const list = document.getElementById('top8-selected-list');
+    if (!list) return;
+    list.innerHTML = editedTop8.map(addr => {
+        const prof = resolveProfile(addr);
+        return `<div style="background: rgba(102, 252, 241, 0.1); border: 1px solid var(--primary); padding: 4px 8px; border-radius: 999px; font-size: 11px; display: flex; align-items: center; gap: 5px; color: #fff;">
+            <img src="${getAvatarUrl(addr)}" style="width:16px; height:16px; border-radius:50%; object-fit: cover;">
+            ${escapeHtml(prof.username)}
+            <span style="cursor: pointer; color: var(--danger); font-weight: bold; margin-left: 4px;" onclick="removeTop8User('${addr}')">✕</span>
+        </div>`;
+    }).join('');
+}
+
+function handleTop8Search() {
+    const q = document.getElementById('top8-search-input').value.trim().toLowerCase();
+    const resDiv = document.getElementById('top8-search-results');
+    if (!q) { resDiv.innerHTML = ''; return; }
+    
+    let matches = [];
+    for (let addr in networkProfiles) {
+        if (addr === userKeys.publicKey || editedTop8.includes(addr)) continue;
+        if (networkProfiles[addr].username.toLowerCase().includes(q)) {
+            matches.push({ address: addr, ...networkProfiles[addr] });
+        }
+    }
+    
+    resDiv.innerHTML = matches.slice(0, 5).map(m => `
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.4);">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <img src="${getAvatarUrl(m.address)}" style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;">
+                <span style="font-size: 12px; color: #fff;">${escapeHtml(m.username)}</span>
+            </div>
+            <button type="button" class="secondary" style="padding: 2px 8px; font-size: 10px; margin: 0;" onclick="addTop8User('${m.address}')">+ Add</button>
+        </div>
+    `).join('');
+}
+
+function addTop8User(address) {
+    if (editedTop8.length >= 8) return alert("You can only have 8 people in your Top 8!");
+    if (!editedTop8.includes(address)) editedTop8.push(address);
+    document.getElementById('top8-search-input').value = '';
+    document.getElementById('top8-search-results').innerHTML = '';
+    renderEditedTop8();
+}
+
+function removeTop8User(address) {
+    editedTop8 = editedTop8.filter(a => a !== address);
+    renderEditedTop8();
+}
+
 async function fetchUserProfile(publicKey, isNavUpdateOnly) {
     try {
         const response = await fetch(`/api/social/profile?publicKey=${encodeURIComponent(publicKey)}`);
@@ -1906,7 +1887,9 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
             setVal('input-edit-username', profile.username || "");
             setVal('input-edit-bio', profile.bio || "");
-            setVal('input-edit-top8', (profile.top8 || []).join(', '));
+            editedTop8 = profile.top8 ? [...profile.top8] : [];
+            myFollowing = profile.following || [];
+            renderEditedTop8();
 
             if (profile.customCss) {
                 const pMatch = profile.customCss.match(/--primary:\s*(#[0-9a-fA-F]{6})/i);
@@ -1935,6 +1918,27 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
         const toggleBtn = document.getElementById('btn-toggle-edit');
         if (toggleBtn) {
             toggleBtn.style.display = viewingUserPublicKey === userKeys.publicKey ? 'block' : 'none';
+        }
+
+        const messageBtn = document.getElementById('btn-profile-message');
+        if (messageBtn) {
+            messageBtn.style.display = viewingUserPublicKey === userKeys.publicKey ? 'none' : 'block';
+        }
+
+        const followBtn = document.getElementById('btn-profile-follow');
+        if (followBtn) {
+            if (viewingUserPublicKey === userKeys.publicKey) {
+                followBtn.style.display = 'none';
+            } else {
+                followBtn.style.display = 'block';
+                if (profile.followers && profile.followers.includes(userKeys.publicKey)) {
+                    followBtn.innerText = "Crew Locked 🤝";
+                    followBtn.disabled = true;
+                } else {
+                    followBtn.innerText = "Lock In Crew";
+                    followBtn.disabled = false;
+                }
+            }
         }
         
         // Update Profile UI Elements
@@ -2321,7 +2325,6 @@ function updateComposerPreview() {
 async function saveInlineEdit() {
     const userIn = document.getElementById('input-edit-username').value.trim();
     const bioIn = document.getElementById('input-edit-bio').value.trim();
-    const top8In = document.getElementById('input-edit-top8').value.trim();
     const avatarInput = document.getElementById('input-edit-avatar');
     const bannerInput = document.getElementById('input-edit-banner');
     const sectionBgInput = document.getElementById('input-section-bg');
@@ -2358,7 +2361,7 @@ async function saveInlineEdit() {
         
         let msgData = { sender: userKeys.publicKey, receiver: userKeys.publicKey, type: 'PROFILE_UPDATE', data: {}, timestamp: Date.now() };
         if(userIn) msgData.data.username = userIn;
-        if(bioIn) msgData.data.bio = bioIn;
+        msgData.data.bio = bioIn; // Included unconditionally so users can clear their bio
         if(finalAvatarHash) msgData.data.avatarHash = finalAvatarHash;
         if(finalBannerHash) msgData.data.bannerHash = finalBannerHash;
         if(finalSectionBgHash) msgData.data.sectionImages = finalSectionBgHash;
@@ -2378,13 +2381,10 @@ async function saveInlineEdit() {
         myCustomTheme = cssIn;
         document.getElementById('ui-dynamic-user-theme').innerHTML = cssIn; 
 
-        if(top8In || top8In === "") {
-            let keys = top8In.split(',').map(k => k.trim()).filter(k => k !== "");
-            let top8Msg = { sender: userKeys.publicKey, receiver: userKeys.publicKey, type: 'SET_TOP_8', data: { top8Keys: keys }, timestamp: Date.now() };
-            const top8Sig = await generateClientSignature(userKeys.privateKey, top8Msg);
-            let top8Tx = { ...top8Msg, signature: top8Sig };
-            await fetch('/api/social/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(top8Tx) });
-        }
+        let top8Msg = { sender: userKeys.publicKey, receiver: userKeys.publicKey, type: 'SET_TOP_8', data: { top8Keys: editedTop8 }, timestamp: Date.now() };
+        const top8Sig = await generateClientSignature(userKeys.privateKey, top8Msg);
+        let top8Tx = { ...top8Msg, signature: top8Sig };
+        await fetch('/api/social/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(top8Tx) });
         
         alert("Identity and Theme blocks successfully deployed to the ledger.");
         document.getElementById('input-edit-avatar').value = '';
@@ -2410,6 +2410,10 @@ async function executeTargetFollow(targetPeerPublicKey) {
         const txFields = { ...msgData, signature: sig };
         await fetch('/api/social/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
         alert("Crew connection established.");
+        
+        // Refresh profiles to immediately update the button UI and feed priorities
+        fetchUserProfile(targetPeerPublicKey, false);
+        fetchUserProfile(userKeys.publicKey, true);
     } catch (err) { alert(err.message); }
 }
 
@@ -2800,30 +2804,39 @@ async function submitHotOrNotFromDropdown() {
     if (!userKeys.publicKey) return alert("Must be logged in.");
     const select = document.getElementById('hotornot-submit-select');
     const catSelect = document.getElementById('hotornot-category-select');
-    const targetHash = select.value;
+    let targetHash = select.value;
+    const originalHash = targetHash;
     const category = catSelect ? catSelect.value : 'music';
     if (!targetHash) return alert("Please select a valid item to submit.");
 
     try {
-        const msgData = { sender: userKeys.publicKey, receiver: '0x00', type: 'SUBMIT_HOT_OR_NOT', data: { category: category, targetHash: targetHash, audioHash: category === 'music' ? targetHash : undefined }, timestamp: Date.now() };
+        let msgData = { sender: userKeys.publicKey, receiver: '0x00', type: 'SUBMIT_HOT_OR_NOT', data: { category: category, targetHash: targetHash, originalHash: originalHash }, timestamp: Date.now() };
+
+        if (category === 'music') {
+            const btn = document.querySelector('button[onclick="submitHotOrNotFromDropdown()"]');
+            const originalText = btn.innerText;
+            btn.innerText = "Formatting MP3...";
+            btn.disabled = true;
+            
+            try {
+                const procRes = await fetch('/api/feed/process-hotornot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetHash }) });
+                if (procRes.ok) {
+                    const procData = await procRes.json();
+                    msgData.data.targetHash = procData.formattedHash || targetHash;
+                    msgData.data.audioHash = msgData.data.targetHash;
+                }
+            } catch (e) { console.error("Formatting error:", e); }
+            
+            btn.innerText = originalText;
+            btn.disabled = false;
+        }
+
         const txFields = { ...msgData, signature: await generateClientSignature(userKeys.privateKey, msgData) };
         const res = await fetch('/api/feed/interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
         if (!res.ok) throw new Error((await res.json()).error);
         alert("Item submitted to Hot or Not!");
         loadHotOrNot();
     } catch(err) { alert("Submission failed: " + err.message); }
-}
-
-// HTML Escaper for standard display
-function escapeHtml(str) {
-    if (!str) return '';
-    return str.toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-}
-
-// BUG FIX 2: Specialized JS Escaper for inline onclick functions
-function escapeJsArg(str) {
-    if(!str) return '';
-    return str.toString().replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
 }
 
 // ==========================================
@@ -3080,26 +3093,19 @@ socket.on('new_reaction', (data) => {
 // 9. NEW SOCIAL FEATURES (Badges, Mentions, Modals)
 // ==========================================
 
-function renderBadges(roles) {
-    if (!roles || !roles.length) return '';
-    const badgeMap = { 'admin': '🛠️ Admin', 'artist': '🎵 Artist', 'whale': '🐋 Whale' };
-    return roles.map(r => `<span class="user-badge" title="${r}">${badgeMap[r] || '✨'}</span>`).join('');
-}
-
-function parseMentions(text) {
-    if (!text) return '';
-    const escaped = escapeHtml(text);
-    return escaped.replace(/@([a-zA-Z0-9_]+)/g, (match, p1) => {
-        return `<span class="mention" onclick="inspectTargetNode('${p1}')">${match}</span>`;
-    });
-}
-
 function detectMentionsAndEmit(text) {
     if (!text) return;
     const mentions = text.match(/@([a-zA-Z0-9_]+)/g);
     if (mentions) {
         mentions.forEach(m => {
-            socket.emit('notify_mention', { target: m.substring(1), from: userKeys.publicKey });
+            const username = m.substring(1).toLowerCase();
+            let targetAddr = null;
+            for (const addr in networkProfiles) {
+                if (networkProfiles[addr].username.toLowerCase() === username) {
+                    targetAddr = addr; break;
+                }
+            }
+            if (targetAddr) socket.emit('notify_mention', { target: targetAddr, from: userKeys.publicKey });
         });
     }
 }
@@ -3376,4 +3382,32 @@ function closeStoryModal() {
     document.getElementById('story-modal').classList.add('hidden');
     const modalContent = document.getElementById('story-modal-content');
     modalContent.innerHTML = ''; 
+}
+
+function toggleDMPane() {
+    switchServer('@dms');
+    resetInboxBadge();
+    const container = document.querySelector('.container');
+    if (container) {
+        container.classList.add('chat-mode');
+    }
+}
+
+function promptNewDM() {
+    const username = prompt("Enter the exact username of the person you want to message:");
+    if (!username) return;
+    
+    let targetAddr = null;
+    for (const [addr, profile] of Object.entries(networkProfiles)) {
+        if (profile.username.toLowerCase() === username.toLowerCase()) {
+            targetAddr = addr;
+            break;
+        }
+    }
+    
+    if (targetAddr) {
+        sendDM(targetAddr);
+    } else {
+        alert("User not found on the network.");
+    }
 }

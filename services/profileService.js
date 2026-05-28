@@ -522,6 +522,11 @@ class ProfileService {
                         upvotes: 0,
                         downvotes: 0
                     };
+                    
+                    // Link the formatted copy back to the original track details
+                    if (tx.data.originalHash && trackDetails[tx.data.originalHash]) {
+                        trackDetails[targetHash] = trackDetails[tx.data.originalHash];
+                    }
                 }
                 if (tx.type === 'VOTE_HOT_OR_NOT') {
                     const subId = tx.data.submissionId;
@@ -542,12 +547,27 @@ class ProfileService {
             }
         }
         
+        const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+
         return Object.values(submissions).map(s => {
             return {
                 ...s,
                 trackDetails: s.category === 'music' ? (trackDetails[s.targetHash] || { title: "Unknown Track", creator: s.submitter }) : null,
                 votes: votes[s.id] || {}
             }
+        }).filter(s => {
+            // Rotate off and delete tracks older than a week if not hot enough
+            const isOld = (now - s.timestamp) > ONE_WEEK;
+            if (isOld && s.score < 5) {
+                if (s.targetHash && s.targetHash.startsWith('hotornot_')) {
+                    const fs = require('fs'); const path = require('path');
+                    const filePath = path.join(process.cwd(), 'mock_ipfs', s.targetHash);
+                    if (fs.existsSync(filePath)) { try { fs.unlinkSync(filePath); } catch(e) {} }
+                }
+                return false;
+            }
+            return true;
         }).sort((a,b) => b.timestamp - a.timestamp);
     }
 }

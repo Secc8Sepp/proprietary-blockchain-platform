@@ -22,7 +22,8 @@ router.post('/keygen', (req, res) => {
 // This replaces /keygen. The frontend passes the Wallet Address and a Signature.
 router.post('/verify', async (req, res) => {
     try {
-        const { address, signature } = req.body;
+        const body = req.body || {};
+        const { address, signature } = body;
 
         if (!address || !signature) {
             return res.status(400).json({ success: false, error: "Missing address or signature" });
@@ -44,7 +45,7 @@ router.post('/verify', async (req, res) => {
                 publicKey: address,
                 username: "Node_" + address.substring(0, 6),
                 bio: "Active on the Vibe or Die Network.",
-                balance: 0, // Balance is fully determined by the immutable ledger
+                balance: 100000, // Balance is fully determined by the immutable ledger
                 avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${address}`,
                 top8: [],
                 css: ""

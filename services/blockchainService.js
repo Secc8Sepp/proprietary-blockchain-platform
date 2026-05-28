@@ -72,7 +72,7 @@ class BlockchainService extends EventEmitter {
 
     // THE ATTENTION ECONOMY CALCULATOR
     calculateBalance(publicKey, chain) {
-        let balance = 0; // Removed the infinite free faucet
+        let balance = 100000; // Starting faucet to afford initial transactions
         const songShareDistribution = {};
         const escrowContracts = {};
         const openBounties = {};
@@ -117,8 +117,13 @@ class BlockchainService extends EventEmitter {
                 if (tx.type === 'IMAGE_POST') {
                     if (tx.sender === publicKey) balance -= 5000; // Cost to mint image (5k VOD)
                 }
-                if (tx.type === 'VIDEO_POST' || tx.type === 'PROJECT_FILE_POST') {
-                    if (tx.sender === publicKey) balance -= 15000; // Cost to mint video (15k VOD)
+                if (tx.type === 'VIDEO_POST') {
+                    const baseCost = 5000000; // 100x standard 50k VOD cost
+                    const sizePenalty = tx.data.fileSize ? Math.floor(tx.data.fileSize / 1024) * 100 : 0; // 100 VOD per KB
+                    if (tx.sender === publicKey) balance -= (baseCost + sizePenalty);
+                }
+                if (tx.type === 'PROJECT_FILE_POST') {
+                    if (tx.sender === publicKey) balance -= 15000; // Cost to mint project file (15k VOD)
                 }
 
                 // --- ZERO-SUM TRANSFERS ---
@@ -250,7 +255,12 @@ class BlockchainService extends EventEmitter {
             if (type === 'BUY_SONG_SHARE' && currentBalance < (parseInt(data.shareCount) * parseFloat(data.pricePerShare))) throw new Error("Insufficient funds for equity trade.");
             if (type === 'REQUEST_SONG_SHARE' && currentBalance < (parseInt(data.shareCount) * parseFloat(data.pricePerShare))) throw new Error("Insufficient funds to request equity.");
             if (type === 'SONG_UPLOAD' && currentBalance < 50000) throw new Error("Need 50,000 $VOD to mint a track.");
-            if (type === 'VIDEO_POST' && currentBalance < 15000) throw new Error("Need 15,000 $VOD to mint a video.");
+            if (type === 'VIDEO_POST') {
+                const baseCost = 5000000;
+                const sizePenalty = data.fileSize ? Math.floor(data.fileSize / 1024) * 100 : 0;
+                const totalCost = baseCost + sizePenalty;
+                if (currentBalance < totalCost) throw new Error(`Need ${totalCost.toLocaleString()} $VOD to mint a video of this size.`);
+            }
             if (type === 'PROJECT_FILE_POST' && currentBalance < 15000) throw new Error("Need 15,000 $VOD to mint a project file.");
             if (type === 'BUY_ITEM' && currentBalance < parseFloat(data.price)) throw new Error("Insufficient funds for purchase.");
             if (type === 'LIST_ITEM' && currentBalance < 500) throw new Error("Need 500 $VOD to list an item on the market.");

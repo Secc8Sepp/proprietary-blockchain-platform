@@ -19,6 +19,9 @@ if (!fs.existsSync(IPFS_DIR)) {
     fs.mkdirSync(IPFS_DIR);
 }
 
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+
 // ==========================================
 // WEB PUSH API SETUP
 // ==========================================
@@ -28,7 +31,9 @@ const pushSubscriptions = {};
 
 app.get('/api/push/vapidPublicKey', (req, res) => res.json({ publicKey: vapidKeys.publicKey }));
 app.post('/api/push/subscribe', (req, res) => {
-    const { address, subscription } = req.body;
+    const body = req.body || {};
+    const { address, subscription } = body;
+    if (!address || !subscription) return res.status(400).json({ error: 'Missing push data' });
     if (!pushSubscriptions[address]) pushSubscriptions[address] = [];
     pushSubscriptions[address].push(subscription);
     res.status(201).json({});
@@ -38,9 +43,6 @@ function sendPushNotification(address, payload) {
     const subs = pushSubscriptions[address] || [];
     subs.forEach(sub => webpush.sendNotification(sub, JSON.stringify(payload)).catch(e => console.error('Push Error:', e)));
 }
-
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
 // 1. API ROUTES
 app.use('/api/auth', authRoutes);
@@ -82,7 +84,8 @@ const PEERS = process.env.PEERS ? process.env.PEERS.split(',') : defaultPeers;
 app.set('peers', PEERS);
 
 app.post('/api/network/register', (req, res) => {
-    const { peerUrl } = req.body;
+    const body = req.body || {};
+    const { peerUrl } = body;
     if (peerUrl && !PEERS.includes(peerUrl)) {
         PEERS.push(peerUrl);
         console.log(`🔗 New Full Node connected to swarm: ${peerUrl}`);
@@ -91,7 +94,9 @@ app.post('/api/network/register', (req, res) => {
 });
 
 app.post('/api/network/block', (req, res) => {
-    const { block } = req.body;
+    const body = req.body || {};
+    const { block } = body;
+    if (!block) return res.status(400).send('No block provided');
     const currentChain = blockchainService.getChain();
     const latestBlock = currentChain[currentChain.length - 1];
     if (block && block.index > latestBlock.index) {
@@ -115,6 +120,8 @@ app.post('/api/network/block', (req, res) => {
 // 5. WEBSOCKETS (Chat & Anti-Cheat Mining)
 // ==========================================
 
+const CHAT_DB_FILE = path.join(process.cwd(), 'chat_db.json');
+
 // Temporary Memory for Chat & Mining Sessions
 const dbMemory = {
     servers: {
@@ -131,8 +138,30 @@ const dbMemory = {
     },
     l2eSessions: {},
     connectedNodes: {},
-    zineArticles: []
+    zineArticles: [],
+    directMessages: []
 };
+
+if (fs.existsSync(CHAT_DB_FILE)) {
+    try {
+        const data = JSON.parse(fs.readFileSync(CHAT_DB_FILE, 'utf8'));
+        if (data.servers) dbMemory.servers = data.servers;
+        if (data.directMessages) dbMemory.directMessages = data.directMessages;
+        if (data.zineArticles) dbMemory.zineArticles = data.zineArticles;
+    } catch (e) {
+        console.error('Error loading DB file:', e);
+    }
+}
+
+function saveDBMemory() {
+    try {
+        fs.writeFileSync(CHAT_DB_FILE, JSON.stringify({
+            servers: dbMemory.servers,
+            directMessages: dbMemory.directMessages,
+            zineArticles: dbMemory.zineArticles
+        }, null, 2));
+    } catch (e) { console.error('Error saving DB file:', e); }
+}
 
 let profileCache = null;
 function getProfileDirectory() {
@@ -173,6 +202,13 @@ io.on('connection', (socket) => {
         dbMemory.connectedNodes[socket.id] = { address: data.address, status: 'online', activity: null };
         socket.emit('profile_directory', getProfileDirectory());
         socket.emit('zine_update', dbMemory.zineArticles);
+        
+        // Sync offline / historical DMs securely to the registered node
+        if (dbMemory.directMessages) {
+            const myDMs = dbMemory.directMessages.filter(m => m.sender === data.address || m.to === data.address);
+            myDMs.forEach(msg => socket.emit('direct_message', msg));
+        }
+        
         broadcastSwarmUpdate();
     });
     
@@ -192,6 +228,7 @@ io.on('connection', (socket) => {
             timestamp: Date.now()
         };
         dbMemory.zineArticles.push(article);
+        saveDBMemory();
         io.emit('zine_update', dbMemory.zineArticles);
     });
 
@@ -199,6 +236,7 @@ io.on('connection', (socket) => {
         const article = dbMemory.zineArticles.find(a => a.id === articleId);
         if (article) {
             article.likes = (article.likes || 0) + 1;
+            saveDBMemory();
             io.emit('zine_update', dbMemory.zineArticles);
         }
     });
@@ -243,6 +281,7 @@ io.on('connection', (socket) => {
 
         // 2. Update In-Memory Rights
         article.ownersList.push(buyerNode.address);
+        saveDBMemory();
         
         io.emit('zine_update', dbMemory.zineArticles);
         socket.emit('article_purchased', { articleId });
@@ -283,6 +322,7 @@ io.on('connection', (socket) => {
             channels: {}
         };
         dbMemory.servers[serverId].channels[generalChannelId] = { id: generalChannelId, name: 'general', locked: false, messages: [] };
+        saveDBMemory();
         
         io.emit('server_created', {
             id: serverId,
@@ -296,6 +336,7 @@ io.on('connection', (socket) => {
         if (dbMemory.servers[serverId]) {
             const channelId = 'ch_' + Date.now() + Math.floor(Math.random()*1000);
             dbMemory.servers[serverId].channels[channelId] = { id: channelId, name: channelName, locked: !!locked, messages: [] };
+            saveDBMemory();
             io.emit('channel_created', { serverId, channel: { id: channelId, name: channelName, locked: !!locked } });
         }
     });
@@ -346,6 +387,7 @@ io.on('connection', (socket) => {
             if (balance >= 10000) roles.push('whale');
             const msg = { sender: address, text, time: Date.now(), roles };
             server.channels[channelId].messages.push(msg);
+            saveDBMemory();
             io.to(`${serverId}_${channelId}`).emit('new_message', msg);
         }
     });
@@ -398,6 +440,12 @@ io.on('connection', (socket) => {
         );
         
         const msgPayload = { sender: senderNode.address, text: data.text, time: Date.now(), to: data.to, roles };
+        
+        // Store securely on backend to prevent message loss on refresh
+        if (!dbMemory.directMessages) dbMemory.directMessages = [];
+        dbMemory.directMessages.push(msgPayload);
+        saveDBMemory();
+
         sendPushNotification(data.to, { title: 'New Secure DM 💬', body: `Message from Node_${senderNode.address.substring(0,6)}` });
         
         if (targetSocketId) {
@@ -409,6 +457,15 @@ io.on('connection', (socket) => {
 
     socket.on('add_message_reaction', (data) => {
         const { serverId, channelId, msgId, emoji } = data;
+        const server = dbMemory.servers[serverId];
+        if (server && server.channels[channelId]) {
+            const msg = server.channels[channelId].messages.find(m => (m.time + '_' + m.sender.substring(0, 5)) === msgId);
+            if (msg) {
+                if (!msg.reactions) msg.reactions = [];
+                msg.reactions.push(emoji);
+                saveDBMemory();
+            }
+        }
         io.to(`${serverId}_${channelId}`).emit('new_reaction', { msgId, emoji });
     });
 
