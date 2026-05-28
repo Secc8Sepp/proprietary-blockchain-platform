@@ -4,7 +4,12 @@ const crypto = require('crypto');
 const EventEmitter = require('events');
 
 const Wallet = require('../core/wallet');
-const CHAIN_FILE = path.join(process.cwd(), 'chain.json');
+
+const LEDGER_DIR = path.join(__dirname, '..', 'ledger-data');
+if (!fs.existsSync(LEDGER_DIR)) {
+    fs.mkdirSync(LEDGER_DIR, { recursive: true });
+}
+const CHAIN_FILE = path.join(LEDGER_DIR, 'chain.json');
 
 class BlockchainService extends EventEmitter {
     constructor() {
