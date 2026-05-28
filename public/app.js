@@ -943,7 +943,7 @@ function switchChannel(serverId, channelId) {
     input.placeholder = `Message #${ch.name}...`;
     input.disabled = false;
     
-    socket.emit('join_channel', { serverId, channelId, address: userKeys.publicKey || 'anonymous' });
+    socket.emit('join_channel', { serverId, channelId, address: window.CoreEngine.userKeys.publicKey || 'anonymous' });
 }
 
 function handleChatEnter(e) {
@@ -2345,7 +2345,7 @@ async function submitReply(txHash, receiver, parentReplyId = null) {
     socket.emit('reply_post', { txHash, address: window.CoreEngine.userKeys.publicKey, text: text.trim(), parentReplyId });
 
     try {
-        const replyId = Date.now() + '_' + userKeys.publicKey.substring(0, 10);
+        const replyId = Date.now() + '_' + window.CoreEngine.userKeys.publicKey.substring(0, 10);
         await window.CoreEngine.sendSignedTransaction('REPLY_POST', receiver || '0x00', { txHash: txHash, text: text.trim(), parentReplyId, replyId });
     } catch (err) {
         console.error("Reply block failed:", err);
