@@ -5,6 +5,7 @@ window.AudioEngine = {
     playedTracks: new Set(),
     currentPlaylistMode: 'global',
     lastClientPing: 0,
+    isPreviewMode: false,
     socket: null,
 
     init(socket) {
@@ -60,6 +61,10 @@ window.AudioEngine = {
         player.addEventListener('pause', () => this.stopPlaybackTrackingLoop(false));
         player.addEventListener('ended', () => {
             this.stopPlaybackTrackingLoop(true);
+            if (this.isPreviewMode) {
+                this.isPreviewMode = false; // It ended before 30s, reset.
+                return; // Don't play next track in preview mode.
+            }
             this.playNextTrackAdvanced();
         });
 
@@ -90,6 +95,7 @@ window.AudioEngine = {
         if (window.CoreEngine) window.CoreEngine.setPresence(undefined, null, null);
     },
 
+
     async triggerProofOfListenMint() {
         try {
             await window.CoreEngine.sendSignedTransaction('STREAM_COMPLETED', this.activeTrackArtist, { audioHash: this.activeTrackHash });
@@ -98,11 +104,12 @@ window.AudioEngine = {
         } catch(err) { console.error("Mining rejected:", err); }
     },
 
-    playTrack(title, audioHash, artistPublicKey, artistName) {
+    playTrack(title, audioHash, artistPublicKey, artistName, isPreview = false) {
         this.stopPlaybackTrackingLoop(true);
         this.activeTrackHash = audioHash; 
         this.activeTrackArtist = artistPublicKey;
         this.playedTracks.add(audioHash);
+        this.isPreviewMode = isPreview;
         
         if (window.CoreEngine) window.CoreEngine.setPresence(undefined, 'Listening to Track', { title, hash: audioHash, creator: artistPublicKey, artistName });
 

@@ -557,7 +557,7 @@ class ProfileService {
         for (const block of chain) {
             for (const tx of block.transactions) {
                 if (tx.type === 'SONG_UPLOAD') {
-                    trackDetails[tx.data.audioHash] = { title: tx.data.trackTitle, creator: tx.sender, coverHash: tx.data.coverHash };
+                    trackDetails[tx.data.audioHash] = { title: tx.data.trackTitle, artist: tx.data.artist, creator: tx.sender, coverHash: tx.data.coverHash };
                 }
                 if (tx.type === 'EDIT_SONG_METADATA') {
                     if (trackDetails[tx.data.audioHash] && trackDetails[tx.data.audioHash].creator === tx.sender) {
@@ -573,6 +573,7 @@ class ProfileService {
                         id: block.hash,
                         category: category,
                         targetHash: targetHash,
+                        originalHash: tx.data.originalHash || null,
                         submitter: tx.sender,
                         timestamp: tx.timestamp,
                         score: 0,

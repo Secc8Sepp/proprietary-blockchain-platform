@@ -210,6 +210,11 @@ class BlockchainService extends EventEmitter {
                     if (tx.sender === publicKey) balance += 500;
                     if (tx.receiver === publicKey) balance += 2000;
                 }
+                if (tx.type === 'LIKE_POST') {
+                    // Curator mines 500 $VOD, Creator mines 2000 $VOD
+                    if (tx.sender === publicKey) balance += 500;
+                    if (tx.receiver === publicKey) balance += 2000;
+                }
 
                 // --- ESCROW & COMMISSIONS ---
                 if (tx.type === 'CREATE_COMMISSION') {

@@ -1059,6 +1059,9 @@ function cleanUpCoveredFlyers() {
             removed++; 
             if (txHash && sender === userKeys.publicKey) silentDeletePost(txHash);
             if (txHash && sender === userKeys.publicKey) window.ActionEngine.silentDeletePost(txHash);
+            if (txHash && window.CoreEngine && window.CoreEngine.userKeys && sender === window.CoreEngine.userKeys.publicKey) {
+                window.ActionEngine.silentDeletePost(txHash);
+            }
         }
     });
     if (removed > 0) console.log(`[FLYER WALL] Deleted ${removed} completely buried flyers to save space.`);

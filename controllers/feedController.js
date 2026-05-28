@@ -33,6 +33,8 @@ class FeedController {
 
                 if (type === 'LIKE_POST') {
                     sendPush(receiver, { title: '🔥 Post Liked!', body: `${fromProfile.username} liked your post.` });
+                } else if (type === 'LIKE_IMAGE') { // This is for legacy or other parts of the app that might use this
+                    sendPush(receiver, { title: '🖼️ Image Liked!', body: `${fromProfile.username} liked your image.` });
                 } else if (type === 'REPLY_POST') {
                     sendPush(receiver, { title: '💬 New Reply', body: `${fromProfile.username} replied to your post.` });
                 } else if (type === 'SHOUTBOX_POST') {
@@ -87,6 +89,11 @@ class FeedController {
                             sendPush(data.winner, { title: '🏆 Bounty Awarded!', body: `You won the bounty for "${bountyTx.data.description.substring(0, 30)}..."!` });
                         }
                     }
+                } else if (type === 'VOTE_HOT_OR_NOT' && data.vote === 1) {
+                    const hotOrNotData = profileService.getHotOrNotEngine();
+                    const submission = hotOrNotData.find(s => s.id === data.submissionId);
+                    const submissionTitle = (submission && submission.trackDetails) ? `"${submission.trackDetails.title}"` : 'your submission';
+                    sendPush(receiver, { title: '🔥 Hot or Not!', body: `${fromProfile.username} voted HOT on ${submissionTitle}!` });
                 }
             }
             
@@ -136,7 +143,7 @@ class FeedController {
             return res.status(404).json({ error: "Original asset not found on this node." });
         }
 
-        const formattedHash = `hotornot_${targetHash}`;
+        const formattedHash = `hotornot_${Date.now()}_${targetHash}`;
         const destPath = path.join(IPFS_DIR, formattedHash);
 
         try {

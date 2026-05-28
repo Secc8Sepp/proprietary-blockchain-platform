@@ -126,21 +126,16 @@ window.ActionEngine = {
             console.log('[PUBLISH] ✓ Success!');
             alert("Block recorded successfully!");
             
-            if (true) { // Cleanup UI
-                document.getElementById('composer-text').value = '';
-                document.getElementById('composer-audio-upload').value = '';
-                document.getElementById('audio-meta-title').value = '';
-                document.getElementById('audio-meta-off-collab').value = '';
-                document.getElementById('composer-image-upload').value = '';
-                if (document.getElementById('composer-video-upload')) document.getElementById('composer-video-upload').value = '';
-                if (document.getElementById('composer-zip-upload')) document.getElementById('composer-zip-upload').value = '';
-                updateComposerPreview();
-                loadMainGlobalFeed();
-            } else {
-                const err = await res.json();
-                console.error('[PUBLISH] ✗ Server error:', err);
-                alert("Ledger Rejected: " + err.error);
-            }
+            // Cleanup UI on success
+            document.getElementById('composer-text').value = '';
+            document.getElementById('composer-audio-upload').value = '';
+            document.getElementById('audio-meta-title').value = '';
+            document.getElementById('audio-meta-off-collab').value = '';
+            document.getElementById('composer-image-upload').value = '';
+            if (document.getElementById('composer-video-upload')) document.getElementById('composer-video-upload').value = '';
+            if (document.getElementById('composer-zip-upload')) document.getElementById('composer-zip-upload').value = '';
+            updateComposerPreview();
+            loadMainGlobalFeed();
         } catch (err) { 
             console.error('[PUBLISH] ✗ Exception:', err);
             alert("Transaction Failed: " + err.message); 
@@ -712,22 +707,6 @@ window.ActionEngine = {
         } catch (err) { alert("Tip failed: " + err.message); }
     },
 
-    async castHotOrNotVote(submissionId, submitter, vote, targetHash) {
-        if (!window.CoreEngine || !window.CoreEngine.userKeys || !window.CoreEngine.userKeys.publicKey) return alert('Must be logged in to vote.');
-        if (submitter === window.CoreEngine.userKeys.publicKey) return alert('You cannot vote on your own submission.');
-
-        try {
-            const player = document.getElementById('global-audio-player');
-            const activeHash = window.AudioEngine && window.AudioEngine.activeTrackHash;
-            const listened = player && ((activeHash && activeHash === targetHash && player.currentTime >= 30) || player.currentTime >= 30);
-            if (!listened) return alert('You must listen to at least 30 seconds of the track before voting.');
-
-            await window.CoreEngine.sendSignedTransaction('VOTE_HOT_OR_NOT', submitter, { submissionId, vote, targetHash });
-            window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, true);
-            window.BattleEngines.loadHotOrNot();
-        } catch(err) { console.error(err); alert('Vote failed: ' + (err.message || err)); }
-    },
-
     async submitHotOrNotFromDropdown() {
         if (!window.CoreEngine.userKeys.publicKey) return alert("Must be logged in.");
         const select = document.getElementById('hotornot-submit-select');
@@ -735,7 +714,7 @@ window.ActionEngine = {
         let targetHash = select.value;
         const originalHash = targetHash;
         const category = catSelect ? catSelect.value : 'music';
-        if (!targetHash) return alert("Please select a valid item to submit.");
+        if (!targetHash) return alert("Please select a valid track or image to submit.");
 
         try {
             let data = { category: category, targetHash: targetHash, originalHash: originalHash };
