@@ -533,6 +533,7 @@ function renderPostContent(item) {
                 barGap: 2,
                 height: 80,
                 backend: 'MediaElement', // FIX 2: Force HTML5 streaming so it doesn't hang on large files
+                mediaControls: false, // Act as visualizer only
                 plugins: [
                     WaveSurfer.regions.create({
                         regionsMinLength: 0.1,
@@ -553,35 +554,59 @@ function renderPostContent(item) {
                     if (window.activeWaveform && window.activeWaveform !== wavesurfer) {
                         window.activeWaveform.pause();
                     }
-                    
-                    // FIX 3: Trigger your global Audio Engine so mining and the bottom player still work
-                    if (window.AudioEngine && window.AudioEngine.playTrack) {
-                        window.AudioEngine.playTrack(item.data.trackTitle, audioHash, item.sender, displayArtist);
-                    }
-                    
                     wavesurfer.playPause();
-                    window.activeWaveform = wavesurfer;
                 };
             }
 
             wavesurfer.on('ready', () => {
                 if (playButton) playButton.disabled = false;
+                wavesurfer.setMute(true); // Mute the visualizer
                 console.log(`[Waveform] Ready: ${transactionHash}`);
             });
 
             wavesurfer.on('play', () => {
                 if (playButton) playButton.innerText = '⏸️ Pause';
                 const globalPlayer = document.getElementById('global-audio-player');
+
+                // If a different track is playing on the global player, pause it.
                 if (globalPlayer && !globalPlayer.paused && window.AudioEngine.activeTrackHash !== audioHash) {
                     globalPlayer.pause();
                 }
-                window.AudioEngine.activeTrackHash = audioHash;
+
+                // If this is a new track, start it on the global player.
+                if (window.AudioEngine.activeTrackHash !== audioHash) {
+                    if (window.AudioEngine && window.AudioEngine.playTrack) {
+                        window.AudioEngine.playTrack(item.data.trackTitle, audioHash, item.sender, displayArtist);
+                    }
+                } 
+                // If it's the same track but paused, play it.
+                else if (globalPlayer && globalPlayer.paused) {
+                    globalPlayer.play();
+                }
+                
+                window.activeWaveform = wavesurfer;
             });
 
             wavesurfer.on('pause', () => {
                 if (playButton) playButton.innerText = '▶ Play';
                 if (window.activeWaveform === wavesurfer) {
                     window.activeWaveform = null;
+                }
+                // Sync Pause: If this waveform is for the active track, pause the global player.
+                const globalPlayer = document.getElementById('global-audio-player');
+                if (globalPlayer && window.AudioEngine.activeTrackHash === audioHash && !globalPlayer.paused) {
+                    globalPlayer.pause();
+                }
+            });
+
+            // Sync Scrubbing: If someone clicks on the waveform, skip the master player.
+            wavesurfer.on('seek', (progress) => {
+                const globalPlayer = document.getElementById('global-audio-player');
+                if (globalPlayer && window.AudioEngine.activeTrackHash === audioHash) {
+                    const duration = globalPlayer.duration;
+                    if (duration && isFinite(duration)) {
+                        globalPlayer.currentTime = progress * duration;
+                    }
                 }
             });
 
