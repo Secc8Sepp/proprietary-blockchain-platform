@@ -23,7 +23,9 @@ document.addEventListener('DOMContentLoaded', () => {
     window.networkProfiles = {}; window.zineArticles = []; window.hotOrNotData = [];
     initializeApplicationListeners(); 
     window.MeshEngine.init(socket);
+    window.ActionEngine.init(socket);
     window.AudioEngine.init(socket);
+    window.LayoutEngine.init();
     initLocalLedgerNode();
     
     if ('serviceWorker' in navigator) {
@@ -69,13 +71,13 @@ function initializeApplicationListeners() {
     // Unified Media Composer
     const publishBtn = document.getElementById('btn-publish-post');
     if(publishBtn) {
-        publishBtn.addEventListener('click', () => handlePublishPost(false));
+        publishBtn.addEventListener('click', () => window.ActionEngine.handlePublishPost(false));
         console.log('[INIT] ✓ Publish button wired');
     } else console.warn('[INIT] ✗ btn-publish-post not found');
     
     const storyBtn = document.getElementById('btn-publish-story');
     if(storyBtn) {
-        storyBtn.addEventListener('click', () => handlePublishPost(true));
+        storyBtn.addEventListener('click', () => window.ActionEngine.handlePublishPost(true));
         console.log('[INIT] ✓ Story button wired');
     }
     
@@ -93,50 +95,9 @@ function initializeApplicationListeners() {
 
     const followBtn = document.getElementById('btn-profile-follow');
     if(followBtn) {
-        followBtn.addEventListener('click', () => executeTargetFollow(viewingUserPublicKey));
+        followBtn.addEventListener('click', () => window.ActionEngine.executeTargetFollow(viewingUserPublicKey));
         console.log('[INIT] ✓ Follow button wired');
     } else console.warn('[INIT] ✗ btn-profile-follow not found');
-
-    // Profile Drag & Drop Logic
-    let draggedSection = null;
-    document.addEventListener('dragstart', (e) => {
-        if (e.target.classList.contains('profile-section') || e.target.classList.contains('playlist-item')) {
-            if(viewingUserPublicKey !== window.CoreEngine.userKeys.publicKey) {
-                e.preventDefault();
-                return;
-            }
-            draggedSection = e.target;
-            e.target.classList.add('dragging');
-            e.target.style.opacity = 0.5;
-        }
-    });
-    document.addEventListener('dragend', (e) => {
-        if (e.target.classList.contains('profile-section') || e.target.classList.contains('playlist-item')) {
-            e.target.style.opacity = "";
-            e.target.classList.remove('dragging');
-            draggedSection = null;
-        }
-    });
-    document.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        if (draggedSection) {
-            if (draggedSection.classList.contains('profile-section')) {
-                const container = e.target.closest('.profile-sortable');
-                if (container) {
-                    const afterElement = getDragAfterElement(container, e.clientY, '.profile-section:not(.dragging)');
-                    if (afterElement == null) container.appendChild(draggedSection);
-                    else container.insertBefore(draggedSection, afterElement);
-                }
-            } else if (draggedSection.classList.contains('playlist-item')) {
-                const container = e.target.closest('#ui-profile-playlist');
-                if (container) {
-                    const afterElement = getDragAfterElement(container, e.clientY, '.playlist-item:not(.dragging)');
-                    if (afterElement == null) container.appendChild(draggedSection);
-                    else container.insertBefore(draggedSection, afterElement);
-                }
-            }
-        }
-    });
 
     document.addEventListener('mousemove', (e) => {
         if (eventsState.isPlacing) {
@@ -144,20 +105,6 @@ function initializeApplicationListeners() {
             if(p) { p.style.left = (e.clientX + 15) + 'px'; p.style.top = (e.clientY + 15) + 'px'; }
         }
     });
-
-function getDragAfterElement(container, y, selector) {
-    if (!container) return null;
-    const draggableElements = [...container.querySelectorAll(selector)];
-    return draggableElements.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = y - box.top - box.height / 2;
-        if (offset < 0 && offset > closest.offset) {
-            return { offset: offset, element: child };
-        } else {
-            return closest;
-        }
-    }, { offset: Number.NEGATIVE_INFINITY }).element;
-}
 
     // Presence Idle Detection
     document.addEventListener('mousemove', () => window.CoreEngine.resetIdleTimer());
@@ -270,183 +217,6 @@ async function syncFullChain() {
 // ==========================================
 // 2. MEDIA & CRYPTO ENGINE
 // ==========================================
-
-async function handlePublishPost(isStory = false) {
-    if (typeof isStory !== 'boolean') isStory = false;
-    try {
-        console.log('[PUBLISH] Starting post publish...');
-        const textIn = document.getElementById('composer-text').value.trim();
-        const audFile = document.getElementById('composer-audio-upload').files[0];
-        const imgFile = document.getElementById('composer-image-upload').files[0];
-        const vidFile = document.getElementById('composer-video-upload') ? document.getElementById('composer-video-upload').files[0] : null;
-        const zipFile = document.getElementById('composer-zip-upload') ? document.getElementById('composer-zip-upload').files[0] : null;
-        const btn = document.getElementById(isStory ? 'btn-publish-story' : 'btn-publish-post');
-
-        if (isStory && !imgFile && !vidFile) return alert("Stories must include an image or short video.");
-        if (!isStory && !textIn && !audFile && !imgFile && !vidFile && !zipFile) return alert("Please provide some content to broadcast.");
-        if (!window.CoreEngine.userKeys.publicKey) return alert("You must login first.");
-
-        btn.innerText = "Uploading...";
-        btn.disabled = true;
-
-        let type, data;
-        // Determine post type and upload requisite files to IPFS node
-        if (isStory) {
-            if (imgFile) {
-                const hash = await uploadMediaAssetFile(imgFile);
-                type = 'STORY_POST';
-                data = { caption: textIn, imageHash: hash };
-            } else if (vidFile) {
-                const hash = await uploadMediaAssetFile(vidFile);
-                type = 'STORY_POST';
-                data = { caption: textIn, videoHash: hash };
-            }
-        } else if (audFile) {
-            const titleIn = document.getElementById('audio-meta-title').value.trim();
-            if (!titleIn) throw new Error("Please provide a Track Title for the audio upload.");
-            const hash = await uploadMediaAssetFile(audFile);
-            
-            let coverHash = null;
-            const coverFile = document.getElementById('audio-cover-upload').files[0];
-            if (coverFile) coverHash = await uploadMediaAssetFile(coverFile);
-            
-            const artist = document.getElementById('audio-meta-artist').value.trim();
-            const offCollab = document.getElementById('audio-meta-off-collab').value.trim();
-            const collabs = [];
-            document.querySelectorAll('.collab-row').forEach(row => {
-                const addr = row.querySelector('.collab-address').value.trim();
-                const pct = parseInt(row.querySelector('.collab-percent').value);
-                if (addr && pct > 0) collabs.push({ address: addr, percentage: pct });
-            });
-
-            const genre = document.getElementById('audio-meta-genre').value.trim();
-            const forStake = document.getElementById('audio-stake-checkbox').checked;
-            let sellPercentage = 0; let pricePerShare = 0;
-            if (forStake) {
-                sellPercentage = parseInt(document.getElementById('audio-stake-percent').value) || 0;
-                pricePerShare = parseFloat(document.getElementById('audio-stake-price').value) || 0;
-            }
-            
-            type = 'SONG_UPLOAD';
-            data = { 
-                caption: textIn, 
-                trackTitle: titleIn, 
-                artist: artist, 
-                offPlatformCollaborator: offCollab, 
-                audioHash: hash, 
-                coverHash: coverHash, 
-                metadata: genre, 
-                forStake: forStake, 
-                sellPercentage: sellPercentage, 
-                pricePerShare: pricePerShare, 
-                collaborators: collabs 
-            };
-        } else if (imgFile) {
-            const hash = await uploadMediaAssetFile(imgFile);
-            type = 'IMAGE_POST';
-            data = { caption: textIn, imageHash: hash };
-        } else if (vidFile) {
-            const hash = await uploadMediaAssetFile(vidFile);
-            type = 'VIDEO_POST';
-            data = { caption: textIn, videoHash: hash, fileSize: vidFile.size };
-        } else if (zipFile) {
-            const hash = await uploadMediaAssetFile(zipFile);
-            type = 'PROJECT_FILE_POST';
-            data = { caption: textIn, fileHash: hash, filename: zipFile.name };
-        } else {
-            if (textIn.length > 200) {
-                if (confirm("This is a long post! Would you like to publish it as a Zine Article instead?")) {
-                    promptPublishZineArticle(textIn);
-                    btn.innerText = isStory ? "Deploy Story" : "Broadcast Block";
-                    btn.disabled = false;
-                    return; // Stop further processing as a regular post
-                }
-            }
-            type = 'TEXT_POST';
-            data = { content: textIn };
-        }
-
-        await window.CoreEngine.sendSignedTransaction(type, "0x00", data);
-        detectMentionsAndEmit(textIn);
-        
-        console.log('[PUBLISH] ✓ Success!');
-        alert("Block recorded successfully!");
-        
-        if (true) { // Cleanup UI
-            document.getElementById('composer-text').value = '';
-            document.getElementById('composer-audio-upload').value = '';
-            document.getElementById('audio-meta-title').value = '';
-            document.getElementById('audio-meta-off-collab').value = '';
-            document.getElementById('composer-image-upload').value = '';
-            if (document.getElementById('composer-video-upload')) document.getElementById('composer-video-upload').value = '';
-            if (document.getElementById('composer-zip-upload')) document.getElementById('composer-zip-upload').value = '';
-            updateComposerPreview();
-            loadMainGlobalFeed();
-        } else {
-            const err = await res.json();
-            console.error('[PUBLISH] ✗ Server error:', err);
-            alert("Ledger Rejected: " + err.error);
-        }
-    } catch (err) { 
-        console.error('[PUBLISH] ✗ Exception:', err);
-        alert("Transaction Failed: " + err.message); 
-    } finally {
-        const btn = document.getElementById(isStory ? 'btn-publish-story' : 'btn-publish-post');
-        if (btn) {
-            btn.innerText = isStory ? "Deploy Story" : "Broadcast Block";
-            btn.disabled = false;
-        }
-    }
-}
-
-function addCollaboratorField() {
-    const list = document.getElementById('collaborator-list');
-    const id = Date.now();
-    const div = document.createElement('div');
-    div.id = 'collab-' + id;
-    div.className = 'collab-row';
-    div.style = 'display:flex; gap:10px; margin-bottom: 5px;';
-    div.innerHTML = `
-        <input placeholder="Public Key" class="collab-address" style="margin:0; flex: 2; padding: 6px;" />
-        <input type="number" placeholder="%" class="collab-percent" style="margin:0; flex: 1; padding: 6px;" max="100" min="1" />
-        <button class="secondary" style="padding: 0 10px;" onclick="document.getElementById('collab-${id}').remove()">X</button>
-    `;
-    list.appendChild(div);
-}
-
-function promptPublishZineArticle(bodyText) {
-    const modalTitle = document.getElementById('form-modal-title');
-    const modalBody = document.getElementById('form-modal-body');
-    
-    modalTitle.innerText = 'Publish as Zine Article';
-    modalBody.innerHTML = `
-        <p style="font-size: 13px; color: var(--text-muted);">Your post is quite long. Publishing it as a Zine Article allows you to give it a title and set a price for others to curate and feature it.</p>
-        <label>Article Title</label>
-        <input id="form-input-zine-title" type="text" placeholder="Title of your masterpiece...">
-        <label>Curation Price ($VOD)</label>
-        <input id="form-input-zine-price" type="number" value="5000">
-        <button id="form-modal-submit" style="width: 100%; margin-top: 10px;">Publish Article</button>
-    `;
-
-    const submitBtn = document.getElementById('form-modal-submit');
-    submitBtn.onclick = () => {
-        const title = document.getElementById('form-input-zine-title').value;
-        const price = document.getElementById('form-input-zine-price').value;
-
-        if (!title.trim()) return alert("Please enter a title for your article.");
-        if (!price || isNaN(price) || price < 0) return alert("Please enter a valid, non-negative price.");
-
-        socket.emit('publish_article', { title, body: bodyText, price: parseFloat(price), author: window.CoreEngine.userKeys.publicKey });
-        alert("Masterpiece published to the swarm as an Article!");
-        
-        toggleModal('form-modal');
-        document.getElementById('composer-text').value = '';
-        updateComposerPreview();
-        switchTab('zine');
-    };
-
-    toggleModal('form-modal');
-}
 
 function showKeyModal(keys, callback) {
     const modalTitle = document.getElementById('form-modal-title');
@@ -610,7 +380,7 @@ async function loadMainGlobalFeed() {
             const timeStr = new Date(item.timestamp).toLocaleString();
             const roles = item.roles || [];
             const isOwner = item.sender === window.CoreEngine.userKeys.publicKey;
-            const deleteBtn = isOwner ? `<button class="interaction-btn" onclick="deletePost('${item.transactionHash}')">🗑️ Delete</button>` : '';
+            const deleteBtn = isOwner ? `<button class="interaction-btn" onclick="window.ActionEngine.deletePost('${item.transactionHash}')">🗑️ Delete</button>` : '';
             postEl.innerHTML = `
                 <div class="post-avatar" onclick="inspectTargetNode('${item.sender}')" style="cursor:pointer;"><img src="${getAvatarUrl(item.sender)}"></div>
                 <div style="flex: 1;">
@@ -622,14 +392,14 @@ async function loadMainGlobalFeed() {
                     </div>
                     ${renderPostContent(item)}
                     <div class="post-interactions">
-                        <button class="interaction-btn" onclick="toggleLike('${item.transactionHash}', '${item.sender}')">🔥 <span id="like-count-${item.transactionHash}">${item.likeCount || 0}</span></button>
+                        <button class="interaction-btn" onclick="window.ActionEngine.toggleLike('${item.transactionHash}', '${item.sender}')">🔥 <span id="like-count-${item.transactionHash}">${item.likeCount || 0}</span></button>
                         <button class="interaction-btn" onclick="toggleReplyBox('${item.transactionHash}')">💬 Reply</button>
                         ${!isOwner ? `<button class="interaction-btn" onclick="window.WalletEngine.promptSendCoins('${item.sender}')">💸 Tip</button>` : ''}
                         ${deleteBtn}
                     </div>
                     <div class="reply-box" id="reply-box-${item.transactionHash}">
                         <textarea placeholder="Write a reply..."></textarea>
-                        <button style="padding: 5px 15px; font-size: 11px;" onclick="submitReply('${item.transactionHash}', '${item.sender}')">Post Reply</button>
+                        <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${item.transactionHash}', '${item.sender}')">Post Reply</button>
                         <div id="replies-list-${item.transactionHash}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
                             ${(item.replies || []).map(r => `<div style="font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 8px;"><strong>${resolveProfile(r.sender).username}:</strong> ${parseMentions(r.text)}</div>`).join('')}
                         </div>
@@ -659,7 +429,7 @@ function renderPostContent(item) {
         let listingHtml = '';
         if (item.listing && item.listing.available > 0) {
             listingHtml = `
-                <button class="secondary" style="padding:8px 15px; font-size: 12px;" onclick="buySongShareDirect('${item.data.audioHash}', '${item.sender}', ${item.listing.price})">
+                <button class="secondary" style="padding:8px 15px; font-size: 12px;" onclick="window.ActionEngine.buySongShareDirect('${item.data.audioHash}', '${item.sender}', ${item.listing.price})">
                     🛒 Buy Stake (${item.listing.available}% avail @ ${item.listing.price} VOD)
                 </button>
             `;
@@ -689,7 +459,7 @@ function renderPostContent(item) {
                         ▶ Play Track
                     </button>
                     ${listingHtml}
-                    <button class="secondary" style="padding:8px 15px; font-size: 12px;" onclick="requestSongShare('${item.data.audioHash}', '${item.sender}')">
+                    <button class="secondary" style="padding:8px 15px; font-size: 12px;" onclick="window.ActionEngine.requestSongShare('${item.data.audioHash}', '${item.sender}')">
                         📈 Request Stake
                     </button>
                     ${(window.CoreEngine && item.sender !== window.CoreEngine.userKeys.publicKey) ? `<button class="interaction-btn" style="padding:8px 15px; font-size: 12px;" onclick="window.WalletEngine.promptSendCoins('${item.sender}')">💸 Tip Artist</button>` : ''}
@@ -811,73 +581,6 @@ function inspectTargetNode(publicKey) {
     switchTab('profile', profileTabItem, publicKey);
 }
 
-async function deletePost(txHash) {
-    if (!confirm("Are you sure you want to delete this post?")) return;
-    try {
-        await window.CoreEngine.sendSignedTransaction('DELETE_POST', '0x00', { txHash });
-        alert("Post deleted.");
-        loadMainGlobalFeed();
-        if (currentView === 'profile') fetchUserProfile(viewingUserPublicKey || window.CoreEngine.userKeys.publicKey, false);
-    } catch (err) {
-        alert("Failed to delete: " + err.message);
-    }
-}
-
-function requestSongShare(hash, seller) {
-    if (seller === window.CoreEngine.userKeys.publicKey) return alert("You already own this track's equity.");
-
-    const modalTitle = document.getElementById('form-modal-title');
-    const modalBody = document.getElementById('form-modal-body');
-    
-    modalTitle.innerText = 'Request Track Stake';
-    modalBody.innerHTML = `
-        <p style="font-size: 13px; color: var(--text-muted);">Make an offer to the creator to acquire a percentage of their track's streaming royalties.</p>
-        <label>Shares to Request (%)</label>
-        <input id="form-input-share-count" type="number" placeholder="e.g., 10" min="1" max="100" style="margin-bottom: 15px;">
-        <label>Offer Price per Share ($VOD)</label>
-        <input id="form-input-share-price" type="number" placeholder="e.g., 5000" style="margin-bottom: 15px;">
-        <button id="form-modal-submit" style="width: 100%;">Send Stake Request</button>
-    `;
-
-    const submitBtn = document.getElementById('form-modal-submit');
-    submitBtn.onclick = async () => {
-        const count = document.getElementById('form-input-share-count').value;
-        const price = document.getElementById('form-input-share-price').value;
-
-        if (!count || isNaN(count) || count <= 0) return alert("Please enter a valid percentage to request.");
-        if (!price || isNaN(price) || price <= 0) return alert("Please enter a valid price to offer.");
-
-        try {
-            await window.CoreEngine.sendSignedTransaction('REQUEST_SONG_SHARE', seller, { audioHash: hash, shareCount: parseInt(count), pricePerShare: parseFloat(price) });
-            alert(`Stake Request sent to the creator for ${count}% at ${price} $VOD each!`);
-            toggleModal('form-modal');
-            fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
-        } catch(err) { alert(err.message); }
-    };
-
-    toggleModal('form-modal');
-}
-
-async function buySongShareDirect(hash, seller, price) {
-    const count = prompt("How many available shares (percentage) do you want to buy?");
-    if (!count || isNaN(count)) return;
-    try {
-        await window.CoreEngine.sendSignedTransaction('BUY_SONG_SHARE', seller, { audioHash: hash, shareCount: parseInt(count), pricePerShare: parseFloat(price) });
-        alert(`Successfully purchased ${count}% stake!`);
-        loadMainGlobalFeed();
-        fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
-    } catch(err) { alert(err.message); }
-}
-
-async function respondToStakeRequest(requestId, type) {
-    if (!confirm(`Are you sure you want to ${type === 'ACCEPT_SHARE_REQUEST' ? 'accept' : 'decline'} this request?`)) return;
-    try {
-        await window.CoreEngine.sendSignedTransaction(type, '0x00', { requestId });
-        alert("Request processed successfully.");
-        fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
-    } catch(err) { alert(err.message); }
-}
-
 window.showSearchResultsDialog = function(matches, query) {
     let modal = document.getElementById('search-results-modal');
     if (!modal) {
@@ -916,48 +619,6 @@ window.showConnectionsModal = function(friendsList, followersList) {
     const users = friendsList.map(addr => ({ address: addr, ...resolveProfile(addr) }));
     // Reuse the search modal UI for friends
     showSearchResultsDialog(users, "Crew Connections");
-}
-
-function promptEditSong(audioHash) {
-    if (!window.CoreEngine.userKeys.publicKey || !currentViewedProfile) return;
-
-    const track = currentViewedProfile.uploadedTracks.find(t => t.hash === audioHash);
-    if (!track) return alert("Track details not found.");
-
-    const modalTitle = document.getElementById('form-modal-title');
-    const modalBody = document.getElementById('form-modal-body');
-    
-    modalTitle.innerText = 'Edit Track Metadata';
-    modalBody.innerHTML = `
-        <p style="font-size: 13px; color: var(--text-muted);">Update the details for your track. This will be recorded as a new transaction on the ledger.</p>
-        <label>Track Title</label>
-        <input id="form-input-edit-title" type="text" value="${escapeHtml(track.title || '')}">
-        <label>Artist Name</label>
-        <input id="form-input-edit-artist" type="text" value="${escapeHtml(track.artist || '')}">
-        <label>Off-Platform Collaborator (optional)</label>
-        <input id="form-input-edit-offcollab" type="text" value="${escapeHtml(track.offPlatformCollaborator || '')}">
-        <button id="form-modal-submit" style="width: 100%; margin-top: 10px;">Update Metadata</button>
-    `;
-
-    const submitBtn = document.getElementById('form-modal-submit');
-    submitBtn.onclick = async () => {
-        const newTitle = document.getElementById('form-input-edit-title').value;
-        const newArtist = document.getElementById('form-input-edit-artist').value;
-        const newOffCollab = document.getElementById('form-input-edit-offcollab').value;
-
-        try {
-            let data = { audioHash: audioHash };
-            if (newTitle) data.title = newTitle;
-            if (newArtist) data.artist = newArtist;
-            if (newOffCollab !== undefined) data.offPlatformCollaborator = newOffCollab;
-            await window.CoreEngine.sendSignedTransaction('EDIT_SONG_METADATA', '0x00', data);
-            alert("Metadata updated!"); 
-            toggleModal('form-modal');
-            fetchUserProfile(window.CoreEngine.userKeys.publicKey, false); 
-            loadMainGlobalFeed();
-        } catch(err) { alert("Failed to edit: " + err.message); }
-    };
-    toggleModal('form-modal');
 }
 
 function switchTab(tabName, element, targetKey = null) {
@@ -1290,7 +951,7 @@ async function loadEvents() {
                 <img src="/tracks/${item.data.imageHash}" draggable="false">
                 <div class="flyer-meta-tag">@${resolveProfile(item.sender).username}</div>
             `;
-            board.appendChild(flyerEl);
+        board.appendChild(flyerEl);
 
             if (eventsMap && item.data.lat && item.data.lng) {
                 const marker = new google.maps.Marker({
@@ -1373,6 +1034,7 @@ function cleanUpCoveredFlyers() {
             flyer.remove(); 
             removed++; 
             if (txHash && sender === userKeys.publicKey) silentDeletePost(txHash);
+            if (txHash && sender === userKeys.publicKey) window.ActionEngine.silentDeletePost(txHash);
         }
     });
     if (removed > 0) console.log(`[FLYER WALL] Deleted ${removed} completely buried flyers to save space.`);
@@ -1380,70 +1042,11 @@ function cleanUpCoveredFlyers() {
 
 async function silentDeletePost(txHash) {
     try {
-        await window.CoreEngine.sendSignedTransaction('DELETE_POST', '0x00', { txHash });
+        await window.ActionEngine.sendSignedTransaction('DELETE_POST', '0x00', { txHash });
     } catch (err) {}
 }
 
-async function handleFlyerSelect(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    console.log('[FLYER] File selected:', file.name);
-
-    // Generate SHA-256 hash of file content to prevent duplicates BEFORE upload
-    const buffer = await file.arrayBuffer();
-    const hashBuffer = await window.crypto.subtle.digest('SHA-256', buffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const fileHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
-    if (eventsState.hashes.has(fileHash)) {
-        alert("This exact flyer has already been pinned to the board!");
-        e.target.value = '';
-        return;
-    }
-
-    eventsState.currentFile = file;
-    eventsState.currentFile.localHash = fileHash;
-    eventsState.isPlacing = true;
-
-    const preview = document.getElementById('ui-flyer-cursor');
-    if (preview) {
-        preview.src = URL.createObjectURL(file);
-        preview.style.display = 'block';
-    }
-    document.body.style.cursor = 'crosshair';
-}
-
-async function handleBulletinBoardClick(e) {
-    if (!eventsState.isPlacing || !eventsState.currentFile) {
-        // If no file is selected, trigger the upload dialog to help users "add events"
-        const input = document.getElementById('event-file-input');
-        if (input) input.click();
-        return;
-    }
-    console.log('[FLYER] Board clicked. Posting flyer...');
-    
-    const board = document.getElementById('ui-bulletin-board');
-    const rect = board.getBoundingClientRect();
-    
-    const x = ((e.clientX - rect.left) / rect.width) * 100; const y = ((e.clientY - rect.top) / rect.height) * 100;
-    const rot = (Math.random() * 30) - 15;
-
-    let lat = 40.7128, lng = -74.0060;
-    if (eventsMap && eventsMap.getCenter()) {
-        lat = eventsMap.getCenter().lat() + (Math.random() - 0.5) * 0.005;
-        lng = eventsMap.getCenter().lng() + (Math.random() - 0.5) * 0.005;
-    }
-
-    eventsState.isPlacing = false; document.body.style.cursor = 'default'; document.getElementById('ui-flyer-cursor').style.display = 'none';
-    try {
-        const hash = await uploadMediaAssetFile(eventsState.currentFile);
-        await window.CoreEngine.sendSignedTransaction('IMAGE_POST', "0x00", { imageHash: hash, isFlyer: true, localHash: eventsState.currentFile.localHash, x, y, rotation: rot, lat, lng });
-        loadEvents();
-    } catch (err) { alert(err.message); }
-    eventsState.currentFile = null;
-}
-
-function appendChatMessage(msg) {
+function appendChatMessage(msg) { // NOSONAR
     const chatLog = document.getElementById('ui-chat-log');
     if(!chatLog) return;
     
@@ -1870,7 +1473,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                 return `<div style="background: rgba(102, 252, 241, 0.05); border: 1px solid var(--border); padding: 12px; border-radius: 8px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
                         <strong style="color: var(--primary);">${c.amount} $VOD Escrow</strong>
-                        ${actionBtn}
+                        <button style="padding: 4px 10px; font-size: 11px; background:var(--success); color:#fff;" onclick="window.ActionEngine.fulfillCommission('${c.id}')">Upload Asset to Fulfill</button>
                     </div>
                     <div style="font-size: 12px; color: #fff; margin-bottom: 5px;"><strong>Terms:</strong> ${escapeHtml(c.terms)}</div>
                     <div style="font-size: 11px; color: var(--text-muted);">Buyer: ${resolveProfile(c.buyer).username} | Creator: ${resolveProfile(c.creator).username}</div>
@@ -1887,8 +1490,8 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                         <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
                             <strong style="color: var(--primary);">Request for ${r.count}% stake</strong>
                             <div>
-                                <button style="padding: 4px 10px; font-size: 11px; background:var(--success); color:#fff; cursor:pointer;" onclick="respondToStakeRequest('${r.id}', 'ACCEPT_SHARE_REQUEST')">Accept</button>
-                                <button style="padding: 4px 10px; font-size: 11px; background:var(--danger); color:#fff; cursor:pointer;" onclick="respondToStakeRequest('${r.id}', 'DECLINE_SHARE_REQUEST')">Decline</button>
+                                <button style="padding: 4px 10px; font-size: 11px; background:var(--success); color:#fff; cursor:pointer;" onclick="window.ActionEngine.respondToStakeRequest('${r.id}', 'ACCEPT_SHARE_REQUEST')">Accept</button>
+                                <button style="padding: 4px 10px; font-size: 11px; background:var(--danger); color:#fff; cursor:pointer;" onclick="window.ActionEngine.respondToStakeRequest('${r.id}', 'DECLINE_SHARE_REQUEST')">Decline</button>
                             </div>
                         </div>
                         <div style="font-size: 12px; color: #fff;">Buyer: ${resolveProfile(r.buyer).username} is offering ${r.price} $VOD per share (Total: ${r.count * r.price} $VOD)</div>
@@ -1933,7 +1536,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                     const timeStr = new Date(item.timestamp).toLocaleString();
                     const roles = item.roles || [];
                     const isOwner = item.sender === window.CoreEngine.userKeys.publicKey;
-                    const deleteBtn = isOwner ? `<button class="interaction-btn" onclick="deletePost('${item.transactionHash}')">🗑️ Delete</button>` : '';
+                    const deleteBtn = isOwner ? `<button class="interaction-btn" onclick="window.ActionEngine.deletePost('${item.transactionHash}')">🗑️ Delete</button>` : '';
                     postEl.innerHTML = `
                         <div class="post-avatar" onclick="inspectTargetNode('${item.sender}')" style="cursor:pointer;"><img src="${getAvatarUrl(item.sender)}"></div>
                         <div style="flex: 1;">
@@ -1944,14 +1547,14 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                             </div>
                             ${renderPostContent(item)}
                             <div class="post-interactions">
-                                <button class="interaction-btn" onclick="toggleLike('${item.transactionHash}', '${item.sender}')">🔥 <span id="like-count-${item.transactionHash}">${item.likeCount || 0}</span></button>
+                                <button class="interaction-btn" onclick="window.ActionEngine.toggleLike('${item.transactionHash}', '${item.sender}')">🔥 <span id="like-count-${item.transactionHash}">${item.likeCount || 0}</span></button>
                                 <button class="interaction-btn" onclick="toggleReplyBox('${item.transactionHash}')">💬 Reply</button>
                                 ${!isOwner ? `<button class="interaction-btn" onclick="window.WalletEngine.promptSendCoins('${item.sender}')">💸 Tip</button>` : ''}
                                 ${deleteBtn}
                             </div>
                             <div class="reply-box" id="reply-box-${item.transactionHash}">
                                 <textarea placeholder="Write a reply..."></textarea>
-                                <button style="padding: 5px 15px; font-size: 11px;" onclick="submitReply('${item.transactionHash}', '${item.sender}')">Post Reply</button>
+                                <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${item.transactionHash}', '${item.sender}')">Post Reply</button>
                                 <div id="replies-list-${item.transactionHash}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
                                     ${renderThreadedReplies(item.replies, 0, item.transactionHash)}
                                 </div>
@@ -1988,7 +1591,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                             <div style="font-size: 14px; font-weight: bold; color: #fff;">${escapeHtml(track.title)}</div>
                             <div style="font-size: 11px; color: var(--text-muted);">${track.playCount || 0} Streams</div>
                         </div>
-                        ${viewingUserPublicKey === window.CoreEngine.userKeys.publicKey ? `<button class="secondary" style="padding: 4px 8px; font-size: 10px;" onclick="promptEditSong('${track.hash}')">Edit</button>` : ''}
+                        ${viewingUserPublicKey === window.CoreEngine.userKeys.publicKey ? `<button class="secondary" style="padding: 4px 8px; font-size: 10px;" onclick="window.ActionEngine.promptEditSong('${track.hash}')">Edit</button>` : ''}
                     </div>
                 `).join('');
             } else {
@@ -2118,230 +1721,6 @@ function updateComposerPreview() {
 // ==========================================
 // 6. NODE SETTINGS & BLOCKCHAIN DEPLOYMENTS
 // ==========================================
-
-async function saveInlineEdit() {
-    const userIn = document.getElementById('input-edit-username').value.trim();
-    const bioIn = document.getElementById('input-edit-bio').value.trim();
-    const tagsInputEl = document.getElementById('input-edit-tags');
-    const tagsIn = tagsInputEl ? tagsInputEl.value.trim() : "";
-    const avatarInput = document.getElementById('input-edit-avatar');
-    const bannerInput = document.getElementById('input-edit-banner');
-    const sectionBgInput = document.getElementById('input-section-bg');
-
-    const colorPrimary = document.getElementById('input-color-primary').value;
-    const colorBg = document.getElementById('input-color-bg').value;
-    const colorCard = document.getElementById('input-color-card').value;
-    const rawCSS = document.getElementById('input-edit-css').value.trim();
-
-    // More robust CSS sanitization to prevent layout-breaking and XSS-like attacks
-    const dangerousProperties = /@import|url\(|expression|behavior|position|float|clear|overflow|top|left|right|bottom|clip|visibility|z-index|transform|filter|pointer-events/gi;
-    if (dangerousProperties.test(rawCSS)) {
-        return alert("SECURITY WARNING: Your custom CSS contained prohibited layout-breaking properties (like position, url, @import, etc.) and was blocked.");
-    }
-
-    // Second pass for script-like content
-    const dangerousContent = /<script|javascript:|onclick|onerror|onload/gi;
-    if (dangerousContent.test(rawCSS)) {
-        return alert("SECURITY WARNING: Your custom CSS appears to contain script-like content and was blocked.");
-    }
-
-    const cssIn = `:root { --primary: ${colorPrimary}; --bg-body: ${colorBg}; --bg-card: ${colorCard}; } /* --- CUSTOM CSS --- */\n${rawCSS}`;
-
-    try {
-        let finalAvatarHash = "";
-        let finalBannerHash = "";
-        if (avatarInput.files[0]) finalAvatarHash = await uploadMediaAssetFile(avatarInput.files[0]);
-        if (bannerInput.files[0]) finalBannerHash = await uploadMediaAssetFile(bannerInput.files[0]);
-        
-        let finalSectionBgHash = "";
-        if (sectionBgInput && sectionBgInput.files[0]) finalSectionBgHash = await uploadMediaAssetFile(sectionBgInput.files[0]);
-        
-        const playlistItems = document.querySelectorAll('.playlist-item');
-        let playlistOrder = null;
-        if (playlistItems.length > 0) playlistOrder = Array.from(playlistItems).map(item => item.dataset.hash);
-        
-        const layoutOrder = {
-            left: Array.from(document.getElementById('profile-col-left').children).map(c => c.id),
-            right: Array.from(document.getElementById('profile-col-right').children).map(c => c.id)
-        };
-        
-        let profileData = {};
-        if(userIn) profileData.username = userIn;
-        profileData.bio = bioIn; // Included unconditionally so users can clear their bio
-        if(tagsInputEl) profileData.tags = tagsIn.split(',').map(t => t.trim().toLowerCase().replace(/[^a-z0-9-]/g, '')).filter(t => t);
-        if(finalAvatarHash) profileData.avatarHash = finalAvatarHash;
-        if(finalBannerHash) profileData.bannerHash = finalBannerHash;
-        if(finalSectionBgHash) profileData.sectionImages = finalSectionBgHash;
-        if(playlistOrder) profileData.playlistOrder = playlistOrder;
-        profileData.layoutOrder = layoutOrder;
-        
-        if(Object.keys(profileData).length > 0) {
-            await window.CoreEngine.sendSignedTransaction('PROFILE_UPDATE', window.CoreEngine.userKeys.publicKey, profileData);
-        }
-
-        await window.CoreEngine.sendSignedTransaction('THEME_UPDATE', window.CoreEngine.userKeys.publicKey, { customCss: cssIn });
-        myCustomTheme = cssIn;
-        document.getElementById('ui-dynamic-user-theme').innerHTML = cssIn; 
-
-        await window.CoreEngine.sendSignedTransaction('SET_TOP_8', window.CoreEngine.userKeys.publicKey, { top8Keys: editedTop8 });
-        
-        alert("Identity and Theme blocks successfully deployed to the ledger.");
-        document.getElementById('input-edit-avatar').value = '';
-        document.getElementById('input-edit-banner').value = '';
-        fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
-        toggleInlineEdit();
-    } catch (err) { alert("Update failed: " + err.message); }
-}
-
-window.executeTargetFollow = async function(targetPeerPublicKey, isReply = false) {
-    if(!targetPeerPublicKey) return;
-    if (window.CoreEngine.userKeys.publicKey === targetPeerPublicKey) return alert("Cannot connect to your own node.");
-    try {
-        await window.CoreEngine.sendSignedTransaction('FOLLOW_USER', targetPeerPublicKey, {});
-        
-        if (!isReply && socket) {
-            socket.emit('send_crew_request', { target: targetPeerPublicKey, from: window.CoreEngine.userKeys.publicKey });
-        }
-        
-        alert("Crew connection established.");
-        
-        // Refresh profiles to immediately update the button UI and feed priorities
-        fetchUserProfile(targetPeerPublicKey, false);
-        fetchUserProfile(window.CoreEngine.userKeys.publicKey, true);
-    } catch (err) { alert(err.message); }
-}
-
-async function createCommission() {
-    const recipient = document.getElementById('input-comm-recipient').value.trim();
-    const amount = document.getElementById('input-comm-amount').value.trim();
-    const terms = document.getElementById('input-comm-terms').value.trim();
-    
-    if(!recipient || !amount || !terms) return alert("Recipient, amount, and terms are required to start an escrow contract.");
-    if(recipient === window.CoreEngine.userKeys.publicKey) return alert("You cannot commission yourself.");
-    
-    try {
-        await window.CoreEngine.sendSignedTransaction('CREATE_COMMISSION', recipient, { amount: parseFloat(amount), terms: terms });
-        
-        alert(`Escrow Successful: Locked ${amount} $VOD in a smart contract.`);
-        document.getElementById('input-comm-amount').value = ''; document.getElementById('input-comm-terms').value = '';
-        fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
-    } catch (err) { alert("Escrow failed: " + err.message); }
-}
-
-function fulfillCommission(commId) {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'audio/*,image/*';
-    input.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        try {
-            const hash = await uploadMediaAssetFile(file);
-            await window.CoreEngine.sendSignedTransaction('FULFILL_COMMISSION', '0x00', { commissionId: commId, assetHash: hash });
-            alert("Commission fulfilled! Escrow funds have been successfully released to your wallet.");
-            
-            const activeComms = currentViewedProfile ? currentViewedProfile.activeCommissions : [];
-            const c = activeComms.find(x => x.id === commId);
-            if(c) socket.emit('trigger_push', { target: c.buyer, payload: { title: 'Commission Fulfilled! 📦', body: `${resolveProfile(window.CoreEngine.userKeys.publicKey).username} uploaded the asset for your escrow.` } });
-
-            fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
-        } catch(err) { alert("Fulfillment failed: " + err.message); }
-    };
-    input.click();
-}
-
-async function executeSellItem() {
-    const title = document.getElementById('sell-title-input').value.trim();
-    const price = document.getElementById('sell-price-input').value.trim();
-    const itemType = document.getElementById('sell-type-input').value;
-    const fileInput = document.getElementById('sell-file-input');
-    
-    if (!title) return alert("Please enter a title.");
-    if (!price || isNaN(parseFloat(price))) return alert("Please enter a valid price.");
-    if (!fileInput.files[0]) return alert("Please upload an asset file.");
-
-    try {
-        const hash = await uploadMediaAssetFile(fileInput.files[0]);
-        await window.CoreEngine.sendSignedTransaction('LIST_ITEM', '0x00', { title: title, itemType: itemType, price: parseFloat(price), assetHash: hash });
-        alert("Asset listed in the Marketplace!"); 
-        document.getElementById('sell-title-input').value = '';
-        document.getElementById('sell-price-input').value = '';
-        fileInput.value = '';
-        window.loadMarketplace(); 
-        fetchUserProfile(window.CoreEngine.userKeys.publicKey, false); 
-        window.switchMarketTab('buy');
-    } catch(err) { alert("Listing failed: " + err.message); }
-}
-
-async function buyDigitalItem(itemId, price, seller) {
-    if (seller === window.CoreEngine.userKeys.publicKey) return alert("You cannot buy your own item.");
-    if (!confirm(`Purchase this asset for ${price} $VOD?`)) return;
-    try {
-        await window.CoreEngine.sendSignedTransaction('BUY_ITEM', seller, { itemId, price });
-        alert("Purchase successful! You can now view this asset in your Wallet.");
-        window.loadMarketplace();
-        fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
-    } catch(err) { alert("Purchase failed: " + err.message); }
-}
-
-function createOpenBounty() {
-    const modalTitle = document.getElementById('form-modal-title');
-    const modalBody = document.getElementById('form-modal-body');
-    
-    modalTitle.innerText = 'Create Open Commission Bounty';
-    modalBody.innerHTML = `
-        <p style="font-size: 13px; color: var(--text-muted);">Post a public request for work. The funds will be locked in escrow until you award the bounty to a submission.</p>
-        <label>Bounty Amount ($VOD)</label>
-        <input id="form-input-bounty-amount" type="number" placeholder="e.g., 100000">
-        <label>Bounty Description</label>
-        <textarea id="form-input-bounty-desc" rows="3" placeholder="e.g., 'Need a 16-bar verse for this track...'"></textarea>
-        <button id="form-modal-submit" style="width: 100%; margin-top: 10px;">Post Bounty to Ledger</button>
-    `;
-
-    const submitBtn = document.getElementById('form-modal-submit');
-    submitBtn.onclick = async () => {
-        const amount = document.getElementById('form-input-bounty-amount').value;
-        const desc = document.getElementById('form-input-bounty-desc').value.trim();
-
-        if (!amount || isNaN(parseFloat(amount)) || amount <= 0) return alert("Please enter a valid bounty amount.");
-        if (!desc) return alert("Please provide a description for the bounty.");
-
-        try {
-            await window.CoreEngine.sendSignedTransaction('CREATE_BOUNTY', '0x00', { amount: parseFloat(amount), description: desc });
-            alert("Bounty posted securely to the ledger!");
-            toggleModal('form-modal');
-            window.loadMarketplace();
-            fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
-        } catch(err) { alert("Bounty failed: " + err.message); }
-    };
-    toggleModal('form-modal');
-}
-
-function submitToBounty(bountyId) {
-    const message = prompt("Add a note with your submission:");
-    if (!message) return;
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        try {
-            const hash = await uploadMediaAssetFile(file);
-            await window.CoreEngine.sendSignedTransaction('SUBMIT_BOUNTY', '0x00', { bountyId, message, assetHash: hash });
-            alert("Submission received by the smart contract!"); window.loadMarketplace();
-        } catch(err) { alert("Submission failed: " + err.message); }
-    };
-    input.click();
-}
-
-async function awardBounty(bountyId, winnerAddress) {
-    if(!confirm(`Award this bounty to Node_${winnerAddress.substring(0,6)}? The funds will be released to their wallet permanently.`)) return;
-    try {
-        await window.CoreEngine.sendSignedTransaction('AWARD_BOUNTY', '0x00', { bountyId, winner: winnerAddress });
-        alert("Bounty awarded successfully!");
-        window.loadMarketplace();
-    } catch(err) { alert("Award failed: " + err.message); }
-}
 
 // ==========================================
 // 8. WEBRTC VOICE & DIRECT MESSAGING (DISCORD GAP)
@@ -2630,62 +2009,9 @@ function toggleModal(id) {
     if (modal) modal.classList.toggle('hidden');
 }
 
-async function toggleLike(txHash, receiver) {
-    const countEl = document.getElementById(`like-count-${txHash}`);
-    if (countEl) {
-        countEl.innerText = parseInt(countEl.innerText) + 1;
-        socket.emit('like_post', { txHash, address: window.CoreEngine.userKeys.publicKey });
-    }
-
-    try {
-        await window.CoreEngine.sendSignedTransaction('LIKE_POST', receiver || '0x00', { txHash: txHash });
-    } catch (err) {
-        console.error("Like block failed:", err);
-    }
-}
-
 function toggleReplyBox(txHash) {
     const box = document.getElementById(`reply-box-${txHash}`);
     if (box) box.style.display = box.style.display === 'block' ? 'none' : 'block';
-}
-
-async function submitReply(txHash, receiver, parentReplyId = null) {
-    const boxId = parentReplyId ? `reply-box-${parentReplyId}` : `reply-box-${txHash}`;
-    const box = document.getElementById(boxId);
-    if (!box) return;
-    const text = box.querySelector('textarea').value;
-    if (!text.trim()) return;
-    
-    detectMentionsAndEmit(text);
-    
-    box.querySelector('textarea').value = '';
-    socket.emit('reply_post', { txHash, address: window.CoreEngine.userKeys.publicKey, text: text.trim(), parentReplyId });
-
-    try {
-        const replyId = Date.now() + '_' + window.CoreEngine.userKeys.publicKey.substring(0, 10);
-        await window.CoreEngine.sendSignedTransaction('REPLY_POST', receiver || '0x00', { txHash: txHash, text: text.trim(), parentReplyId, replyId });
-    } catch (err) {
-        console.error("Reply block failed:", err);
-    }
-}
-
-async function submitShout() {
-    if (!window.CoreEngine.userKeys.publicKey) return alert("You must be logged in to post a shout.");
-    if (!viewingUserPublicKey) return;
-
-    const input = document.getElementById('shoutbox-input');
-    const message = input.value.trim();
-    if (!message) return;
-
-    try {
-        await window.CoreEngine.sendSignedTransaction('SHOUTBOX_POST', viewingUserPublicKey, { message });
-        input.value = '';
-        alert("Shout posted to the ledger!");
-        // Refresh the profile to show the new shout
-        fetchUserProfile(viewingUserPublicKey, false);
-    } catch (err) {
-        alert("Failed to post shout: " + err.message);
-    }
 }
 
 window.renderCrewRequests = function() {
@@ -2709,23 +2035,12 @@ window.renderCrewRequests = function() {
                     <span style="color: #fff;"><strong>${escapeHtml(prof.username)}</strong> wants to lock in.</span>
                 </div>
                 <div style="display:flex; gap: 8px;">
-                    <button onclick="acceptCrewRequest('${req.from}')" style="padding: 5px 10px; font-size: 11px;">Accept</button>
-                    <button class="secondary" onclick="declineCrewRequest('${req.from}')" style="padding: 5px 10px; font-size: 11px;">Decline</button>
+                    <button onclick="window.ActionEngine.acceptCrewRequest('${req.from}')" style="padding: 5px 10px; font-size: 11px;">Accept</button>
+                    <button class="secondary" onclick="window.ActionEngine.declineCrewRequest('${req.from}')" style="padding: 5px 10px; font-size: 11px;">Decline</button>
                 </div>
             </div>
         `;
     }).join('');
-}
-
-function acceptCrewRequest(fromAddress) {
-    window.executeTargetFollow(fromAddress, true); // The 'true' prevents sending a request back
-    window.pendingCrewRequests = window.pendingCrewRequests.filter(r => r.from !== fromAddress);
-    window.renderCrewRequests();
-}
-
-function declineCrewRequest(fromAddress) {
-    window.pendingCrewRequests = window.pendingCrewRequests.filter(r => r.from !== fromAddress);
-    window.renderCrewRequests();
 }
 
 function renderThreadedReplies(repliesArray, depthLevel, txHash) {
@@ -2741,7 +2056,7 @@ function renderThreadedReplies(repliesArray, depthLevel, txHash) {
             </div>
             <div class="reply-box" id="reply-box-${r.id}" style="margin-top: 5px;">
                 <textarea placeholder="Write a reply..."></textarea>
-                <button style="padding: 5px 15px; font-size: 11px;" onclick="submitReply('${txHash}', '${r.sender}', '${r.id}')">Post Reply</button>
+                <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${txHash}', '${r.sender}', '${r.id}')">Post Reply</button>
             </div>
             ${r.replies && r.replies.length > 0 ? renderThreadedReplies(r.replies, depthLevel + 1, txHash) : ''}
         </div>
@@ -2767,22 +2082,6 @@ function switchZineSubTab(tab) {
     renderZine();
 }
 
-async function handlePublishArticle() {
-    const title = document.getElementById('zine-publish-title').value.trim();
-    const body = document.getElementById('zine-publish-body').value.trim();
-    const price = document.getElementById('zine-publish-price').value.trim();
-
-    if(!title || !body || !price) return alert("Title, body, and price are required to publish.");
-    if(!window.CoreEngine.userKeys.publicKey) return alert("Identity required.");
-
-    socket.emit('publish_article', { title, body, price: parseFloat(price), author: window.CoreEngine.userKeys.publicKey });
-
-    document.getElementById('zine-publish-title').value = '';
-    document.getElementById('zine-publish-body').value = '';
-    alert("Masterpiece published to the swarm!");
-    switchZineSubTab('market');
-}
-
 function renderZine() {
     const marketContainer = document.getElementById('ui-zine-articles');
     const ownedContainer = document.getElementById('ui-zine-owned');
@@ -2794,7 +2093,7 @@ function renderZine() {
         const isOwner = art.ownersList.includes(myAddr) || art.author === myAddr;
         const buyBtn = isOwner 
             ? `<button class="secondary" disabled style="width:100%; opacity:0.5;">Rights Owned</button>` 
-            : `<button style="width:100%;" onclick="purchaseArticleRights('${art.id}')">Buy Curation Rights: ${art.price} $VOD</button>`;
+            : `<button style="width:100%;" onclick="window.ActionEngine.purchaseArticleRights('${art.id}')">Buy Curation Rights: ${art.price} $VOD</button>`;
 
         return `
             <div class="article-card">
@@ -2802,8 +2101,8 @@ function renderZine() {
                 <div style="font-size: 18px; font-weight: bold; color: #fff; margin-top: 5px;">${escapeHtml(art.title)}</div>
                 <div class="article-snippet">${escapeHtml(art.body)}</div>
                 <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                    <button class="interaction-btn" onclick="likeArticle('${art.id}')">❤️ ${art.likes || 0}</button>
-                    <button class="interaction-btn" onclick="tipArticle('${art.id}', '${art.author}')">💸 Tip $VOD</button>
+                    <button class="interaction-btn" onclick="window.ActionEngine.likeArticle('${art.id}')">❤️ ${art.likes || 0}</button>
+                    <button class="interaction-btn" onclick="window.ActionEngine.tipArticle('${art.id}', '${art.author}')">💸 Tip $VOD</button>
                 </div>
                 ${buyBtn}
             </div>
@@ -2818,31 +2117,6 @@ function renderZine() {
             <div class="article-snippet" style="color: #eee;">${escapeHtml(art.body)}</div>
         </div>
     `).join('') || '<div style="color:var(--text-muted);">Acquire rights in the marketplace to see articles here.</div>';
-}
-
-function purchaseArticleRights(articleId) {
-    if(!window.CoreEngine.userKeys.publicKey) return alert("Please login.");
-    socket.emit('purchase_article_rights', articleId);
-}
-
-function likeArticle(articleId) {
-    if (!window.CoreEngine.userKeys.publicKey) return alert("Must be logged in to like.");
-    socket.emit('like_article', articleId);
-}
-
-async function tipArticle(articleId, author) {
-    if (!window.CoreEngine.userKeys.publicKey) return alert("Must be logged in to tip.");
-    if (author === window.CoreEngine.userKeys.publicKey) return alert("You cannot tip your own article.");
-    const amount = prompt("How much $VOD would you like to tip the author?");
-    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) return;
-    
-    try {
-        await window.CoreEngine.sendSignedTransaction('TRANSFER_COIN', author, { amount: parseFloat(amount) });
-        
-        socket.emit('trigger_push', { target: author, payload: { title: 'Tip Received! 💸', body: `You received ${amount} $VOD from ${resolveProfile(window.CoreEngine.userKeys.publicKey).username} for your Zine Article!` } });
-
-        alert(`Successfully tipped ${amount} $VOD to the author!`);
-    } catch (err) { alert("Tip failed: " + err.message); }
 }
 
 // ==========================================

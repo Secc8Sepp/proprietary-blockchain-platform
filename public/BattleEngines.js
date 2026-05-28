@@ -32,7 +32,6 @@ window.BattleEngines = {
         } catch(err) { console.error("HotOrNot Error:", err); }
     },
 
-    async populateHotOrNotDropdown() {
     async populateHotOrNotSubmitDropdown() {
         const select = document.getElementById('hotornot-submit-select');
         const catSelect = document.getElementById('hotornot-category-select');
@@ -50,20 +49,6 @@ window.BattleEngines = {
             const submittedHashes = (window.hotOrNotData || [])
                 .filter(s => s.submitter === window.CoreEngine.userKeys.publicKey && (s.category || 'music') === category)
                 .map(s => s.originalHash || s.targetHash);
-            
-            catSelect.onchange = () => {
-                const category = catSelect.value;
-                if (category === 'music') {
-                    const myTracks = profile.uploadedTracks || [];
-                    if (myTracks.length === 0) select.innerHTML = '<option value="">No tracks uploaded</option>';
-                    else select.innerHTML = '<option value="">Select your track...</option>' + myTracks.map(t => `<option value="${t.hash}">${window.escapeHtml(t.title)}</option>`).join('');
-                } else if (category === 'looks') {
-                    const myImages = profile.uploadedImages || [];
-                    let options = '<option value="">Select your image...</option>';
-                    if (profile.avatarHash) options += `<option value="${profile.avatarHash}">Current Avatar</option>`;
-                    if (myImages.length > 0) options += myImages.map(img => `<option value="${img.hash}">Gallery Image (${new Date(img.timestamp).toLocaleDateString()})</option>`).join('');
-                    if (!profile.avatarHash && myImages.length === 0) options = '<option value="">No images uploaded</option>';
-                    select.innerHTML = options;
             if (category === 'music') {
                 const myTracks = (profile.uploadedTracks || []).filter(t => !submittedHashes.includes(t.hash));
                 if (myTracks.length === 0) select.innerHTML = '<option value="">No tracks left to submit</option>';
