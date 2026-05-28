@@ -510,13 +510,18 @@ function renderPostContent(item) {
         const playCount = item.playCount || 0;
         const audioHash = item.data.audioHash;
         const transactionHash = item.transactionHash;
+        let displayArtist = item.data.artist ? escapeHtml(item.data.artist) : resolveProfile(item.sender).username;
+        if (item.data.offPlatformCollaborator) {
+            displayArtist += ` ft. ${escapeHtml(item.data.offPlatformCollaborator)}`;
+        }
 
         // Defer rendering until WaveSurfer is loaded
         setTimeout(() => {
-            if (!window.WaveSurfer || !window.WaveSurfer.regions) return; // Not loaded yet
+            if (!window.WaveSurfer || !window.WaveSurfer.regions) return; 
             
-            const waveformContainer = document.getElementById(`waveform-${audioHash}`);
-            if (!waveformContainer || waveformContainer.childElementCount > 0) return; // Already initialized
+            // FIX 1: Use transactionHash for unique DOM targeting
+            const waveformContainer = document.getElementById(`waveform-${transactionHash}`);
+            if (!waveformContainer || waveformContainer.childElementCount > 0) return; 
 
             const wavesurfer = WaveSurfer.create({
                 container: waveformContainer,
@@ -527,24 +532,33 @@ function renderPostContent(item) {
                 barRadius: 3,
                 barGap: 2,
                 height: 80,
+                backend: 'MediaElement', // FIX 2: Force HTML5 streaming so it doesn't hang on large files
                 plugins: [
                     WaveSurfer.regions.create({
                         regionsMinLength: 0.1,
                         dragSelection: false,
-                        color: 'rgba(255, 255, 255, 0.2)',
+                        color: 'rgba(255, 170, 0, 0.3)',
                     })
                 ]
             });
             
-            window.waveformInstances[audioHash] = wavesurfer;
+            // Store by transactionHash to avoid cross-contamination on reposts
+            window.waveformInstances[transactionHash] = wavesurfer;
 
-            const playButton = document.getElementById(`play-btn-${audioHash}`);
+            const playButton = document.getElementById(`play-btn-${transactionHash}`);
             if (playButton) {
                 playButton.disabled = true;
                 playButton.onclick = () => {
+                    // Pause any currently playing waveform
                     if (window.activeWaveform && window.activeWaveform !== wavesurfer) {
                         window.activeWaveform.pause();
                     }
+                    
+                    // FIX 3: Trigger your global Audio Engine so mining and the bottom player still work
+                    if (window.AudioEngine && window.AudioEngine.playTrack) {
+                        window.AudioEngine.playTrack(item.data.trackTitle, audioHash, item.sender, displayArtist);
+                    }
+                    
                     wavesurfer.playPause();
                     window.activeWaveform = wavesurfer;
                 };
@@ -552,7 +566,7 @@ function renderPostContent(item) {
 
             wavesurfer.on('ready', () => {
                 if (playButton) playButton.disabled = false;
-                console.log(`[Waveform] Ready: ${audioHash}`);
+                console.log(`[Waveform] Ready: ${transactionHash}`);
             });
 
             wavesurfer.on('play', () => {
@@ -571,8 +585,9 @@ function renderPostContent(item) {
                 }
             });
 
+            // Handle Timed Comments...
             const timedComments = (item.replies || []).filter(r => r.audioTimestamp !== undefined && r.audioTimestamp !== null);
-            const commentsOverlayContainer = document.getElementById(`comments-overlay-${audioHash}`);
+            const commentsOverlayContainer = document.getElementById(`comments-overlay-${transactionHash}`);
             
             timedComments.forEach(comment => {
                 wavesurfer.addRegion({
@@ -631,7 +646,7 @@ function renderPostContent(item) {
             });
 
             wavesurfer.on('error', (err) => {
-                console.error(`WaveSurfer error for ${audioHash}:`, err);
+                console.error(`WaveSurfer error for ${transactionHash}:`, err);
                 if (playButton) {
                     playButton.innerText = '❌ Error';
                     playButton.disabled = true;
@@ -643,11 +658,6 @@ function renderPostContent(item) {
         }, 500);
 
         let coverHtml = item.data.coverHash ? `<img src="/tracks/${item.data.coverHash}" style="width: 60px; height: 60px; border-radius: 6px; object-fit: cover;">` : '';
-        let displayArtist = item.data.artist ? escapeHtml(item.data.artist) : resolveProfile(item.sender).username;
-        if (item.data.offPlatformCollaborator) {
-            displayArtist += ` ft. ${escapeHtml(item.data.offPlatformCollaborator)}`;
-        }
-
         let sharesHtml = '';
         if (item.shares) {
             sharesHtml = `<div style="font-size: 11px; margin-top: 15px; color: var(--text-muted); border-top: 1px solid rgba(69, 162, 158, 0.2); padding-top: 10px;"><strong>Shareholders:</strong> `;
@@ -681,12 +691,12 @@ function renderPostContent(item) {
                 </div>
 
                 <div style="position: relative; margin-bottom: 10px;">
-                    <div id="waveform-${audioHash}"></div>
-                    <div id="comments-overlay-${audioHash}" style="position: absolute; top: -10px; right: 0; width: 250px; height: calc(100% + 20px); pointer-events: none; z-index: 5;"></div>
+                    <div id="waveform-${transactionHash}"></div>
+                    <div id="comments-overlay-${transactionHash}" style="position: absolute; top: -10px; right: 0; width: 250px; height: calc(100% + 20px); pointer-events: none; z-index: 5;"></div>
                 </div>
 
                 <div style="display: flex; gap: 10px; margin-bottom: 10px; align-items: center;">
-                    <button id="play-btn-${audioHash}" style="background:#66fcf1; color:#000; padding:8px 15px; flex-grow: 1;">
+                    <button id="play-btn-${transactionHash}" style="background:#66fcf1; color:#000; padding:8px 15px; flex-grow: 1;">
                         ▶ Play
                     </button>
                 </div>
