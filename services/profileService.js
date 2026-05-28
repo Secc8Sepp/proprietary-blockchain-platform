@@ -1,5 +1,12 @@
 const blockchainService = require('./blockchainService');
 
+// --- PERFORMANCE CACHING ---
+let fullProfileCache = new Map();
+let lastProfileCacheChainLength = 0;
+let feedCache = null;
+let lastFeedCacheChainLength = 0;
+// --- END CACHING ---
+
 class ProfileService {
     getSocialGraph() {
         const chain = blockchainService.getChain();
@@ -36,6 +43,17 @@ class ProfileService {
 
     getProfile(publicKey) {
         const chain = blockchainService.getChain();
+
+        // Invalidate entire profile cache if chain has grown
+        if (chain.length !== lastProfileCacheChainLength) {
+            fullProfileCache.clear();
+            lastProfileCacheChainLength = chain.length;
+        } else {
+            // Return from cache if available
+            if (fullProfileCache.has(publicKey)) {
+                return fullProfileCache.get(publicKey);
+            }
+        }
         
         let profile = {
             publicKey: publicKey,
@@ -293,12 +311,20 @@ class ProfileService {
         const adminAddress = blockchainService.getAdminAddress(chain);
         profile.isAdmin = (publicKey === adminAddress);
 
+        fullProfileCache.set(publicKey, profile); // Store result in cache
         return profile;
     }
 
     getFeedEngine() {
         const chain = blockchainService.getChain();
-        const feedItems = [];
+
+        // Return from cache if available and chain hasn't changed
+        if (feedCache && chain.length === lastFeedCacheChainLength) {
+            return feedCache;
+        }
+
+        const feedItems = []; // Recompute if not cached
+        lastFeedCacheChainLength = chain.length; // Update cache timestamp
         
         const playCounts = {};
         const shareDistribution = {};
@@ -385,7 +411,7 @@ class ProfileService {
             if (deletedPosts.has(block.hash)) continue; // Hide deleted blocks from the feed
             
             for (const tx of block.transactions) {
-                if (['SONG_UPLOAD', 'TEXT_POST', 'PROFILE_UPDATE', 'FOLLOW_USER', 'LIKE_POST', 'LIKE_IMAGE', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'THEME_UPDATE', 'SHOUTBOX_POST', 'SET_TOP_8', 'STREAM_COMPLETED', 'BUY_SONG_SHARE', 'TRANSFER_COIN', 'REQUEST_SONG_SHARE', 'ACCEPT_SHARE_REQUEST', 'STORY_POST'].includes(tx.type)) {
+                if (['SONG_UPLOAD', 'TEXT_POST', 'PROFILE_UPDATE', 'FOLLOW_USER', 'LIKE_POST', 'LIKE_IMAGE', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'THEME_UPDATE', 'SHOUTBOX_POST', 'SET_TOP_8', 'STREAM_COMPLETED', 'BUY_SONG_SHARE', 'TRANSFER_COIN', 'REQUEST_SONG_SHARE', 'ACCEPT_SHARE_REQUEST', 'STORY_POST', 'PURCHASE_ZINE_RIGHTS'].includes(tx.type)) {
                     
                     const senderBalance = blockchainService.calculateBalance(tx.sender, chain);
                     const adminAddress = blockchainService.getAdminAddress(chain);
@@ -436,7 +462,9 @@ class ProfileService {
             }
         }
 
-        return feedItems.sort((a, b) => b.timestamp - a.timestamp);
+        const sortedFeed = feedItems.sort((a, b) => b.timestamp - a.timestamp);
+        feedCache = sortedFeed; // Store result in cache
+        return sortedFeed;
     }
 
     getMarketData() {

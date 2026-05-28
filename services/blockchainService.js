@@ -269,6 +269,11 @@ class BlockchainService extends EventEmitter {
         const currentBalance = this.calculateBalance(sender, chain);
         // Skip balance checks for certain types that don't consume balance
         const balanceRequired = !['FOLLOW_USER', 'PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'SHOUTBOX_POST', 'ADMIN_MINT', 'SUBMIT_HOT_OR_NOT', 'VOTE_HOT_OR_NOT', 'STORY_POST'].includes(type);
+
+        if (type === 'ADMIN_MINT') {
+            const adminAddress = this.getAdminAddress(chain);
+            if (sender !== adminAddress) throw new Error("Unauthorized: Only the network admin can mint OTC VOD.");
+        }
         
         if (balanceRequired) {
             if (type === 'TRANSFER_COIN' && currentBalance < parseFloat(data.amount)) throw new Error("Insufficient funds for wire.");

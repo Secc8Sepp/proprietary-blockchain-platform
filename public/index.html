@@ -423,6 +423,8 @@
                                 <h4 style="margin-bottom: 10px; color: var(--primary);">Edit Identity & Theme</h4>
                                 <input id="input-edit-username" placeholder="Display name" style="margin-bottom: 8px;" />
                                 <textarea id="input-edit-bio" rows="2" placeholder="Profile bio" style="margin-bottom: 8px;"></textarea>
+                                <span style="font-size:12px; color:var(--text-muted); display:block;">Profile Tags (comma separated):</span>
+                                <input id="input-edit-tags" placeholder="e.g. producer, gamer, 3d-artist" style="margin-bottom: 15px;" />
                                 <div style="margin-bottom: 15px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; border: 1px solid rgba(69, 162, 158, 0.2);">
                                     <label style="font-size: 11px; display:block; margin-bottom: 8px; color: var(--text-muted); text-transform: uppercase;">Manage Top 8 Crew</label>
                                     <div id="top8-selected-list" style="display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px;"></div>
@@ -753,6 +755,7 @@
     <script src="/crypto.js"></script>
     <script src="/CoreEngine.js"></script>
     <script src="/MeshEngine.js"></script>
+    <script src="/WalletEngine.js"></script>
     <script src="/AudioEngine.js"></script>
     <script src="/GlobalTagEngine.js"></script>
     <script src="/BattleEngines.js"></script>

@@ -286,27 +286,21 @@ io.on('connection', (socket) => {
             });
         }
 
-        // 1. Credit Author & Deduct Buyer via Ledger Transaction
-        const tx = {
-            sender: buyerNode.address,
-            receiver: article.author,
-            type: 'PURCHASE_ZINE_RIGHTS',
-            data: { articleId: article.id, title: article.title },
-            amount: article.price,
-            timestamp: Date.now()
-        };
-
-        // Simulate adding to blockchain state (reusing existing sync logic)
-        const latestBlock = chain[chain.length - 1];
-        const newBlock = {
-            index: latestBlock.index + 1,
-            timestamp: Date.now(),
-            transactions: [tx],
-            prevHash: latestBlock.hash,
-            hash: 'p2p_' + Math.random().toString(36).substring(7)
-        };
-        chain.push(newBlock);
-        blockchainService.saveChain(chain);
+        try {
+            // 1. Create and process the ledger transaction
+            const tx = {
+                sender: buyerNode.address,
+                receiver: article.author,
+                type: 'PURCHASE_ZINE_RIGHTS',
+                data: { articleId: article.id, title: article.title, amount: article.price },
+                timestamp: Date.now(),
+                signature: 'server-validated' // Placeholder signature for server-side transaction
+            };
+            const activeBlock = blockchainService.addTransaction(tx);
+            io.emit('blockchain_update', { type: tx.type, transaction: activeBlock.transactions[0] });
+        } catch (error) {
+            return socket.emit('chat_error', { message: `Transaction Failed: ${error.message}` });
+        }
 
         // 2. Update In-Memory Rights
         article.ownersList.push(buyerNode.address);

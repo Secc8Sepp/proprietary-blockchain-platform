@@ -29,15 +29,14 @@ router.post('/verify', async (req, res) => {
             return res.status(400).json({ success: false, error: "Missing address or signature" });
         }
 
-        // ---------------------------------------------------------
-        // IN A REAL WEB3 APP (Using ethers.js):
-        // const expectedMessage = "Sign this message to login to VOD Social.";
-        // const recoveredAddress = ethers.utils.verifyMessage(expectedMessage, signature);
-        // if (recoveredAddress.toLowerCase() !== address.toLowerCase()) {
-        //     return res.status(401).json({ success: false, error: "Invalid signature" });
-        // }
-        // ---------------------------------------------------------
+        // Perform cryptographic signature verification
+        const expectedMessage = "Sign this message to login to VOD Social.";
+        const isValid = Wallet.verifySignature(address, expectedMessage, signature);
 
+        if (!isValid) {
+            return res.status(401).json({ success: false, error: "Invalid signature. Authentication failed." });
+        }
+        
         // If this is a brand new wallet connecting for the first time, 
         // mint their initial profile state!
         if (!usersDb[address]) {

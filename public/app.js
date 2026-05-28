@@ -511,6 +511,7 @@ async function loadMainGlobalFeed() {
                     <div class="post-interactions">
                         <button class="interaction-btn" onclick="toggleLike('${item.transactionHash}', '${item.sender}')">🔥 <span id="like-count-${item.transactionHash}">${item.likeCount || 0}</span></button>
                         <button class="interaction-btn" onclick="toggleReplyBox('${item.transactionHash}')">💬 Reply</button>
+                        ${!isOwner ? `<button class="interaction-btn" onclick="window.WalletEngine.promptSendCoins('${item.sender}')">💸 Tip</button>` : ''}
                         ${deleteBtn}
                     </div>
                     <div class="reply-box" id="reply-box-${item.transactionHash}">
@@ -578,6 +579,7 @@ function renderPostContent(item) {
                     <button class="secondary" style="padding:8px 15px; font-size: 12px;" onclick="requestSongShare('${item.data.audioHash}', '${item.sender}')">
                         📈 Request Stake
                     </button>
+                    ${(window.CoreEngine && item.sender !== window.CoreEngine.userKeys.publicKey) ? `<button class="interaction-btn" style="padding:8px 15px; font-size: 12px;" onclick="window.WalletEngine.promptSendCoins('${item.sender}')">💸 Tip Artist</button>` : ''}
                 </div>
                 ${sharesHtml}
             </div>
@@ -858,6 +860,7 @@ function switchTab(tabName, element, targetKey = null) {
     if (tabName === 'zine') renderZine();
     if (tabName === 'hotornot') window.BattleEngines.loadHotOrNot();
     if (tabName === 'feed') window.loadMainGlobalFeed();
+    if (tabName === 'wallet' && window.WalletEngine) window.WalletEngine.renderWalletDashboard();
 }
 
 function renderServerList() {
@@ -1466,6 +1469,20 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
         viewingUserPublicKey = profile.publicKey;
         currentViewedProfile = profile;
 
+        // =================================================================
+        // PRE-RENDER SANITIZATION: Clear all dynamic containers to prevent data bleed from previous profile view
+        // =================================================================
+        const containersToClear = [
+            'ui-profile-top8', 'ui-profile-recommended', 'ui-profile-shoutbox', 
+            'ui-tx-history', 'ui-active-commissions', 'ui-wallet-stake-requests',
+            'ui-profile-commissions', 'ui-profile-feed', 'ui-profile-playlist',
+            'ui-profile-gallery', 'ui-profile-vst'
+        ];
+        containersToClear.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = '<div style="font-size:12px; color:var(--text-muted); padding: 10px;">Loading...</div>';
+        });
+
         const toggleBtn = document.getElementById('btn-toggle-edit');
         if (toggleBtn) {
             toggleBtn.style.display = viewingUserPublicKey === window.CoreEngine.userKeys.publicKey ? 'block' : 'none';
@@ -1502,7 +1519,13 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
         
         for (let id in elements) {
             let el = document.getElementById(id);
-            if(el) el.innerText = elements[id];
+            if(el) {
+                if (id === 'ui-profile-view-address') {
+                    el.innerHTML = `${elements[id]} <button class="secondary" style="padding: 2px 8px; font-size: 10px; margin-left: 10px;" onclick="window.WalletEngine.promptSendCoins('${profile.publicKey}')">💸 Send $VOD</button>`;
+                } else {
+                    el.innerText = elements[id];
+                }
+            }
         }
 
         const avatar = document.getElementById('ui-profile-view-avatar');
@@ -1578,9 +1601,11 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                 html += `<span style="background: var(--primary); color: #000; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">🎧 Artist</span>`;
             }
             if (profile.tags && profile.tags.length > 0) {
+                html += `<div style="margin-bottom: 15px; display: flex; gap: 5px; flex-wrap: wrap;">`;
                 profile.tags.forEach(t => {
                     html += `<span style="background: rgba(102, 252, 241, 0.1); border: 1px solid var(--primary); color: var(--primary); padding: 3px 8px; border-radius: 4px; font-size: 11px;">#${escapeHtml(t)}</span>`;
                 });
+                html += `</div>`;
             }
             html += `</div>`;
 
@@ -1762,13 +1787,13 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                             <div class="post-interactions">
                                 <button class="interaction-btn" onclick="toggleLike('${item.transactionHash}', '${item.sender}')">🔥 <span id="like-count-${item.transactionHash}">${item.likeCount || 0}</span></button>
                                 <button class="interaction-btn" onclick="toggleReplyBox('${item.transactionHash}')">💬 Reply</button>
+                                ${!isOwner ? `<button class="interaction-btn" onclick="window.WalletEngine.promptSendCoins('${item.sender}')">💸 Tip</button>` : ''}
                                 ${deleteBtn}
                             </div>
                             <div class="reply-box" id="reply-box-${item.transactionHash}">
                                 <textarea placeholder="Write a reply..."></textarea>
                                 <button style="padding: 5px 15px; font-size: 11px;" onclick="submitReply('${item.transactionHash}', '${item.sender}')">Post Reply</button>
                                 <div id="replies-list-${item.transactionHash}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
-                                    ${renderThreadedReplies(item.replies, 0, item.transactionHash)}
                                     ${renderThreadedReplies(item.replies, 0, item.transactionHash)}
                                 </div>
                             </div>
@@ -1949,9 +1974,16 @@ async function saveInlineEdit() {
     const colorCard = document.getElementById('input-color-card').value;
     const rawCSS = document.getElementById('input-edit-css').value.trim();
 
-    const dangerousKeywords = /(position|z-index|url\(|transform|opacity|pointer-events|import)/gi;
-    if (dangerousKeywords.test(rawCSS)) {
-        return alert("SECURITY WARNING: Your custom CSS contained prohibited layout properties and was blocked.");
+    // More robust CSS sanitization to prevent layout-breaking and XSS-like attacks
+    const dangerousProperties = /@import|url\(|expression|behavior|position|float|clear|overflow|top|left|right|bottom|clip|visibility|z-index|transform|filter|pointer-events/gi;
+    if (dangerousProperties.test(rawCSS)) {
+        return alert("SECURITY WARNING: Your custom CSS contained prohibited layout-breaking properties (like position, url, @import, etc.) and was blocked.");
+    }
+
+    // Second pass for script-like content
+    const dangerousContent = /<script|javascript:|onclick|onerror|onload/gi;
+    if (dangerousContent.test(rawCSS)) {
+        return alert("SECURITY WARNING: Your custom CSS appears to contain script-like content and was blocked.");
     }
 
     const cssIn = `:root { --primary: ${colorPrimary}; --bg-body: ${colorBg}; --bg-card: ${colorCard}; } /* --- CUSTOM CSS --- */\n${rawCSS}`;
@@ -2188,23 +2220,19 @@ window.webrtcOffer = async (data) => {
 };
 
 window.webrtcAnswer = async (data) => {
-    if (peerConnections[data.sender]) {
-        await peerConnections[data.sender].setRemoteDescription(data.sdp);
-    }
     try {
-        if (peerConnections[data.sender]) await peerConnections[data.sender].setRemoteDescription(data.sdp);
-    } catch(e) { console.warn("WebRTC Answer Error:", e.message); }
+        if (peerConnections[data.sender]) {
+            await peerConnections[data.sender].setRemoteDescription(data.sdp);
+        }
+    } catch(e) { console.error("WebRTC Answer Error:", e); }
 };
 
 window.webrtcIceCandidate = async (data) => {
-    if (peerConnections[data.sender]) {
-        await peerConnections[data.sender].addIceCandidate(data.candidate);
-    }
     try {
         if (peerConnections[data.sender] && peerConnections[data.sender].remoteDescription) {
             await peerConnections[data.sender].addIceCandidate(data.candidate);
         }
-    } catch(e) { console.warn("WebRTC ICE Error:", e.message); }
+    } catch(e) { console.error("WebRTC ICE Error:", e); }
 };
 
 // ==========================================
@@ -2252,20 +2280,18 @@ window.meshOffer = async (data) => {
 
 window.meshAnswer = async (data) => {
     if (isNodeBlocked(window.MeshEngine.socketIdToAddress[data.sender])) return;
-    if (window.MeshEngine.meshConnections[data.sender]) await window.MeshEngine.meshConnections[data.sender].setRemoteDescription(data.sdp);
     try {
         if (window.MeshEngine.meshConnections[data.sender]) await window.MeshEngine.meshConnections[data.sender].setRemoteDescription(data.sdp);
-    } catch(e) { console.warn("Mesh Answer Error:", e.message); }
+    } catch(e) { console.error("Mesh Answer Error:", e); }
 };
 
 window.meshIceCandidate = async (data) => {
     if (isNodeBlocked(window.MeshEngine.socketIdToAddress[data.sender])) return;
-    if (window.MeshEngine.meshConnections[data.sender]) await window.MeshEngine.meshConnections[data.sender].addIceCandidate(data.candidate);
     try {
         if (window.MeshEngine.meshConnections[data.sender] && window.MeshEngine.meshConnections[data.sender].remoteDescription) {
             await window.MeshEngine.meshConnections[data.sender].addIceCandidate(data.candidate);
         }
-    } catch(e) { console.warn("Mesh ICE Error:", e.message); }
+    } catch(e) { console.error("Mesh ICE Error:", e); }
 };
 
 function setupDataChannel(dc, id) {
