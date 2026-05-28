@@ -169,7 +169,7 @@ app.post('/api/network/block', (req, res) => {
     const { block } = body;
     if (!block) return res.status(400).send('No block provided');
     const currentChain = blockchainService.getChain();
-    const latestBlock = currentChain[currentChain.length - 1];
+    const latestBlock = currentChain.length > 0 ? currentChain[currentChain.length - 1] : { index: -1 };
     if (block && block.index > latestBlock.index) {
         currentChain.push(block);
         blockchainService.saveChain(currentChain);
@@ -268,7 +268,7 @@ io.on('connection', (socket) => {
                 const likerProfile = profileService.getProfileDirectory()[likerNode.address] || { username: `Node_${likerNode.address.substring(0,6)}` };
                 sendPushNotification(article.author, {
                     title: 'Zine Article Liked ❤️',
-                    body: `${likerProfile.username} liked your article: "${article.title.substring(0, 40)}..."`
+                    body: `${likerProfile.username} liked your article: "${(article.title || '').substring(0, 40)}..."`
                 });
             }
         }
@@ -446,7 +446,7 @@ io.on('connection', (socket) => {
         const { serverId, channelId, msgId, emoji } = data;
         const server = dbMemory.servers[serverId];
         if (server && server.channels[channelId]) {
-            const msg = server.channels[channelId].messages.find(m => (m.time + '_' + m.sender.substring(0, 5)) === msgId);
+            const msg = server.channels[channelId].messages.find(m => (m.time + '_' + (m.sender || '').substring(0, 5)) === msgId);
             if (msg) {
                 if (!msg.reactions) msg.reactions = [];
                 msg.reactions.push(emoji);
@@ -576,7 +576,11 @@ server.listen(PORT, () => {
                             blockchainService.saveChain(data.chain);
                             profileService.getProfileDirectory(); // Invalidate cache
                             io.emit('blockchain_update', { type: 'SYSTEM_SYNC' }); // Tell browsers to refresh!
-                            data.chain.forEach(block => block.transactions.forEach(extractAndSyncHashes));
+                            data.chain.forEach(block => {
+                                if (block.transactions && Array.isArray(block.transactions)) {
+                                    block.transactions.forEach(extractAndSyncHashes);
+                                }
+                            });
                         }
                     }).catch(e => {
                         console.log(`⚠️ Peer offline: ${peerUrl} - Retrying in 30s...`);
@@ -604,7 +608,7 @@ server.listen(PORT, () => {
 
             // Update in-memory state based on new transactions
             block.transactions.forEach(tx => {
-                if (tx.type === 'PURCHASE_ZINE_RIGHTS') {
+                if (tx.type === 'PURCHASE_ZINE_RIGHTS' && tx.data) {
                     const article = dbMemory.zineArticles.find(a => a.id === tx.data.articleId);
                     if (article && !article.ownersList.includes(tx.sender)) {
                         article.ownersList.push(tx.sender);
