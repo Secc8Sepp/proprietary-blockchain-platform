@@ -15,24 +15,101 @@ class FeedController {
         try {
             const { sender, receiver, type, data, timestamp, signature } = req.body;
             // Whitelist all market and media transaction types
-            if (!['SONG_UPLOAD', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'STORY_POST', 'TEXT_POST', 'LIKE_IMAGE', 'LIKE_POST', 'REPLY_POST', 'DELETE_POST', 'STREAM_COMPLETED', 'BUY_SONG_SHARE', 'TRANSFER_COIN', 'SHOUTBOX_POST', 'CREATE_COMMISSION', 'FULFILL_COMMISSION', 'CREATE_BOUNTY', 'SUBMIT_BOUNTY', 'AWARD_BOUNTY', 'LIST_ITEM', 'BUY_ITEM', 'BRIDGE_WITHDRAW', 'BRIDGE_DEPOSIT', 'ADMIN_MINT', 'REQUEST_SONG_SHARE', 'ACCEPT_SHARE_REQUEST', 'DECLINE_SHARE_REQUEST', 'VOTE_HOT_OR_NOT', 'SUBMIT_HOT_OR_NOT'].includes(type)) {
+            if (!['SONG_UPLOAD', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'STORY_POST', 'TEXT_POST', 'LIKE_IMAGE', 'LIKE_POST', 'REPLY_POST', 'DELETE_POST', 'STREAM_COMPLETED', 'BUY_SONG_SHARE', 'TRANSFER_COIN', 'SHOUTBOX_POST', 'CREATE_COMMISSION', 'FULFILL_COMMISSION', 'CREATE_BOUNTY', 'SUBMIT_BOUNTY', 'AWARD_BOUNTY', 'LIST_ITEM', 'BUY_ITEM', 'BRIDGE_WITHDRAW', 'BRIDGE_DEPOSIT', 'ADMIN_MINT', 'REQUEST_SONG_SHARE', 'ACCEPT_SHARE_REQUEST', 'DECLINE_SHARE_REQUEST', 'VOTE_HOT_OR_NOT', 'SUBMIT_HOT_OR_NOT', 'PURCHASE_ZINE_RIGHTS'].includes(type)) {
                 return res.status(400).json({ error: "Invalid feed operation profile." });
             }
             const activeBlock = blockchainService.addTransaction({ sender, receiver, type, data, timestamp, signature });
             const io = req.app.get('socketio');
             io.emit('blockchain_update', { type, transaction: activeBlock.transactions[0] });
 
-            // Emit stake-specific notifications so frontends can surface them
+            const sendPush = req.app.get('sendPushNotification');
+            const getProfiles = req.app.get('getProfileDirectory');
+            const socialGraph = profileService.getSocialGraph();
+            const fromProfile = getProfiles ? (getProfiles()[sender] || { username: `Node_${sender.substring(0,6)}` }) : { username: `Node_${sender.substring(0,6)}` };
+
+            // --- NOTIFICATION ENGINE ---
+            if (sendPush) {
+                const followers = socialGraph.followers[sender] || [];
+
+                if (type === 'LIKE_POST') {
+                    sendPush(receiver, { title: '🔥 Post Liked!', body: `${fromProfile.username} liked your post.` });
+                } else if (type === 'REPLY_POST') {
+                    sendPush(receiver, { title: '💬 New Reply', body: `${fromProfile.username} replied to your post.` });
+                } else if (type === 'SHOUTBOX_POST') {
+                    sendPush(receiver, { title: '📢 New Shout!', body: `${fromProfile.username} posted on your shoutbox.` });
+                } else if (type === 'BUY_ITEM') {
+                    sendPush(receiver, { title: '💰 Item Sold!', body: `${fromProfile.username} purchased your item from the marketplace.` });
+                } else if (['SONG_UPLOAD', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST'].includes(type)) {
+                    const assetType = type.replace('_POST', '').replace('_UPLOAD', '').toLowerCase();
+                    const title = data.trackTitle || data.caption || `new ${assetType}`;
+                    followers.forEach(followerAddress => {
+                        sendPush(followerAddress, { title: 'New Mint from your Crew ⭐', body: `${fromProfile.username} just minted a new ${assetType}: "${title.substring(0, 40)}..."` });
+                    });
+                } else if (type === 'CREATE_COMMISSION') {
+                    sendPush(receiver, { title: 'New Commission Request 💼', body: `${fromProfile.username} sent you a commission request for ${data.amount} $VOD.` });
+                } else if (type === 'FULFILL_COMMISSION') {
+                    const commissionBlock = blockchainService.getBlockByHash(data.commissionId);
+                    if (commissionBlock) {
+                        const commissionTx = commissionBlock.transactions.find(t => t.type === 'CREATE_COMMISSION');
+                        if (commissionTx) {
+                            const originalBuyer = commissionTx.sender;
+                            sendPush(originalBuyer, { title: 'Commission Fulfilled! 📦', body: `${fromProfile.username} has delivered your commission.` });
+                        }
+                    }
+                } else if (type === 'SUBMIT_BOUNTY') {
+                    const bountyBlock = blockchainService.getBlockByHash(data.bountyId);
+                    if (bountyBlock) {
+                        const bountyTx = bountyBlock.transactions.find(t => t.type === 'CREATE_BOUNTY');
+                        if (bountyTx) {
+                            const bountyCreator = bountyTx.sender;
+                            sendPush(bountyCreator, { title: 'New Bounty Submission 📥', body: `${fromProfile.username} submitted to your bounty: "${bountyTx.data.description.substring(0, 30)}..."` });
+                        }
+                    }
+                } else if (type === 'LIST_ITEM') {
+                    followers.forEach(followerAddress => {
+                        sendPush(followerAddress, { title: 'New Marketplace Listing 🏪', body: `${fromProfile.username} listed "${data.title}" for ${data.price} $VOD.` });
+                    });
+                } else if (type === 'TRANSFER_COIN') {
+                    sendPush(receiver, { title: 'Incoming $VOD Transfer 💸', body: `You received ${data.amount} $VOD from ${fromProfile.username}.` });
+                } else if (type === 'STREAM_COMPLETED') {
+                    const feed = profileService.getFeedEngine();
+                    const originalPost = feed.find(item => item.type === 'SONG_UPLOAD' && item.data.audioHash === data.audioHash);
+                    if (originalPost && originalPost.sender !== sender) {
+                        sendPush(originalPost.sender, { title: 'Royalty Dividend Paid 💎', body: `Your track "${originalPost.data.trackTitle}" was streamed, and you earned royalties!` });
+                    }
+                } else if (type === 'PURCHASE_ZINE_RIGHTS') {
+                    sendPush(receiver, { title: 'Curation Rights Sold 📰', body: `${fromProfile.username} bought the rights to your Zine article.` });
+                } else if (type === 'AWARD_BOUNTY') {
+                    const bountyBlock = blockchainService.getBlockByHash(data.bountyId);
+                    if (bountyBlock) {
+                        const bountyTx = bountyBlock.transactions.find(t => t.type === 'CREATE_BOUNTY');
+                        if (bountyTx) {
+                            sendPush(data.winner, { title: '🏆 Bounty Awarded!', body: `You won the bounty for "${bountyTx.data.description.substring(0, 30)}..."!` });
+                        }
+                    }
+                }
+            }
+            
+            // Emit stake-specific notifications and push notifications
             if (type === 'REQUEST_SONG_SHARE') {
                 const reqTx = activeBlock.transactions[0];
                 const assetHash = reqTx.data.audioHash || reqTx.data.imageHash || reqTx.data.videoHash || reqTx.data.fileHash || reqTx.data.targetHash;
                 io.emit('stake_request_notification', { to: receiver, from: sender, requestId: activeBlock.hash, assetHash, shareCount: reqTx.data.shareCount, pricePerShare: reqTx.data.pricePerShare });
+                if (sendPush) sendPush(receiver, { title: 'New Stake Request 📈', body: `${fromProfile.username} wants to buy ${reqTx.data.shareCount}% of your asset.` });
             }
             if (type === 'ACCEPT_SHARE_REQUEST' || type === 'DECLINE_SHARE_REQUEST') {
                 const respTx = activeBlock.transactions[0];
-                io.emit('stake_request_response', { to: respTx.data.requester || respTx.receiver || null, from: sender, requestId: respTx.data.requestId, accepted: type === 'ACCEPT_SHARE_REQUEST' });
+                const originalRequestBlock = blockchainService.getBlockByHash(respTx.data.requestId);
+                if (originalRequestBlock) {
+                    const originalRequestTx = originalRequestBlock.transactions.find(tx => tx.type === 'REQUEST_SONG_SHARE');
+                    if (originalRequestTx) {
+                        const originalRequester = originalRequestTx.sender;
+                        io.emit('stake_request_response', { to: originalRequester, from: sender, requestId: respTx.data.requestId, accepted: type === 'ACCEPT_SHARE_REQUEST' });
+                        if (sendPush) sendPush(originalRequester, { title: `Stake Request ${type === 'ACCEPT_SHARE_REQUEST' ? 'Accepted' : 'Declined'}`, body: `${fromProfile.username} has ${type === 'ACCEPT_SHARE_REQUEST' ? 'accepted' : 'declined'} your request.` });
+                    }
+                }
             }
-            
+
             // Broadcast to other Full Nodes (Dedicated Servers/PCs)
             const peers = req.app.get('peers') || [];
             if (globalThis.fetch) {

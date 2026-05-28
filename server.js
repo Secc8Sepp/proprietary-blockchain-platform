@@ -44,6 +44,9 @@ function sendPushNotification(address, payload) {
     subs.forEach(sub => webpush.sendNotification(sub, JSON.stringify(payload)).catch(e => console.error('Push Error:', e)));
 }
 
+app.set('sendPushNotification', sendPushNotification);
+app.set('getProfileDirectory', getProfileDirectory);
+
 // ==========================================
 // SYSTEM DIAGNOSTIC TOOL (For Server Debugging)
 // ==========================================
@@ -268,48 +271,17 @@ io.on('connection', (socket) => {
             article.likes = (article.likes || 0) + 1;
             saveDBMemory();
             io.emit('zine_update', dbMemory.zineArticles);
+
+            // --- NOTIFICATION ---
+            const likerNode = dbMemory.connectedNodes[socket.id];
+            if (likerNode && article.author !== likerNode.address) {
+                const likerProfile = getProfileDirectory()[likerNode.address] || { username: `Node_${likerNode.address.substring(0,6)}` };
+                sendPushNotification(article.author, {
+                    title: 'Zine Article Liked ❤️',
+                    body: `${likerProfile.username} liked your article: "${article.title.substring(0, 40)}..."`
+                });
+            }
         }
-    });
-
-    socket.on('purchase_article_rights', (articleId) => {
-        const buyerNode = dbMemory.connectedNodes[socket.id];
-        if (!buyerNode) return;
-
-        const article = dbMemory.zineArticles.find(a => a.id === articleId);
-        if (!article) return;
-
-        const chain = blockchainService.getChain();
-        const balance = blockchainService.calculateBalance(buyerNode.address, chain);
-
-        if (balance < article.price) {
-            return socket.emit('chat_error', { 
-                message: `Transaction Denied: Insufficient $VOD. Balance: ${balance.toFixed(0)}, Required: ${article.price}` 
-            });
-        }
-
-        try {
-            // 1. Create and process the ledger transaction
-            const tx = {
-                sender: buyerNode.address,
-                receiver: article.author,
-                type: 'PURCHASE_ZINE_RIGHTS',
-                data: { articleId: article.id, title: article.title, amount: article.price },
-                timestamp: Date.now(),
-                signature: 'server-validated' // Placeholder signature for server-side transaction
-            };
-            const activeBlock = blockchainService.addTransaction(tx);
-            io.emit('blockchain_update', { type: tx.type, transaction: activeBlock.transactions[0] });
-        } catch (error) {
-            return socket.emit('chat_error', { message: `Transaction Failed: ${error.message}` });
-        }
-
-        // 2. Update In-Memory Rights
-        article.ownersList.push(buyerNode.address);
-        saveDBMemory();
-        
-        io.emit('zine_update', dbMemory.zineArticles);
-        socket.emit('article_purchased', { articleId });
-        console.log(`📰 Article Rights Purchased: ${article.title} by ${buyerNode.address}`);
     });
 
     socket.on('request_profile_directory', () => {
@@ -513,6 +485,11 @@ io.on('connection', (socket) => {
         if (targetSocketId) {
             io.to(targetSocketId).emit('crew_request_received', { from });
         }
+        const fromProfile = getProfileDirectory()[from] || { username: `Node_${from.substring(0,6)}` };
+        sendPushNotification(target, {
+            title: 'New Crew Request 🤝',
+            body: `${fromProfile.username} wants to lock in with you!`
+        });
     });
 
     socket.on('like_post', (data) => {
@@ -629,6 +606,19 @@ server.listen(PORT, () => {
             }
         });
         block.transactions.forEach(extractAndSyncHashes);
+
+        // Update in-memory state based on new transactions
+        block.transactions.forEach(tx => {
+            if (tx.type === 'PURCHASE_ZINE_RIGHTS') {
+                const article = dbMemory.zineArticles.find(a => a.id === tx.data.articleId);
+                if (article && !article.ownersList.includes(tx.sender)) {
+                    article.ownersList.push(tx.sender);
+                    saveDBMemory();
+                    io.emit('zine_update', dbMemory.zineArticles); // Notify all clients of the ownership change
+                    console.log(`📰 Article Rights Updated via Ledger: ${article.title} by ${tx.sender}`);
+                }
+            }
+        });
     });
 });
 

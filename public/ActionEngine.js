@@ -437,10 +437,6 @@ window.ActionEngine = {
                 const hash = await uploadMediaAssetFile(file);
                 await window.CoreEngine.sendSignedTransaction('FULFILL_COMMISSION', '0x00', { commissionId: commId, assetHash: hash });
                 alert("Commission fulfilled! Escrow funds have been successfully released to your wallet.");
-                
-                const activeComms = currentViewedProfile ? currentViewedProfile.activeCommissions : [];
-                const c = activeComms.find(x => x.id === commId);
-                if(c) this.socket.emit('trigger_push', { target: c.buyer, payload: { title: 'Commission Fulfilled! 📦', body: `${resolveProfile(window.CoreEngine.userKeys.publicKey).username} uploaded the asset for your escrow.` } });
 
                 fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
             } catch(err) { alert("Fulfillment failed: " + err.message); }
@@ -680,9 +676,20 @@ window.ActionEngine = {
         switchZineSubTab('market');
     },
 
-    purchaseArticleRights(articleId) {
+    async purchaseArticleRights(articleId, price, author) {
         if(!window.CoreEngine.userKeys.publicKey) return alert("Please login.");
-        this.socket.emit('purchase_article_rights', articleId);
+        if (author === window.CoreEngine.userKeys.publicKey) return alert("You cannot buy rights to your own article.");
+        if (!confirm(`Acquire curation rights for this article for ${price} $VOD?`)) return;
+
+        try {
+            await window.CoreEngine.sendSignedTransaction('PURCHASE_ZINE_RIGHTS', author, { articleId, price });
+            
+            // The server will emit a zine_update, but we can give instant feedback.
+            alert("Curation Rights Acquired! The article is now in your collection.");
+            if(window.CoreEngine.userKeys.publicKey) window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, true);
+            if(window.renderZine) window.renderZine();
+
+        } catch (err) { alert("Purchase failed: " + err.message); }
     },
 
     likeArticle(articleId) {

@@ -18,6 +18,7 @@ let currentViewedProfile = null;
 let swRegistration = null;
 let localDB = null;
 let editedTop8 = [];
+let pendingCrewRequests = [];
 
 document.addEventListener('DOMContentLoaded', () => { 
     window.networkProfiles = {}; window.zineArticles = []; window.hotOrNotData = [];
@@ -2121,7 +2122,7 @@ function renderZine() {
         const isOwner = art.ownersList.includes(myAddr) || art.author === myAddr;
         const buyBtn = isOwner 
             ? `<button class="secondary" disabled style="width:100%; opacity:0.5;">Rights Owned</button>` 
-            : `<button style="width:100%;" onclick="window.ActionEngine.purchaseArticleRights('${art.id}')">Buy Curation Rights: ${art.price} $VOD</button>`;
+            : `<button style="width:100%;" onclick="window.ActionEngine.purchaseArticleRights('${art.id}', ${art.price}, '${art.author}')">Buy Curation Rights: ${art.price} $VOD</button>`;
 
         return `
             <div class="article-card">

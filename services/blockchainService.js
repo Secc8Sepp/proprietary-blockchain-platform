@@ -51,6 +51,11 @@ class BlockchainService extends EventEmitter {
         }
     }
 
+    getBlockByHash(hash) {
+        const chain = this.getChain();
+        return chain.find(b => b.hash === hash);
+    }
+
     saveChain(chain) {
         fs.writeFileSync(CHAIN_FILE, JSON.stringify(chain, null, 2));
     }
@@ -245,6 +250,13 @@ class BlockchainService extends EventEmitter {
                     if (tx.receiver === publicKey) balance += netEarnings; // Seller gets 95%
                 }
 
+                if (tx.type === 'PURCHASE_ZINE_RIGHTS') {
+                    const price = parseFloat(tx.data.price) || 0;
+                    if (tx.sender === publicKey) balance -= price;
+                    if (tx.receiver === publicKey) balance += price; // No tax on zine rights for now
+                }
+
+
                 // --- ERC-20 BRIDGE (LAYER 1 <-> LAYER 2) ---
                 if (tx.type === 'BRIDGE_WITHDRAW') {
                     const amt = parseFloat(tx.data.amount) || 0;
@@ -304,6 +316,7 @@ class BlockchainService extends EventEmitter {
             if (type === 'BUY_ITEM' && currentBalance < parseFloat(data.price)) throw new Error("Insufficient funds for purchase.");
             if (type === 'LIST_ITEM' && currentBalance < 500) throw new Error("Need 500 $VOD to list an item on the market.");
             if (type === 'CREATE_BOUNTY' && currentBalance < parseFloat(data.amount)) throw new Error("Insufficient funds for bounty.");
+            if (type === 'PURCHASE_ZINE_RIGHTS' && currentBalance < parseFloat(data.price)) throw new Error("Insufficient funds to purchase Zine rights.");
             if (type === 'BRIDGE_WITHDRAW' && currentBalance < parseFloat(data.amount)) throw new Error("Insufficient funds for bridge withdrawal.");
         }
 

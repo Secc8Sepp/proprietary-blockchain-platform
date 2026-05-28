@@ -73,10 +73,24 @@ window.MeshEngine = {
         });
 
         socket.on('crew_request_received', (data) => {
-            const username = window.resolveProfile(data.from).username;
-            if (confirm(`🤝 ${username} just locked you in their Crew! Do you want to follow them back and become mutuals?`)) {
-                window.ActionEngine.executeTargetFollow(data.from, true);
+            if (!window.pendingCrewRequests) window.pendingCrewRequests = [];
+            // Avoid duplicates
+            if (window.pendingCrewRequests.find(r => r.from === data.from)) return;
+
+            window.pendingCrewRequests.push({ from: data.from });
+            
+            const badge = document.getElementById('ui-requests-badge');
+            if (badge) {
+                badge.innerText = window.pendingCrewRequests.length;
+                badge.classList.remove('hidden');
             }
+
+            if (typeof window.renderCrewRequests === 'function') {
+                window.renderCrewRequests();
+            }
+            
+            const username = window.resolveProfile(data.from).username;
+            alert(`🤝 ${username} sent you a crew request! Check your notifications.`);
         });
 
         socket.on('user_typing', (data) => {
