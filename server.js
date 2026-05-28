@@ -111,7 +111,13 @@ app.get('/api/debug/system', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/social', socialRoutes);
 app.use('/api/feed', feedRoutes);
-app.use('/api/tools', require('./routes/tools'));
+try {
+    app.use('/api/tools', require('./routes/tools'));
+} catch (e) {
+    if (e.code === 'MODULE_NOT_FOUND') {
+        console.warn("⚠️  './routes/tools.js' not found, skipping. AI Stem Splitter will be disabled.");
+    } else { throw e; }
+}
 
 app.get('/api/social/hotornot', (req, res) => {
     res.json(require('./services/profileService').getHotOrNotEngine());
@@ -221,6 +227,7 @@ io.on('connection', (socket) => {
     console.log(`📡 New Node Connected: ${socket.id}`);
 
     socket.on('register_node', (data) => {
+        if (!data || !data.address) return;
         dbMemory.connectedNodes[socket.id] = { address: data.address, status: 'online', activity: null };
         socket.emit('profile_directory', profileService.getProfileDirectory());
         socket.emit('zine_update', dbMemory.zineArticles);
@@ -239,6 +246,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('publish_article', (data) => {
+        if (!data || !data.title || !data.body || !data.price || !data.author) return;
         const article = {
             id: 'art_' + Date.now(),
             title: data.title,
@@ -256,6 +264,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('like_article', (articleId) => {
+        if (!articleId) return;
         const article = dbMemory.zineArticles.find(a => a.id === articleId);
         if (article) {
             article.likes = (article.likes || 0) + 1;
@@ -279,6 +288,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('update_presence', (data) => {
+        if (!data) return;
         const node = dbMemory.connectedNodes[socket.id];
         if (node) {
             if (data.status !== undefined) node.status = data.status;
@@ -299,6 +309,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('create_server', (data) => {
+        if (!data || !data.serverName || !data.address) return;
         const { serverName, address } = data;
         const serverId = 'srv_' + Date.now() + Math.floor(Math.random()*1000);
         const generalChannelId = 'ch_' + Date.now();
@@ -319,6 +330,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('create_channel', (data) => {
+        if (!data || !data.serverId || !data.channelName || !data.address) return;
         const { serverId, channelName, address, locked } = data;
         if (dbMemory.servers[serverId]) {
             const channelId = 'ch_' + Date.now() + Math.floor(Math.random()*1000);
@@ -329,6 +341,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('join_channel', (data) => {
+        if (!data || !data.serverId || !data.channelId || !data.address) return;
         const { serverId, channelId, address } = data;
         
         const server = dbMemory.servers[serverId];
@@ -363,6 +376,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('send_message', (data) => {
+        if (!data || !data.serverId || !data.channelId || !data.address || typeof data.text === 'undefined') return;
         const { serverId, channelId, address, text } = data;
         const server = dbMemory.servers[serverId];
         if (server && server.channels[channelId]) {
@@ -380,10 +394,12 @@ io.on('connection', (socket) => {
     });
 
     socket.on('trigger_push', (data) => {
+        if (!data || !data.target || !data.payload) return;
         sendPushNotification(data.target, data.payload);
     });
 
     socket.on('user_typing', (data) => {
+        if (!data || !data.serverId || !data.channelId) return;
         const { serverId, channelId, sender } = data;
         if (serverId === '@dms') {
             const targetSocketId = Object.keys(dbMemory.connectedNodes).find(
@@ -398,6 +414,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('message_read', (data) => {
+        if (!data || !data.to || !data.time) return;
         const { to, time } = data;
         const senderNode = dbMemory.connectedNodes[socket.id];
         if (!senderNode) return;
@@ -411,6 +428,7 @@ io.on('connection', (socket) => {
 
     // --- 1-ON-1 DIRECT MESSAGING & REACTIONS ---
     socket.on('send_direct_message', (data) => {
+        if (!data || !data.to || typeof data.text === 'undefined') return;
         const senderNode = dbMemory.connectedNodes[socket.id];
         if (!senderNode) return;
         
@@ -443,6 +461,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('add_message_reaction', (data) => {
+        if (!data || !data.serverId || !data.channelId || !data.msgId || !data.emoji) return;
         const { serverId, channelId, msgId, emoji } = data;
         const server = dbMemory.servers[serverId];
         if (server && server.channels[channelId]) {
@@ -458,6 +477,9 @@ io.on('connection', (socket) => {
 
     // --- NOTIFICATIONS, LIKES & CREW REQUESTS ---
     socket.on('notify_mention', (data) => {
+        if (!data || !data.target || !data.from) {
+            return; // Invalid data, ignore.
+        }
         const { target, from } = data;
         const fromProfile = profileService.getProfileDirectory()[from] || { username: `Node_${from.substring(0,6)}` };
         const payload = {
@@ -472,6 +494,9 @@ io.on('connection', (socket) => {
     });
 
     socket.on('send_crew_request', (data) => {
+        if (!data || !data.target || !data.from) {
+            return; // Invalid data, ignore.
+        }
         const { target, from } = data;
         const targetSocketId = Object.keys(dbMemory.connectedNodes).find(
             id => dbMemory.connectedNodes[id].address === target
@@ -487,31 +512,47 @@ io.on('connection', (socket) => {
     });
 
     socket.on('like_post', (data) => {
+        if (!data || !data.txHash) return;
         socket.broadcast.emit('post_liked', data);
     });
 
     socket.on('reply_post', (data) => {
+        if (!data || !data.txHash || typeof data.text === 'undefined') return;
         socket.broadcast.emit('post_replied', data);
     });
 
     // --- WEBRTC VOICE CHANNELS ---
     socket.on('webrtc_join_voice', (data) => {
+        if (!data || !data.serverId || !data.channelId || !data.address) return;
         const voiceRoom = `voice_${data.serverId}_${data.channelId}`;
         socket.join(voiceRoom);
         // Notify others in the voice room to initiate P2P offer
         socket.to(voiceRoom).emit('webrtc_user_joined', { socketId: socket.id, address: data.address });
     });
-    socket.on('webrtc_offer', (data) => { io.to(data.target).emit('webrtc_offer', { sdp: data.sdp, sender: socket.id }); });
-    socket.on('webrtc_answer', (data) => { io.to(data.target).emit('webrtc_answer', { sdp: data.sdp, sender: socket.id }); });
-    socket.on('webrtc_ice_candidate', (data) => { io.to(data.target).emit('webrtc_ice_candidate', { candidate: data.candidate, sender: socket.id }); });
+    socket.on('webrtc_offer', (data) => {
+        if (data && data.target) io.to(data.target).emit('webrtc_offer', { sdp: data.sdp, sender: socket.id });
+    });
+    socket.on('webrtc_answer', (data) => {
+        if (data && data.target) io.to(data.target).emit('webrtc_answer', { sdp: data.sdp, sender: socket.id });
+    });
+    socket.on('webrtc_ice_candidate', (data) => {
+        if (data && data.target) io.to(data.target).emit('webrtc_ice_candidate', { candidate: data.candidate, sender: socket.id });
+    });
 
     // --- WEBRTC BROWSER DATA MESH SIGNALING ---
-    socket.on('mesh_offer', (data) => { io.to(data.target).emit('mesh_offer', { sdp: data.sdp, sender: socket.id }); });
-    socket.on('mesh_answer', (data) => { io.to(data.target).emit('mesh_answer', { sdp: data.sdp, sender: socket.id }); });
-    socket.on('mesh_ice_candidate', (data) => { io.to(data.target).emit('mesh_ice_candidate', { candidate: data.candidate, sender: socket.id }); });
+    socket.on('mesh_offer', (data) => {
+        if (data && data.target) io.to(data.target).emit('mesh_offer', { sdp: data.sdp, sender: socket.id });
+    });
+    socket.on('mesh_answer', (data) => {
+        if (data && data.target) io.to(data.target).emit('mesh_answer', { sdp: data.sdp, sender: socket.id });
+    });
+    socket.on('mesh_ice_candidate', (data) => {
+        if (data && data.target) io.to(data.target).emit('mesh_ice_candidate', { candidate: data.candidate, sender: socket.id });
+    });
 
     // --- SECURE LISTEN-TO-EARN ENGINE ---
     socket.on('l2e_ping', (data) => {
+        if (!data || !data.address || !data.trackHash) return;
         const { address, trackHash } = data;
         const now = Date.now();
         let session = dbMemory.l2eSessions[socket.id];
