@@ -1601,7 +1601,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
 
             if (profile.recommended && profile.recommended.length > 0) {
                 html += `<div style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px; text-transform: uppercase; font-weight: bold;">Suggested Connections</div>`;
-                html += profile.recommended.map(key => `
+                html += profile.recommended.map(rec => `
                     <div style="display:flex; align-items:center; gap:10px; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; transition: 0.2s; margin-bottom: 5px;" onclick="inspectTargetNode('${rec.key}')" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='transparent'">
                         <img src="${getAvatarUrl(rec.key)}" style="width: 30px; height: 30px; border-radius: 50%;">
                         <div style="display: flex; flex-direction: column;">
