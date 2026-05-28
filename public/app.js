@@ -21,6 +21,8 @@ let editedTop8 = [];
 let pendingCrewRequests = [];
 window.activeWaveform = null;
 window.waveformInstances = {};
+window.userNotifications = [];
+window.unreadNotificationCount = 0;
 
 document.addEventListener('DOMContentLoaded', () => { 
     window.networkProfiles = {}; window.zineArticles = []; window.hotOrNotData = [];
@@ -94,6 +96,13 @@ function initializeApplicationListeners() {
         storyBtn.addEventListener('click', () => window.ActionEngine.handlePublishPost(true));
         console.log('[INIT] ✓ Story button wired');
     }
+
+    // This element needs to exist in index.html, wrapping the notification badge
+    const notifBtn = document.getElementById('nav-notifications-btn'); 
+    if (notifBtn) {
+        notifBtn.addEventListener('click', toggleNotificationsPanel);
+        console.log('[INIT] ✓ Notifications panel wired');
+    }
     
     const imgUpload = document.getElementById('composer-image-upload');
     if(imgUpload) imgUpload.addEventListener('change', updateComposerPreview);
@@ -165,6 +174,21 @@ function initializeApplicationListeners() {
                 fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
             }
         } catch (e) {}
+    });
+
+    socket.on('new_notification', (payload) => {
+        window.userNotifications.push({ ...payload, timestamp: Date.now() });
+        window.unreadNotificationCount++;
+        const badge = document.getElementById('ui-notif-badge');
+        if (badge) {
+            badge.innerText = window.unreadNotificationCount;
+            badge.classList.remove('hidden');
+        }
+        // If the panel is open, refresh it
+        const panel = document.getElementById('notifications-panel');
+        if (panel && panel.style.display !== 'none') {
+            renderNotificationsList();
+        }
     });
     console.log('[INIT] Event listeners initialized');
 }
@@ -432,7 +456,7 @@ async function loadMainGlobalFeed() {
 
             const canRepost = !iAmActionTaker;
             const originalHashForRepost = item.isRepost ? item.data.originalTxHash : item.transactionHash;
-            const repostBtn = canRepost ? `<button class="interaction-btn" onclick="window.ActionEngine.repostPost('${originalHashForRepost}')">🔁 Repost</button>` : '';
+            const repostBtn = canRepost ? `<button class="interaction-btn" onclick="window.ActionEngine.promptRepostPost('${originalHashForRepost}')">🔁 Repost</button>` : '';
 
             const canTip = !isMyContent;
             const tipBtn = canTip ? `<button class="interaction-btn" onclick="window.WalletEngine.promptSendCoins('${originalSender}')">💸 Tip</button>` : '';
@@ -442,32 +466,37 @@ async function loadMainGlobalFeed() {
                 <span style="cursor:pointer;" onclick="inspectTargetNode('${actionTaker}')">${resolveProfile(actionTaker).username} reposted</span>
             </div>` : '';
 
+            const repostCaptionHtml = item.isRepost && item.repostCaption ? `<div class="post-body" style="padding-left: 65px; margin-bottom: 15px;">${parseMentions(item.repostCaption)}</div>` : '';
+
             postEl.innerHTML = `
                 ${repostHeader}
-                <div class="post-avatar" onclick="inspectTargetNode('${originalSender}')" style="cursor:pointer;"><img src="${getAvatarUrl(originalSender)}"></div>
-                <div style="flex: 1;">
-                    <div class="post-header">
-                        <span class="post-name" onclick="inspectTargetNode('${originalSender}')">${resolveProfile(originalSender).username}</span>
-                        ${renderBadges(item.roles || [])}
-                        <span class="post-meta" style="margin-left:auto;">${originalSender.substring(0,10)}... • ${new Date(item.isRepost ? item.data.timestamp : item.timestamp).toLocaleString()}</span>
-                        ${!isMyContent ? `<button class="secondary" style="padding: 2px 5px; font-size: 10px; margin-left: 10px;" onclick="toggleBlockNode('${originalSender}')">Block</button>` : ''}
-                    </div>
-                    ${renderPostContent(item)}
-                    <div class="post-interactions">
-                        <button class="interaction-btn" onclick="window.ActionEngine.toggleLike('${actionHash}', '${actionTaker}')">🔥 <span id="like-count-${actionHash}">${item.likeCount || 0}</span></button>
-                        <button class="interaction-btn" onclick="toggleReplyBox('${actionHash}')">💬 Reply</button>
-                        ${repostBtn}
-                        ${editBtn}
-                        ${tipBtn}
-                        ${deleteBtn}
-                    </div>
-                    <div class="reply-box" id="reply-box-${actionHash}">
-                        <textarea placeholder="Write a reply..."></textarea>
-                        <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${actionHash}', '${actionTaker}')">Post Reply</button>
-                        <div id="replies-list-${actionHash}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
-                            ${renderThreadedReplies(item.replies, 0, actionHash)}
+                ${repostCaptionHtml}
+                <div class="original-post-wrapper" style="display: flex; gap: 15px; ${item.isRepost ? 'border: 1px solid var(--border); padding: 15px; border-radius: 8px; background: rgba(0,0,0,0.2);' : ''}">
+                    <div class="post-avatar" onclick="inspectTargetNode('${originalSender}')" style="cursor:pointer;"><img src="${getAvatarUrl(originalSender)}"></div>
+                    <div style="flex: 1; min-width: 0;">
+                        <div class="post-header">
+                            <span class="post-name" onclick="inspectTargetNode('${originalSender}')">${resolveProfile(originalSender).username}</span>
+                            ${renderBadges(item.roles || [])}
+                            <span class="post-meta" style="margin-left:auto;">${originalSender.substring(0,10)}... • ${new Date(item.isRepost ? item.data.timestamp : item.timestamp).toLocaleString()}</span>
+                            ${!isMyContent ? `<button class="secondary" style="padding: 2px 5px; font-size: 10px; margin-left: 10px;" onclick="toggleBlockNode('${originalSender}')">Block</button>` : ''}
+                        </div>
+                        ${renderPostContent(item)}
+                        <div class="post-interactions">
+                            <button class="interaction-btn" onclick="window.ActionEngine.toggleLike('${actionHash}', '${actionTaker}')">🔥 <span id="like-count-${actionHash}">${item.likeCount || 0}</span></button>
+                            <button class="interaction-btn" onclick="toggleReplyBox('${actionHash}')">💬 Reply</button>
+                            ${repostBtn}
+                            ${editBtn}
+                            ${tipBtn}
+                            ${deleteBtn}
                         </div>
                     </div>
+                </div>
+                <div class="reply-box" id="reply-box-${actionHash}">
+                    <textarea placeholder="Write a reply..."></textarea>
+                    <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${actionHash}', '${actionTaker}', null, ${item.data.audioHash ? `'${item.data.audioHash}'` : 'null'})">Post Reply</button>
+                </div>
+                <div id="replies-list-${actionHash}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px; padding-left: 65px;">
+                    ${renderThreadedReplies(item.replies, 0, actionHash)}
                 </div>
             `;
             container.appendChild(postEl);
@@ -508,6 +537,14 @@ function renderPostContent(item) {
             
             window.waveformInstances[audioHash] = wavesurfer;
 
+            const playButton = document.getElementById(`play-btn-${audioHash}`);
+            if (playButton) playButton.disabled = true;
+
+            wavesurfer.on('ready', () => {
+                if (playButton) playButton.disabled = false;
+                console.log(`[Waveform] Ready: ${audioHash}`);
+            });
+
             wavesurfer.load(`/tracks/${audioHash}`);
 
             const playButton = document.getElementById(`play-btn-${audioHash}`);
@@ -537,7 +574,7 @@ function renderPostContent(item) {
                 }
             });
 
-            const timedComments = item.timedComments || [];
+            const timedComments = (item.replies || []).filter(r => r.audioTimestamp !== undefined && r.audioTimestamp !== null);
             const commentsOverlayContainer = document.getElementById(`comments-overlay-${audioHash}`);
             
             timedComments.forEach(comment => {
@@ -596,6 +633,14 @@ function renderPostContent(item) {
                 }
             });
 
+            wavesurfer.on('error', (err) => {
+                console.error(`WaveSurfer error for ${audioHash}:`, err);
+                if (playButton) {
+                    playButton.innerText = '❌ Error';
+                    playButton.disabled = true;
+                }
+            });
+
         }, 500);
 
         let coverHtml = item.data.coverHash ? `<img src="/tracks/${item.data.coverHash}" style="width: 60px; height: 60px; border-radius: 6px; object-fit: cover;">` : '';
@@ -625,7 +670,7 @@ function renderPostContent(item) {
         }
 
         return `
-            <div class="audio-post-v2" style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border: 1px solid rgba(69, 162, 158, 0.2);">
+            <div class="audio-post-v2">
                 ${item.data.caption ? `<div style="margin-bottom: 10px; color: #fff;">${parseMentions(item.data.caption)}</div>` : ''}
                 <div style="display: flex; gap: 15px; margin-bottom: 10px;">
                     ${coverHtml}
@@ -642,12 +687,8 @@ function renderPostContent(item) {
                 </div>
 
                 <div style="display: flex; gap: 10px; margin-bottom: 10px; align-items: center;">
-                    <button id="play-btn-${audioHash}" style="background:#66fcf1; color:#000; padding:8px 15px;">
+                    <button id="play-btn-${audioHash}" style="background:#66fcf1; color:#000; padding:8px 15px; flex-grow: 1;">
                         ▶ Play
-                    </button>
-                    <input type="text" id="timed-comment-input-${audioHash}" placeholder="Comment at current time..." style="flex: 1; margin: 0; padding: 8px; font-size: 12px;">
-                    <button class="secondary" style="padding:8px 15px; font-size: 12px;" onclick="window.ActionEngine.submitTimedComment('${transactionHash}', '${audioHash}')">
-                        💬 Post
                     </button>
                 </div>
                 <div style="display: flex; gap: 10px;">
@@ -1769,10 +1810,10 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                             </div>
                             <div class="reply-box" id="reply-box-${item.transactionHash}">
                                 <textarea placeholder="Write a reply..."></textarea>
-                                <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${item.transactionHash}', '${item.sender}')">Post Reply</button>
-                                <div id="replies-list-${item.transactionHash}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
-                                    ${renderThreadedReplies(item.replies, 0, item.transactionHash)}
-                                </div>
+                                <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${item.transactionHash}', '${item.sender}', null, ${item.data.audioHash ? `'${item.data.audioHash}'` : 'null'})">Post Reply</button>
+                            </div>
+                            <div id="replies-list-${item.transactionHash}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+                                ${renderThreadedReplies(item.replies, 0, item.transactionHash)}
                             </div>
                         </div>
                     `;
@@ -2198,14 +2239,6 @@ function detectMentionsAndEmit(text) {
     }
 }
 
-window.handleMentionNotification = (data) => {
-    const badge = document.getElementById('ui-notif-badge');
-    if (badge) {
-        badge.innerText = parseInt(badge.innerText) + 1;
-        badge.classList.remove('hidden');
-    }
-};
-
 function resetNotifBadge() {
     const badge = document.getElementById('ui-notif-badge');
     if (badge) {
@@ -2274,11 +2307,78 @@ function renderThreadedReplies(repliesArray, depthLevel, txHash) {
             </div>
             <div class="reply-box" id="reply-box-${r.id}" style="margin-top: 5px;">
                 <textarea placeholder="Write a reply..."></textarea>
-                <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${txHash}', '${r.sender}', '${r.id}')">Post Reply</button>
+                <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${txHash}', '${r.sender}', '${r.id}', null)">Post Reply</button>
             </div>
             ${r.replies && r.replies.length > 0 ? renderThreadedReplies(r.replies, depthLevel + 1, txHash) : ''}
         </div>
     `).join('');
+}
+
+// ==========================================
+// NOTIFICATIONS ENGINE
+// ==========================================
+
+function toggleNotificationsPanel() {
+    let panel = document.getElementById('notifications-panel');
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'notifications-panel';
+        panel.style = `
+            position: fixed;
+            top: 60px;
+            right: 20px;
+            width: 350px;
+            max-height: 500px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            z-index: 2000;
+            display: none;
+            flex-direction: column;
+        `;
+        panel.innerHTML = `
+            <div style="padding: 15px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+                <h4 style="margin: 0; color: #fff;">Notifications</h4>
+                <button class="secondary" style="padding: 2px 8px; font-size: 11px;" onclick="clearNotifications()">Clear All</button>
+            </div>
+            <div id="notifications-list" style="overflow-y: auto; flex-grow: 1; padding: 0;"></div>
+        `;
+        document.body.appendChild(panel);
+    }
+
+    const isHidden = panel.style.display === 'none';
+    if (isHidden) {
+        renderNotificationsList();
+        panel.style.display = 'flex';
+        window.unreadNotificationCount = 0;
+        resetNotifBadge();
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+function renderNotificationsList() {
+    const listEl = document.getElementById('notifications-list');
+    if (!listEl) return;
+    if (window.userNotifications.length === 0) {
+        listEl.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px;">No notifications yet.</div>';
+        return;
+    }
+    listEl.innerHTML = window.userNotifications.slice().reverse().map(notif => `
+        <div style="padding: 12px 15px; border-bottom: 1px solid var(--border); font-size: 13px; color: #eee;">
+            <strong>${escapeHtml(notif.title)}</strong>
+            <p style="margin: 4px 0 0 0; color: var(--text-muted);">${escapeHtml(notif.body)}</p>
+            <div style="font-size: 10px; color: var(--text-muted); text-align: right; margin-top: 5px;">${new Date(notif.timestamp).toLocaleString()}</div>
+        </div>
+    `).join('');
+}
+
+function clearNotifications() {
+    window.userNotifications = [];
+    window.unreadNotificationCount = 0;
+    renderNotificationsList();
+    resetNotifBadge();
 }
 
 // ==========================================

@@ -47,6 +47,7 @@ function sendPushNotification(address, payload) {
 
 app.set('sendPushNotification', sendPushNotification);
 app.set('getProfileDirectory', () => profileService.getProfileDirectory());
+app.set('connectedNodes', dbMemory.connectedNodes);
 
 // ==========================================
 // SYSTEM DIAGNOSTIC TOOL (For Server Debugging)
@@ -440,12 +441,16 @@ io.on('connection', (socket) => {
     // --- NOTIFICATIONS, LIKES & CREW REQUESTS ---
     socket.on('notify_mention', (data) => {
         const { target, from } = data;
-        const targetSocketId = Object.keys(dbMemory.connectedNodes).find(
-            id => dbMemory.connectedNodes[id].address === target
-        );
-        if (targetSocketId) {
-            io.to(targetSocketId).emit('mention_notification', { from });
-        }
+        const fromProfile = profileService.getProfileDirectory()[from] || { username: `Node_${from.substring(0,6)}` };
+        const payload = {
+            title: 'You were mentioned! 💬',
+            body: `${fromProfile.username} mentioned you in a post.`
+        };
+        // Send web push for background users
+        sendPushNotification(target, payload);
+        // Send socket event for active users
+        const targetSocketId = Object.keys(dbMemory.connectedNodes).find(id => dbMemory.connectedNodes[id].address === target);
+        if (targetSocketId) io.to(targetSocketId).emit('new_notification', payload);
     });
 
     socket.on('send_crew_request', (data) => {

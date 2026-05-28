@@ -642,7 +642,7 @@ window.ActionEngine = {
         }
     },
 
-    async submitReply(txHash, receiver, parentReplyId = null) {
+    async submitReply(txHash, receiver, parentReplyId = null, audioHash = null) {
         const boxId = parentReplyId ? `reply-box-${parentReplyId}` : `reply-box-${txHash}`;
         const box = document.getElementById(boxId);
         if (!box) return;
@@ -653,31 +653,22 @@ window.ActionEngine = {
         
         box.querySelector('textarea').value = '';
         this.socket.emit('reply_post', { txHash, address: window.CoreEngine.userKeys.publicKey, text: text.trim(), parentReplyId });
+        
+        const data = { txHash: txHash, text: text.trim(), parentReplyId };
+        data.replyId = Date.now() + '_' + window.CoreEngine.userKeys.publicKey.substring(0, 10);
+
+        // If this is a reply on a song post, check for an active waveform to make it a timed comment
+        if (audioHash && window.waveformInstances && window.waveformInstances[audioHash]) {
+            const wavesurfer = window.waveformInstances[audioHash];
+            if (wavesurfer.isPlaying()) {
+                data.audioTimestamp = wavesurfer.getCurrentTime();
+            }
+        }
 
         try {
-            const replyId = Date.now() + '_' + window.CoreEngine.userKeys.publicKey.substring(0, 10);
-            await window.CoreEngine.sendSignedTransaction('REPLY_POST', receiver || '0x00', { txHash: txHash, text: text.trim(), parentReplyId, replyId });
+            await window.CoreEngine.sendSignedTransaction('REPLY_POST', receiver || '0x00', data);
         } catch (err) {
             console.error("Reply block failed:", err);
-        }
-    },
-
-    async submitShout() {
-        if (!window.CoreEngine.userKeys.publicKey) return alert("You must be logged in to post a shout.");
-        if (!viewingUserPublicKey) return;
-
-        const input = document.getElementById('shoutbox-input');
-        const message = input.value.trim();
-        if (!message) return;
-
-        try {
-            await window.CoreEngine.sendSignedTransaction('SHOUTBOX_POST', viewingUserPublicKey, { message });
-            input.value = '';
-            alert("Shout posted to the ledger!");
-            // Refresh the profile to show the new shout
-            fetchUserProfile(viewingUserPublicKey, false);
-        } catch (err) {
-            alert("Failed to post shout: " + err.message);
         }
     },
 
@@ -795,38 +786,4 @@ window.ActionEngine = {
             }
         }
     },
-
-    async repostPost(txHash) {
-        if (!window.CoreEngine.userKeys.publicKey) return alert("You must login first.");
-        if (!confirm("Are you sure you want to repost this to your followers?")) return;
-        try {
-            await window.CoreEngine.sendSignedTransaction('REPOST_POST', '0x00', { originalTxHash: txHash });
-            alert("Post successfully reposted!");
-            loadMainGlobalFeed();
-        } catch (err) {
-            alert("Failed to repost: " + err.message);
-        }
-    },
-
-    async submitTimedComment(txHash, audioHash) {
-        if (!window.CoreEngine.userKeys.publicKey) return alert("You must login first.");
-
-        const input = document.getElementById(`timed-comment-input-${audioHash}`);
-        const text = input.value.trim();
-        if (!text) return;
-
-        const wavesurfer = window.waveformInstances ? window.waveformInstances[audioHash] : null;
-        if (!wavesurfer) return alert("Waveform not initialized.");
-
-        const audioTimestamp = wavesurfer.getCurrentTime();
-
-        try {
-            await window.CoreEngine.sendSignedTransaction('TIMED_COMMENT', '0x00', { txHash, text, audioTimestamp });
-            alert("Timed comment posted!");
-            input.value = '';
-            loadMainGlobalFeed(); // Reload to see the new comment
-        } catch (err) {
-            alert("Failed to post comment: " + err.message);
-        }
-    }
 };

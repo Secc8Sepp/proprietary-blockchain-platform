@@ -384,7 +384,6 @@ class ProfileService {
         const deletedPosts = new Set();
         const songListings = {};
         const trackMetadata = {};
-        const timedComments = {};
         const postMetadata = {};
 
         // Pass 1: Gather metric aggregates from the ledger
@@ -458,14 +457,6 @@ class ProfileService {
                         text: tx.data.text, 
                         timestamp: tx.timestamp,
                         parentReplyId: tx.data.parentReplyId || null,
-                        replies: []
-                    });
-                }
-                if (tx.type === 'TIMED_COMMENT') {
-                    if (!timedComments[tx.data.txHash]) timedComments[tx.data.txHash] = [];
-                    timedComments[tx.data.txHash].push({
-                        sender: tx.sender,
-                        text: tx.data.text,
                         audioTimestamp: tx.data.audioTimestamp,
                         timestamp: tx.timestamp
                     });
@@ -534,9 +525,6 @@ class ProfileService {
                         feedItem.shares = shareDistribution[assetHash] || {};
                         feedItem.listing = songListings[assetHash];
                         if (trackMetadata[assetHash]) {
-                            if (tx.type === 'SONG_UPLOAD') {
-                                feedItem.timedComments = (timedComments[block.hash] || []).sort((a,b) => a.audioTimestamp - b.audioTimestamp);
-                            }
                             feedItem.data.trackTitle = trackMetadata[assetHash].title;
                             feedItem.data.artist = trackMetadata[assetHash].artist;
                             feedItem.data.offPlatformCollaborator = trackMetadata[assetHash].offPlatformCollaborator;
@@ -567,6 +555,7 @@ class ProfileService {
                     // Create a new object that is the original post, but overridden with repost info
                     return {
                         ...originalPost, // The full, enriched original post object
+                        repostCaption: item.data.caption,
                         isRepost: true,
                         reposter: item.sender, // The person who reposted
                         timestamp: item.timestamp, // The time of the repost
