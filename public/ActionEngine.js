@@ -245,7 +245,9 @@ window.ActionEngine = {
     async silentDeletePost(txHash) {
         try {
             await window.CoreEngine.sendSignedTransaction('DELETE_POST', '0x00', { txHash });
-        } catch (err) {}
+        } catch (err) {
+            console.error('[ActionEngine] Silent delete failed:', err);
+        }
     },
 
     requestSongShare(hash, seller) {

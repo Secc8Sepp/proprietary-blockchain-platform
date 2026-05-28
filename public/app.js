@@ -496,7 +496,7 @@ async function loadMainGlobalFeed() {
                     <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${actionHash}', '${actionTaker}', null, ${item.data.audioHash ? `'${item.data.audioHash}'` : 'null'})">Post Reply</button>
                 </div>
                 <div id="replies-list-${actionHash}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px; padding-left: 65px;">
-                    ${renderThreadedReplies(item.replies, 0, actionHash)}
+                    ${renderThreadedReplies(item.replies, 0, actionHash, item.type === 'SONG_UPLOAD' ? item.data.audioHash : null)}
                 </div>
             `;
             container.appendChild(postEl);
@@ -538,17 +538,8 @@ function renderPostContent(item) {
             window.waveformInstances[audioHash] = wavesurfer;
 
             const playButton = document.getElementById(`play-btn-${audioHash}`);
-            if (playButton) playButton.disabled = true;
-
-            wavesurfer.on('ready', () => {
-                if (playButton) playButton.disabled = false;
-                console.log(`[Waveform] Ready: ${audioHash}`);
-            });
-
-            wavesurfer.load(`/tracks/${audioHash}`);
-
-            const playButton = document.getElementById(`play-btn-${audioHash}`);
             if (playButton) {
+                playButton.disabled = true;
                 playButton.onclick = () => {
                     if (window.activeWaveform && window.activeWaveform !== wavesurfer) {
                         window.activeWaveform.pause();
@@ -557,6 +548,11 @@ function renderPostContent(item) {
                     window.activeWaveform = wavesurfer;
                 };
             }
+
+            wavesurfer.on('ready', () => {
+                if (playButton) playButton.disabled = false;
+                console.log(`[Waveform] Ready: ${audioHash}`);
+            });
 
             wavesurfer.on('play', () => {
                 if (playButton) playButton.innerText = '⏸️ Pause';
@@ -640,6 +636,8 @@ function renderPostContent(item) {
                     playButton.disabled = true;
                 }
             });
+
+            wavesurfer.load(`/tracks/${audioHash}`);
 
         }, 500);
 
@@ -1284,17 +1282,10 @@ function cleanUpCoveredFlyers() {
             const sender = flyer.dataset.sender;
             flyer.remove(); 
             removed++; 
-            if (txHash && sender === userKeys.publicKey) silentDeletePost(txHash);
-            if (txHash && sender === userKeys.publicKey) window.ActionEngine.silentDeletePost(txHash);
+            if (txHash && window.CoreEngine && window.CoreEngine.userKeys && sender === window.CoreEngine.userKeys.publicKey) window.ActionEngine.silentDeletePost(txHash);
         }
     });
     if (removed > 0) console.log(`[FLYER WALL] Deleted ${removed} completely buried flyers to save space.`);
-}
-
-async function silentDeletePost(txHash) {
-    try {
-        await window.ActionEngine.sendSignedTransaction('DELETE_POST', '0x00', { txHash });
-    } catch (err) {}
 }
 
 function appendChatMessage(msg) { // NOSONAR
@@ -1342,8 +1333,23 @@ function appendChatMessage(msg) { // NOSONAR
 
 function playProfileTrack(index) {
     if (!currentViewedProfile || !currentViewedProfile.uploadedTracks) return;
-    const tracks = currentViewedProfile.uploadedTracks.slice().sort((a,b) => b.timestamp - a.timestamp);
-    const track = tracks[index];
+    
+    // Use the same sorting logic as the renderer in fetchUserProfile
+    let sortedTracks = currentViewedProfile.uploadedTracks.slice();
+    if (currentViewedProfile.playlistOrder) {
+        sortedTracks.sort((a, b) => {
+            const idxA = currentViewedProfile.playlistOrder.indexOf(a.hash);
+            const idxB = currentViewedProfile.playlistOrder.indexOf(b.hash);
+            if (idxA === -1 && idxB === -1) return b.timestamp - a.timestamp;
+            if (idxA === -1) return 1;
+            if (idxB === -1) return -1;
+            return idxA - idxB;
+        });
+    } else {
+        sortedTracks.sort((a,b) => b.timestamp - a.timestamp);
+    }
+
+    const track = sortedTracks[index];
     let artistName = track.artist || currentViewedProfile.username;
     if (track.offPlatformCollaborator) artistName += ` ft. ${track.offPlatformCollaborator}`;
     
@@ -1813,7 +1819,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                                 <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${item.transactionHash}', '${item.sender}', null, ${item.data.audioHash ? `'${item.data.audioHash}'` : 'null'})">Post Reply</button>
                             </div>
                             <div id="replies-list-${item.transactionHash}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
-                                ${renderThreadedReplies(item.replies, 0, item.transactionHash)}
+                                ${renderThreadedReplies(item.replies, 0, item.transactionHash, item.type === 'SONG_UPLOAD' ? item.data.audioHash : null)}
                             </div>
                         </div>
                     `;
@@ -2294,7 +2300,7 @@ window.renderCrewRequests = function() {
     }).join('');
 }
 
-function renderThreadedReplies(repliesArray, depthLevel, txHash) {
+function renderThreadedReplies(repliesArray, depthLevel, txHash, audioHash = null) {
     if (!repliesArray || repliesArray.length === 0) return '';
     const marginLeft = depthLevel > 0 ? 20 : 0;
     const borderLeft = depthLevel > 0 ? '2px solid rgba(69, 162, 158, 0.3)' : 'none';
@@ -2307,9 +2313,9 @@ function renderThreadedReplies(repliesArray, depthLevel, txHash) {
             </div>
             <div class="reply-box" id="reply-box-${r.id}" style="margin-top: 5px;">
                 <textarea placeholder="Write a reply..."></textarea>
-                <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${txHash}', '${r.sender}', '${r.id}', null)">Post Reply</button>
+                <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${txHash}', '${r.sender}', '${r.id}', ${audioHash ? `'${audioHash}'` : 'null'})">Post Reply</button>
             </div>
-            ${r.replies && r.replies.length > 0 ? renderThreadedReplies(r.replies, depthLevel + 1, txHash) : ''}
+            ${r.replies && r.replies.length > 0 ? renderThreadedReplies(r.replies, depthLevel + 1, txHash, audioHash) : ''}
         </div>
     `).join('');
 }
