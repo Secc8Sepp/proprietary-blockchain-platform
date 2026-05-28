@@ -48,6 +48,12 @@ function initializeApplicationListeners() {
         loginBtn.addEventListener('click', () => window.CoreEngine.handleLogin());
         console.log('[INIT] ✓ Login button wired');
     } else console.warn('[INIT] ✗ btn-login-submit not found');
+
+    const loginFileInput = document.getElementById('login-key-file-input');
+    if (loginFileInput) {
+        loginFileInput.addEventListener('change', handleKeyFileUpload);
+        console.log('[INIT] ✓ Login key file upload wired');
+    }
     
     // Global Navigation & Search
     const searchInput = document.getElementById('search-input');
@@ -84,13 +90,6 @@ function initializeApplicationListeners() {
     
     const zipUpload = document.getElementById('composer-zip-upload');
     if(zipUpload) zipUpload.addEventListener('change', updateComposerPreview);
-
-    // Settings & Social Actions
-    const updateProfileBtn = document.getElementById('btn-update-profile');
-    if(updateProfileBtn) {
-        updateProfileBtn.addEventListener('click', saveInlineEdit);
-        console.log('[INIT] ✓ Update profile button wired');
-    } else console.warn('[INIT] ✗ btn-update-profile not found');
 
     const followBtn = document.getElementById('btn-profile-follow');
     if(followBtn) {
@@ -184,6 +183,41 @@ function getDragAfterElement(container, y, selector) {
         }
     });
     console.log('[INIT] Event listeners initialized');
+}
+
+function handleKeyFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const fileContent = e.target.result;
+        try {
+            const keyData = JSON.parse(fileContent);
+            if (keyData.privateKey) {
+                const pkInput = document.getElementById('input-login-key'); 
+                if (pkInput) {
+                    pkInput.value = fileContent;
+                    // Attempt to automatically log in
+                    if (window.CoreEngine && typeof window.CoreEngine.handleLogin === 'function') {
+                        console.log('Key file loaded. Attempting to log in...');
+                        window.CoreEngine.handleLogin();
+                    } else {
+                        alert('Key file loaded. Please click the login button to continue.');
+                    }
+                } else {
+                    alert('Could not find the key input field on the page. Please enter it manually.');
+                    console.warn("Could not find input with ID 'input-login-key'");
+                }
+            } else {
+                alert('Invalid key file. The JSON file must contain a "privateKey" property.');
+            }
+        } catch (err) {
+            console.error('Error parsing key file:', err);
+            alert('Failed to read key file. Please ensure it is a valid JSON file.');
+        }
+    };
+    reader.readAsText(file);
 }
 
 // ==========================================
@@ -1158,7 +1192,7 @@ function initEventsMap() {
         return;
     }
 
-    const mapDiv = document.getElementById('events-3d-map');
+    const mapDiv = document.getElementById('ui-events-map');
     
     // Get user location for a personalized landscape background
     if (navigator.geolocation) {
@@ -1257,7 +1291,7 @@ async function handleFlyerSelect(e) {
 async function handleBulletinBoardClick(e) {
     if (!eventsState.isPlacing || !eventsState.currentFile) {
         // If no file is selected, trigger the upload dialog to help users "add events"
-        const input = document.getElementById('flyer-upload-input');
+        const input = document.getElementById('event-file-input');
         if (input) input.click();
         return;
     }

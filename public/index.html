@@ -242,7 +242,9 @@
             <div style="margin-top: 35px; text-align: left; border-top: 1px solid var(--border); padding-top: 20px;">
                 <label for="input-login-key" style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px;">Paste saved wallet JSON</label>
                 <textarea id="input-login-key" rows="4" placeholder="Paste your vod_private_key.json content here" style="width:100%; border:1px solid rgba(69,162,158,0.5); background: rgba(11,12,16,0.9); color:#fff; border-radius:12px; padding:10px;"></textarea>
-                <button class="wallet-btn" id="btn-login-submit" style="margin-top: 12px; width: 100%;">Unlock Existing Profile</button>
+                <label for="login-key-file-input" style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px; margin-top: 15px;">Or upload key file</label>
+                <input id="login-key-file-input" type="file" accept=".json" style="margin-bottom: 12px;" />
+                <button class="wallet-btn" id="btn-login-submit" style="margin-top: 12px; width: 100%;">Unlock Profile</button>
             </div>
             <p id="auth-status" style="font-size: 12px; color: var(--warning); margin-top: 15px; min-height: 15px;"></p>
         </div>
@@ -492,13 +494,12 @@
 
                 <!-- VIEW 4: EVENTS (Rip & Rebuild) -->
                 <div id="view-events" class="hidden">
-                    <div class="events-perspective-container">
-                        <div id="ui-events-board" class="events-wall" onclick="handleBoardClick(event)">
-                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255,255,255,0.05); font-weight: 900; font-size: 60px; pointer-events: none; letter-spacing: 5px;">BOARD</div>
+                    <div class="events-view-container">
+                        <div id="ui-events-map"></div>
+                        <div id="ui-bulletin-board" class="bulletin-board" onclick="handleBulletinBoardClick(event)">
+                            <div id="board-loading-text" style="text-align: center; color: var(--text-muted); padding-top: 100px; font-size: 14px;">Loading Events...</div>
                         </div>
-                        <div id="ui-events-map" class="events-floor"></div>
                     </div>
-                    
                     <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); padding: 15px; border-radius: 12px; margin-top: 15px; border: 1px solid var(--border);">
                         <div style="display:flex; align-items:center; gap: 20px;">
                             <input type="date" id="event-date-picker" class="event-calendar" onchange="loadEvents()">
@@ -508,11 +509,11 @@
                             <span style="font-size:12px; color:var(--text-muted);">Pin Flyer:</span>
                             <label class="attachment-btn" style="cursor: pointer;">
                                 📌
-                                <input id="event-file-input" type="file" accept="image/*" style="display:none;" onchange="handleEventFileSelect(event)" />
+                                <input id="event-file-input" type="file" accept="image/*" style="display:none;" onchange="handleFlyerSelect(event)" />
                             </label>
                         </div>
                     </div>
-                    <img id="ui-flyer-cursor" class="flyer-placement-cursor" />
+                    <img id="ui-flyer-cursor" class="flyer-preview-cursor" />
                 </div>
 
                 <!-- VIEW 7: THE ZINE -->
