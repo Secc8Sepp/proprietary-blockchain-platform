@@ -799,6 +799,7 @@ function switchTab(tabName, element, targetKey = null) {
     if (tabName === 'market') window.loadMarketplace();
     if (tabName === 'zine') renderZine();
     if (tabName === 'hotornot') window.BattleEngines.loadHotOrNot();
+    if (tabName === 'feed') window.loadMainGlobalFeed();
 }
 
 function renderServerList() {
@@ -1778,7 +1779,7 @@ function renderNewUsers() {
     const users = Object.entries(window.networkProfiles).map(([addr, prof]) => ({
         address: addr,
         ...prof
-    })).sort((a, b) => (b.joined || 0) - (a.joined || 0)).slice(0, 10);
+    })).sort((a, b) => (b.joined || 0) - (a.joined || 0));
     
     container.innerHTML = users.map(user => {
         const onlineNode = window.MeshEngine.onlineNodes ? window.MeshEngine.onlineNodes.find(n => n.address === user.address) : null;

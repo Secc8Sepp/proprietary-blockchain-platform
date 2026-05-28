@@ -128,7 +128,8 @@ window.MeshEngine = {
                     
                     let activityHtml = '';
                     if (node.track) {
-                        activityHtml = `<div style="font-size: 10px; color: var(--primary); margin-top: 4px; cursor: pointer;" onclick="event.stopPropagation(); window.AudioEngine.playTrack('${window.escapeJsArg(node.track.title)}', '${node.track.hash}', '${node.track.creator}', '${window.escapeJsArg(node.track.artistName)}')">🎧 ${window.escapeHtml(node.track.title)}<br><span style="color:var(--text-muted)">by ${window.escapeHtml(node.track.artistName)}</span></div>`;
+                        const trackArtist = node.track.artist || node.track.artistName || 'Unknown Artist';
+                        activityHtml = `<div style="font-size: 10px; color: var(--primary); margin-top: 4px; cursor: pointer;" onclick="event.stopPropagation(); window.AudioEngine.playTrack('${window.escapeJsArg(node.track.title)}', '${node.track.hash}', '${node.track.creator}', '${window.escapeJsArg(trackArtist)}')">🎧 ${window.escapeHtml(node.track.title)}<br><span style="color:var(--text-muted)">by ${window.escapeHtml(trackArtist)}</span></div>`;
                     } else if (node.activity) {
                         activityHtml = `<div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">🎧 ${window.escapeHtml(node.activity)}</div>`;
                     }
