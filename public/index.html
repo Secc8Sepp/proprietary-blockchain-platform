@@ -696,35 +696,8 @@
                 </div>
 
                 <!-- VIEW 8: HOT OR NOT -->
-                <div id="view-hotornot" class="hidden card">
-                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); padding-bottom: 15px; margin-bottom: 20px;">
-                        <h2 style="margin:0; color: var(--danger);">🔥 Hot or Not</h2>
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <select id="hotornot-category-select" style="padding: 8px; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid var(--danger); outline: none; margin: 0;">
-                                <option value="music">Music</option>
-                                <option value="looks">Looks</option>
-                            </select>
-                            <select id="hotornot-submit-select" style="padding: 8px; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid var(--danger); outline: none; margin: 0; max-width: 250px;">
-                                <option value="">Select your track...</option>
-                            </select>
-                            <button onclick="window.ActionEngine.submitHotOrNotFromDropdown()" style="background: var(--danger); color: #fff; padding: 8px 15px;">Submit</button>
-                        </div>
-                    </div>
-                    
-                    <div style="margin-bottom: 15px; display: flex; gap: 10px;">
-                        <select id="hotornot-filter" onchange="renderHotOrNot()" style="padding: 8px; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid var(--danger); outline: none;">
-                            <option value="vote">Vote Now</option>
-                            <option value="new">New Submissions</option>
-                            <option value="weekly">Weekly Hotlist</option>
-                            <option value="alltime">All-Time Hotlist</option>
-                        </select>
-                        <select id="hotornot-view-category" onchange="renderHotOrNot()" style="padding: 8px; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid var(--danger); outline: none;">
-                            <option value="music">Music Battles</option>
-                            <option value="looks">Looks Battles</option>
-                        </select>
-                    </div>
-
-                    <div id="ui-hotornot-content" style="display: flex; flex-direction: column; gap: 15px;"></div>
+                <div id="view-hotornot" class="hidden">
+                    <!-- This container is now populated dynamically by BattleEngines.js -->
                 </div>
 
             </div>
@@ -828,6 +801,7 @@
     <script src="/AudioEngine.js"></script>
     <script src="/LayoutEngine.js"></script>
     <script src="/ActionEngine.js"></script>
+    <script src="/GlobalTagEngine.js"></script>
     <script src="/GlobalTagEngine.js"></script>
     <script src="/BattleEngines.js"></script>
     <script src="/app.js"></script>

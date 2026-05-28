@@ -5,9 +5,40 @@ let fullProfileCache = new Map();
 let lastProfileCacheChainLength = 0;
 let feedCache = null;
 let lastFeedCacheChainLength = 0;
+let profileDirectoryCache = null;
+let lastDirectoryCacheChainLength = 0;
 // --- END CACHING ---
 
 class ProfileService {
+    getProfileDirectory() {
+        const chain = blockchainService.getChain();
+        if (profileDirectoryCache && chain.length === lastDirectoryCacheChainLength) {
+            return profileDirectoryCache;
+        }
+
+        const profiles = {};
+        lastDirectoryCacheChainLength = chain.length;
+
+        chain.forEach(block => {
+            block.transactions.forEach(tx => {
+                // Ensure sender profile exists
+                if (!profiles[tx.sender]) profiles[tx.sender] = { username: `Node_${tx.sender.substring(0,6)}`, avatarHash: '', joined: tx.timestamp, tags: [] };
+                // Ensure receiver profile exists if applicable
+                if (tx.receiver && tx.receiver !== '0x00' && !profiles[tx.receiver]) {
+                    profiles[tx.receiver] = { username: `Node_${tx.receiver.substring(0,6)}`, avatarHash: '', joined: tx.timestamp, tags: [] };
+                }
+                // Update profile with data from transaction
+                if (tx.type === 'PROFILE_UPDATE') {
+                    if (tx.data.username) profiles[tx.sender].username = tx.data.username;
+                    if (tx.data.avatarHash) profiles[tx.sender].avatarHash = tx.data.avatarHash;
+                    if (tx.data.tags) profiles[tx.sender].tags = tx.data.tags;
+                }
+            });
+        });
+        profileDirectoryCache = profiles;
+        return profiles;
+    }
+
     getSocialGraph() {
         const chain = blockchainService.getChain();
         const followers = {};
@@ -166,6 +197,7 @@ class ProfileService {
                         if (tx.data.title) profile._trackDetails[tx.data.audioHash].title = tx.data.title;
                         if (tx.data.artist) profile._trackDetails[tx.data.audioHash].artist = tx.data.artist;
                         if (tx.data.offPlatformCollaborator !== undefined) profile._trackDetails[tx.data.audioHash].offPlatformCollaborator = tx.data.offPlatformCollaborator;
+                        if (tx.data.metadata !== undefined) profile._trackDetails[tx.data.audioHash].metadata = tx.data.metadata;
                     }
                 }
                 if (tx.type === 'BUY_SONG_SHARE') {
@@ -227,7 +259,8 @@ class ProfileService {
                                 hash: tx.data.audioHash,
                                 coverHash: tx.data.coverHash || null,
                                 timestamp: tx.timestamp,
-                                playCount: playCounts[tx.data.audioHash] || 0
+                                playCount: playCounts[tx.data.audioHash] || 0,
+                                metadata: tx.data.metadata || ''
                             });
                     }
                         if (tx.type === 'IMAGE_POST' || tx.type === 'VIDEO_POST' || tx.type === 'PROJECT_FILE_POST') {
@@ -235,7 +268,9 @@ class ProfileService {
                             profile.uploadedImages.push({
                                 caption: tx.data.caption,
                                 hash: assetHash,
-                                timestamp: tx.timestamp
+                                timestamp: tx.timestamp,
+                                transactionHash: block.hash,
+                                metadata: tx.data.metadata || ''
                             });
                         }
                     if (tx.type === 'EDIT_SONG_METADATA') {
@@ -245,28 +280,8 @@ class ProfileService {
                             if(tx.data.artist) profile.uploadedTracks[idx].artist = tx.data.artist;
                             if(tx.data.offPlatformCollaborator !== undefined) profile.uploadedTracks[idx].offPlatformCollaborator = tx.data.offPlatformCollaborator;
                             if(tx.data.coverHash) profile.uploadedTracks[idx].coverHash = tx.data.coverHash;
+                            if(tx.data.metadata !== undefined) profile.uploadedTracks[idx].metadata = tx.data.metadata;
                         }
-                    }
-                    if (tx.type === 'IMAGE_POST') {
-                        profile.uploadedImages.push({
-                            caption: tx.data.caption,
-                            hash: tx.data.imageHash,
-                            timestamp: tx.timestamp
-                        });
-                    }
-                    if (tx.type === 'VIDEO_POST') {
-                        profile.uploadedImages.push({
-                            caption: tx.data.caption,
-                            hash: tx.data.videoHash,
-                            timestamp: tx.timestamp
-                        });
-                    }
-                    if (tx.type === 'PROJECT_FILE_POST') {
-                        profile.uploadedImages.push({
-                            caption: tx.data.caption,
-                            hash: tx.data.fileHash,
-                            timestamp: tx.timestamp
-                        });
                     }
                 }
 
@@ -288,16 +303,33 @@ class ProfileService {
         profile.followers = Array.from(graph.followers[publicKey] || []);
         profile.following = Array.from(graph.following[publicKey] || []);
 
-        // Recommendation Algorithm: Count frequencies of friends-of-friends
+        // --- Recommendation Algorithm ---
+        // 1. Social Graph (friends-of-friends)
         const recommendedCounts = {};
         for (const followee of profile.following) {
             const followeeFollowing = graph.following[followee] || [];
             for (const f of followeeFollowing) {
                 if (f !== publicKey && !profile.following.includes(f)) {
-                    recommendedCounts[f] = (recommendedCounts[f] || 0) + 1;
+                    recommendedCounts[f] = (recommendedCounts[f] || 0) + 1; // Score for mutual connection
                 }
             }
         }
+
+        // 2. Tag Similarity
+        const userTags = new Set(profile.tags || []);
+        if (userTags.size > 0) {
+            const allProfiles = this.getProfileDirectory();
+            for (const otherPk in allProfiles) {
+                if (otherPk === publicKey || profile.following.includes(otherPk)) continue;
+                const otherUser = allProfiles[otherPk];
+                const otherTags = new Set(otherUser.tags || []);
+                const commonTags = [...userTags].filter(tag => otherTags.has(tag));
+                if (commonTags.length > 0) {
+                    recommendedCounts[otherPk] = (recommendedCounts[otherPk] || 0) + (commonTags.length * 2); // Higher score for shared tags
+                }
+            }
+        }
+
         // Sort by frequency (most likely to want to add)
         profile.recommended = Object.keys(recommendedCounts)
             .sort((a, b) => recommendedCounts[b] - recommendedCounts[a])
@@ -352,12 +384,16 @@ class ProfileService {
         const deletedPosts = new Set();
         const songListings = {};
         const trackMetadata = {};
+        const postMetadata = {};
 
         // Pass 1: Gather metric aggregates from the ledger
         for (const block of chain) {
             for (const tx of block.transactions) {
                 if (['SONG_UPLOAD', 'TEXT_POST', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'STORY_POST'].includes(tx.type)) {
                     postOwners[block.hash] = tx.sender;
+                    if (tx.data.metadata) {
+                        postMetadata[block.hash] = tx.data.metadata;
+                    }
                 }
                 if (tx.type === 'SONG_UPLOAD' || tx.type === 'IMAGE_POST' || tx.type === 'VIDEO_POST' || tx.type === 'PROJECT_FILE_POST') {
                     const assetHash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
@@ -389,6 +425,9 @@ class ProfileService {
                         if (tx.data.artist) trackMetadata[tx.data.audioHash].artist = tx.data.artist;
                         if (tx.data.offPlatformCollaborator !== undefined) trackMetadata[tx.data.audioHash].offPlatformCollaborator = tx.data.offPlatformCollaborator;
                         if (tx.data.coverHash) trackMetadata[tx.data.audioHash].coverHash = tx.data.coverHash;
+                        if (tx.data.metadata !== undefined) {
+                            trackMetadata[tx.data.audioHash].metadata = tx.data.metadata;
+                        }
                     }
                 }
                 if (tx.type === 'STREAM_COMPLETED') {
@@ -427,6 +466,11 @@ class ProfileService {
                         deletedPosts.add(tx.data.txHash);
                     }
                 }
+                if (tx.type === 'EDIT_POST_METADATA') {
+                    if (postOwners[tx.data.txHash] === tx.sender) {
+                        postMetadata[tx.data.txHash] = tx.data.metadata;
+                    }
+                }
             }
         }
 
@@ -454,6 +498,10 @@ class ProfileService {
                         roles: roles
                     };
 
+                    if (postMetadata[block.hash]) {
+                        feedItem.data.metadata = postMetadata[block.hash];
+                    }
+
                     feedItem.likeCount = likeCounts[block.hash] || 0;
                     
                     const rawReplies = postReplies[block.hash] || [];
@@ -479,6 +527,9 @@ class ProfileService {
                             feedItem.data.artist = trackMetadata[assetHash].artist;
                             feedItem.data.offPlatformCollaborator = trackMetadata[assetHash].offPlatformCollaborator;
                             feedItem.data.coverHash = trackMetadata[assetHash].coverHash;
+                            if (trackMetadata[assetHash].metadata !== undefined) {
+                                feedItem.data.metadata = trackMetadata[assetHash].metadata;
+                            }
                         }
                     }
 

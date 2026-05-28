@@ -404,7 +404,8 @@ async function loadMainGlobalFeed() {
             const timeStr = new Date(item.timestamp).toLocaleString();
             const roles = item.roles || [];
             const isOwner = item.sender === window.CoreEngine.userKeys.publicKey;
-            const deleteBtn = isOwner ? `<button class="interaction-btn" onclick="window.ActionEngine.deletePost('${item.transactionHash}')">🗑️ Delete</button>` : '';
+            const deleteBtn = isOwner ? `<button class="interaction-btn" onclick="window.ActionEngine.deletePost('${item.transactionHash}')">🗑️</button>` : '';
+            const editBtn = isOwner ? `<button class="interaction-btn" onclick="window.ActionEngine.promptEditPostMetadata('${item.transactionHash}', '${escapeJsArg(item.data.metadata || '')}')">✏️ Edit Tags</button>` : '';
             postEl.innerHTML = `
                 <div class="post-avatar" onclick="inspectTargetNode('${item.sender}')" style="cursor:pointer;"><img src="${getAvatarUrl(item.sender)}"></div>
                 <div style="flex: 1;">
@@ -418,6 +419,7 @@ async function loadMainGlobalFeed() {
                     <div class="post-interactions">
                         <button class="interaction-btn" onclick="window.ActionEngine.toggleLike('${item.transactionHash}', '${item.sender}')">🔥 <span id="like-count-${item.transactionHash}">${item.likeCount || 0}</span></button>
                         <button class="interaction-btn" onclick="toggleReplyBox('${item.transactionHash}')">💬 Reply</button>
+                        ${editBtn}
                         ${!isOwner ? `<button class="interaction-btn" onclick="window.WalletEngine.promptSendCoins('${item.sender}')">💸 Tip</button>` : ''}
                         ${deleteBtn}
                     </div>
@@ -495,14 +497,16 @@ function renderPostContent(item) {
         return `
             <div class="post-body">
                 ${item.data.caption ? `<div style="margin-bottom: 10px;">${escapeHtml(item.data.caption)}</div>` : ''}
-                <img src="/tracks/${item.data.imageHash}" style="max-width: 100%; border-radius: 8px; border: 1px solid var(--border); margin-top: 10px;">
+                <img src="/tracks/${item.data.imageHash}" style="max-width: 100%; border-radius: 8px; border: 1px solid var(--border); margin-top: 10px;" loading="lazy">
+                ${item.data.metadata && window.GlobalTagEngine ? `<div style="font-size:12px; color:var(--text-muted); margin-top: 10px;">${window.GlobalTagEngine.renderTags(item.data.metadata)}</div>` : ''}
             </div>
         `;
     } else if (item.type === 'VIDEO_POST') {
         return `
             <div class="post-body">
                 ${item.data.caption ? `<div style="margin-bottom: 10px;">${escapeHtml(item.data.caption)}</div>` : ''}
-                <video src="/tracks/${item.data.videoHash}" controls style="max-width: 100%; border-radius: 8px; border: 1px solid var(--border); margin-top: 10px;"></video>
+                <video src="/tracks/${item.data.videoHash}" controls preload="metadata" style="max-width: 100%; border-radius: 8px; border: 1px solid var(--border); margin-top: 10px;"></video>
+                ${item.data.metadata && window.GlobalTagEngine ? `<div style="font-size:12px; color:var(--text-muted); margin-top: 10px;">${window.GlobalTagEngine.renderTags(item.data.metadata)}</div>` : ''}
             </div>
         `;
     } else if (item.type === 'PROJECT_FILE_POST') {
@@ -516,10 +520,13 @@ function renderPostContent(item) {
                     </div>
                     <button onclick="window.open('/tracks/${item.data.fileHash}', '_blank')">Download</button>
                 </div>
+                ${item.data.metadata && window.GlobalTagEngine ? `<div style="font-size:12px; color:var(--text-muted); margin-top: 10px;">${window.GlobalTagEngine.renderTags(item.data.metadata)}</div>` : ''}
             </div>
         `;
     } else if (item.type === 'TEXT_POST') {
-        return `<div class="post-body">${parseMentions(item.data.content)}</div>`;
+        return `<div class="post-body">${parseMentions(item.data.content)}
+            ${item.data.metadata && window.GlobalTagEngine ? `<div style="font-size:12px; color:var(--text-muted); margin-top: 10px;">${window.GlobalTagEngine.renderTags(item.data.metadata)}</div>` : ''}
+        </div>`;
     } else if (item.type === 'PROFILE_UPDATE') {
         return `<div class="post-body" style="color: var(--primary); font-style: italic;">Deployed a new Node Identity to the swarm.</div>`;
     } else if (item.type === 'THEME_UPDATE') {
@@ -582,10 +589,22 @@ function executeGlobalSearch(query) {
         return window.showSearchResultsDialog(matches, query);
     }
 
-    const track = feedTracks.find(t => (t.data.trackTitle && t.data.trackTitle.toLowerCase().includes(q)) || (t.data.artist && t.data.artist.toLowerCase().includes(q)));
+    const track = feedTracks.find(t => {
+        if (t.data.trackTitle && t.data.trackTitle.toLowerCase().includes(q)) return true;
+        if (t.data.artist && t.data.artist.toLowerCase().includes(q)) return true;
+        if (t.data.metadata && t.data.metadata.toLowerCase().includes(q)) return true;
+        return false;
+    });
     if (track && window.AudioEngine) return window.AudioEngine.playTrack(track.data.trackTitle, track.data.audioHash, track.sender, track.data.artist);
-    const article = zineArticles.find(a => (a.title && a.title.toLowerCase().includes(q)) || (a.body && a.body.toLowerCase().includes(q)));
+    
+    const article = zineArticles.find(a => {
+        if (a.title && a.title.toLowerCase().includes(q)) return true;
+        if (a.body && a.body.toLowerCase().includes(q)) return true;
+        if (a.tags && a.tags.toLowerCase().includes(q)) return true;
+        return false;
+    });
     if (article) return switchTab('zine');
+
     if (marketDataCache && marketDataCache.items) {
         const item = marketDataCache.items.find(i => i.title && i.title.toLowerCase().includes(q));
         if (item) {
@@ -1059,9 +1078,6 @@ function cleanUpCoveredFlyers() {
             removed++; 
             if (txHash && sender === userKeys.publicKey) silentDeletePost(txHash);
             if (txHash && sender === userKeys.publicKey) window.ActionEngine.silentDeletePost(txHash);
-            if (txHash && window.CoreEngine && window.CoreEngine.userKeys && sender === window.CoreEngine.userKeys.publicKey) {
-                window.ActionEngine.silentDeletePost(txHash);
-            }
         }
     });
     if (removed > 0) console.log(`[FLYER WALL] Deleted ${removed} completely buried flyers to save space.`);
@@ -1634,10 +1650,13 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
         // Render Gallery
         const galleryContainer = document.getElementById('ui-profile-gallery');
         if (galleryContainer) {
-            let galleryHtml = '';
-            if (profile.uploadedImages) profile.uploadedImages.forEach(img => { galleryHtml += `<div style="position:relative; cursor:pointer;" onclick="window.open('/tracks/${img.hash}', '_blank')"><img src="/tracks/${img.hash}" style="width:100%; height:100px; object-fit:cover; border-radius:8px; border:1px solid var(--border);"><div style="position:absolute; bottom:0; left:0; width:100%; background:rgba(0,0,0,0.7); font-size:10px; color:#fff; padding:2px; text-align:center;">Uploaded</div></div>`; });
+            let galleryHtml = '';;
+            if (profile.uploadedImages) profile.uploadedImages.forEach(img => { 
+                const editBtn = viewingUserPublicKey === window.CoreEngine.userKeys.publicKey ? `<div style="position:absolute; top:5px; right:5px; z-index:2;"><button class="secondary" style="padding: 2px 6px; font-size: 10px;" onclick="event.stopPropagation(); window.ActionEngine.promptEditPostMetadata('${img.transactionHash}', '${escapeJsArg(img.metadata || '')}')">Edit</button></div>` : '';
+                galleryHtml += `<div style="position:relative; cursor:pointer;" onclick="window.open('/tracks/${img.hash}', '_blank')">${editBtn}<img src="/tracks/${img.hash}" style="width:100%; height:100px; object-fit:cover; border-radius:8px; border:1px solid var(--border);"><div style="position:absolute; bottom:0; left:0; width:100%; background:rgba(0,0,0,0.7); font-size:10px; color:#fff; padding:2px; text-align:center;">Uploaded</div></div>`; 
+            });
             if (profile.ownedItems) profile.ownedItems.forEach(item => { galleryHtml += `<div style="position:relative; cursor:pointer;" onclick="window.open('/tracks/${item.assetHash}', '_blank')"><img src="/tracks/${item.assetHash}" style="width:100%; height:100px; object-fit:cover; border-radius:8px; border:1px solid var(--warning);"><div style="position:absolute; bottom:0; left:0; width:100%; background:rgba(255,170,0,0.7); font-size:10px; color:#fff; font-weight:bold; padding:2px; text-align:center;">Owned Asset</div></div>`; });
-            galleryContainer.innerHTML = galleryHtml || '<div style="color:var(--text-muted); font-size: 12px; grid-column: span 2;">No visual assets to display.</div>';
+            galleryContainer.innerHTML = galleryHtml || '<div style="color:var(--text-muted); font-size: 12px; grid-column: span 2;">No visual assets to display.</div>'
         }
 
         // Render VST Portfolio
@@ -2132,6 +2151,7 @@ function renderZine() {
                 <div class="article-meta">Writer: ${resolveProfile(art.author).username}</div>
                 <div style="font-size: 18px; font-weight: bold; color: #fff; margin-top: 5px;">${escapeHtml(art.title)}</div>
                 <div class="article-snippet">${escapeHtml(art.body)}</div>
+            ${art.tags ? `<div style="margin-top: 10px; margin-bottom: 10px;">${window.GlobalTagEngine.renderTags(art.tags)}</div>` : ''}
                 <div style="display: flex; gap: 10px; margin-bottom: 10px;">
                     <button class="interaction-btn" onclick="window.ActionEngine.likeArticle('${art.id}')">❤️ ${art.likes || 0}</button>
                     <button class="interaction-btn" onclick="window.ActionEngine.tipArticle('${art.id}', '${art.author}')">💸 Tip $VOD</button>
@@ -2147,6 +2167,7 @@ function renderZine() {
             <div class="article-meta" style="color: var(--success);">Featured Content</div>
             <div style="font-size: 18px; font-weight: bold; color: #fff; margin-top: 5px;">${escapeHtml(art.title)}</div>
             <div class="article-snippet" style="color: #eee;">${escapeHtml(art.body)}</div>
+            ${art.tags ? `<div style="margin-top: 10px;">${window.GlobalTagEngine.renderTags(art.tags)}</div>` : ''}
         </div>
     `).join('') || '<div style="color:var(--text-muted);">Acquire rights in the marketplace to see articles here.</div>';
 }

@@ -52,7 +52,7 @@ window.ActionEngine = {
                     if (addr && pct > 0) collabs.push({ address: addr, percentage: pct });
                 });
 
-                const genre = document.getElementById('audio-meta-genre').value.trim();
+                const tags = document.getElementById('audio-meta-genre').value.trim();
                 const forStake = document.getElementById('audio-stake-checkbox').checked;
                 let sellPercentage = 0; let pricePerShare = 0;
                 if (forStake) {
@@ -68,7 +68,7 @@ window.ActionEngine = {
                     offPlatformCollaborator: offCollab, 
                     audioHash: hash, 
                     coverHash: coverHash, 
-                    metadata: genre, 
+                    metadata: tags, 
                     forStake: forStake, 
                     sellPercentage: sellPercentage, 
                     pricePerShare: pricePerShare, 
@@ -172,6 +172,8 @@ window.ActionEngine = {
             <p style="font-size: 13px; color: var(--text-muted);">Your post is quite long. Publishing it as a Zine Article allows you to give it a title and set a price for others to curate and feature it.</p>
             <label>Article Title</label>
             <input id="form-input-zine-title" type="text" placeholder="Title of your masterpiece...">
+            <label>Tags (comma-separated)</label>
+            <input id="form-input-zine-tags" type="text" placeholder="e.g. tutorial, music-production, story">
             <label>Curation Price ($VOD)</label>
             <input id="form-input-zine-price" type="number" value="5000">
             <button id="form-modal-submit" style="width: 100%; margin-top: 10px;">Publish Article</button>
@@ -181,11 +183,12 @@ window.ActionEngine = {
         submitBtn.onclick = () => {
             const title = document.getElementById('form-input-zine-title').value;
             const price = document.getElementById('form-input-zine-price').value;
+            const tags = document.getElementById('form-input-zine-tags').value.trim();
 
             if (!title.trim()) return alert("Please enter a title for your article.");
             if (!price || isNaN(price) || price < 0) return alert("Please enter a valid, non-negative price.");
 
-            this.socket.emit('publish_article', { title, body: bodyText, price: parseFloat(price), author: window.CoreEngine.userKeys.publicKey });
+            this.socket.emit('publish_article', { title, body: bodyText, price: parseFloat(price), author: window.CoreEngine.userKeys.publicKey, tags });
             alert("Masterpiece published to the swarm as an Article!");
             
             toggleModal('form-modal');
@@ -207,6 +210,36 @@ window.ActionEngine = {
         } catch (err) {
             alert("Failed to delete: " + err.message);
         }
+    },
+
+    promptEditPostMetadata(txHash, currentMetadata = '') {
+        if (!window.CoreEngine.userKeys.publicKey) return;
+
+        const modalTitle = document.getElementById('form-modal-title');
+        const modalBody = document.getElementById('form-modal-body');
+        
+        modalTitle.innerText = 'Edit Post Tags';
+        modalBody.innerHTML = `
+            <p style="font-size: 13px; color: var(--text-muted);">Update the tags for your post. Use commas to separate multiple tags. This will be recorded as a new transaction.</p>
+            <label>Tags (comma-separated)</label>
+            <input id="form-input-edit-tags" type="text" value="${escapeHtml(currentMetadata || '')}" placeholder="e.g. art, digital, photoshop">
+            <button id="form-modal-submit" style="width: 100%; margin-top: 10px;">Update Tags</button>
+        `;
+
+        const submitBtn = document.getElementById('form-modal-submit');
+        submitBtn.onclick = async () => {
+            const newTags = document.getElementById('form-input-edit-tags').value;
+
+            try {
+                let data = { txHash: txHash, metadata: newTags };
+                await window.CoreEngine.sendSignedTransaction('EDIT_POST_METADATA', '0x00', data);
+                alert("Tags updated!"); 
+                toggleModal('form-modal');
+                if (currentView === 'profile') fetchUserProfile(window.CoreEngine.userKeys.publicKey, false); 
+                loadMainGlobalFeed();
+            } catch(err) { alert("Failed to edit tags: " + err.message); }
+        };
+        toggleModal('form-modal');
     },
 
     async silentDeletePost(txHash) {
@@ -288,6 +321,8 @@ window.ActionEngine = {
             <input id="form-input-edit-artist" type="text" value="${escapeHtml(track.artist || '')}">
             <label>Off-Platform Collaborator (optional)</label>
             <input id="form-input-edit-offcollab" type="text" value="${escapeHtml(track.offPlatformCollaborator || '')}">
+            <label>Tags (comma-separated)</label>
+            <input id="form-input-edit-tags" type="text" value="${escapeHtml(track.metadata || '')}" placeholder="e.g. lofi, hiphop, instrumental">
             <button id="form-modal-submit" style="width: 100%; margin-top: 10px;">Update Metadata</button>
         `;
 
@@ -296,12 +331,14 @@ window.ActionEngine = {
             const newTitle = document.getElementById('form-input-edit-title').value;
             const newArtist = document.getElementById('form-input-edit-artist').value;
             const newOffCollab = document.getElementById('form-input-edit-offcollab').value;
+            const newTags = document.getElementById('form-input-edit-tags').value;
 
             try {
                 let data = { audioHash: audioHash };
                 if (newTitle) data.title = newTitle;
                 if (newArtist) data.artist = newArtist;
                 if (newOffCollab !== undefined) data.offPlatformCollaborator = newOffCollab;
+                if (newTags !== undefined) data.metadata = newTags;
                 await window.CoreEngine.sendSignedTransaction('EDIT_SONG_METADATA', '0x00', data);
                 alert("Metadata updated!"); 
                 toggleModal('form-modal');
@@ -659,11 +696,12 @@ window.ActionEngine = {
         const title = document.getElementById('zine-publish-title').value.trim();
         const body = document.getElementById('zine-publish-body').value.trim();
         const price = document.getElementById('zine-publish-price').value.trim();
+        const tags = document.getElementById('zine-publish-tags').value.trim();
 
         if(!title || !body || !price) return alert("Title, body, and price are required to publish.");
         if(!window.CoreEngine.userKeys.publicKey) return alert("Identity required.");
 
-        this.socket.emit('publish_article', { title, body, price: parseFloat(price), author: window.CoreEngine.userKeys.publicKey });
+        this.socket.emit('publish_article', { title, body, price: parseFloat(price), author: window.CoreEngine.userKeys.publicKey, tags });
 
         document.getElementById('zine-publish-title').value = '';
         document.getElementById('zine-publish-body').value = '';
@@ -707,35 +745,54 @@ window.ActionEngine = {
         } catch (err) { alert("Tip failed: " + err.message); }
     },
 
-    async submitHotOrNotFromDropdown() {
+    async submitToHotOrNot() {
         if (!window.CoreEngine.userKeys.publicKey) return alert("Must be logged in.");
-        const select = document.getElementById('hotornot-submit-select');
-        const catSelect = document.getElementById('hotornot-category-select');
-        let targetHash = select.value;
-        const originalHash = targetHash;
-        const category = catSelect ? catSelect.value : 'music';
-        if (!targetHash) return alert("Please select a valid track or image to submit.");
+        
+        const category = window.BattleEngines.hotOrNotCategory || 'music';
+        const btn = document.querySelector('button[onclick="window.ActionEngine.submitToHotOrNot()"]');
+        const originalText = btn.innerText;
 
         try {
-            let data = { category: category, targetHash: targetHash, originalHash: originalHash };
+            let targetHash, originalHash, data;
+
             if (category === 'music') {
-                const btn = document.querySelector('button[onclick="window.ActionEngine.submitHotOrNotFromDropdown()"]');
-                const originalText = btn.innerText;
+                const select = document.getElementById('hotornot-submit-select');
+                targetHash = select.value;
+                originalHash = targetHash;
+                if (!targetHash) return alert("Please select a valid track to submit.");
+
                 btn.innerText = "Formatting MP3..."; btn.disabled = true;
+                data = { category: category, targetHash: targetHash, originalHash: originalHash };
                 try {
                     const procRes = await fetch('/api/feed/process-hotornot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetHash }) });
                     if (procRes.ok) {
                         const procData = await procRes.json();
                         data.targetHash = procData.formattedHash || targetHash;
-                        data.audioHash = data.targetHash;
                     }
                 } catch (e) { console.error("Formatting error:", e); }
-                btn.innerText = originalText; btn.disabled = false;
-            }
 
+            } else if (category === 'looks') {
+                const fileInput = document.getElementById('hotornot-looks-upload');
+                const file = fileInput.files[0];
+                if (!file) return alert("Please select an image to upload.");
+
+                btn.innerText = "Uploading..."; btn.disabled = true;
+                targetHash = await uploadMediaAssetFile(file);
+                originalHash = targetHash; // For new uploads, original and target are the same
+                data = { category: category, targetHash: targetHash, originalHash: originalHash };
+            } else {
+                return alert("Invalid category for submission.");
+            }
+            
             await window.CoreEngine.sendSignedTransaction('SUBMIT_HOT_OR_NOT', '0x00', data);
             alert("Item submitted to Hot or Not!");
             window.BattleEngines.loadHotOrNot();
         } catch(err) { alert("Submission failed: " + err.message); }
+        finally {
+            if (btn) {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
     }
 };

@@ -9,6 +9,7 @@ const authRoutes = require('./routes/auth');
 const socialRoutes = require('./routes/social');
 const feedRoutes = require('./routes/feed');
 const blockchainService = require('./services/blockchainService');
+const profileService = require('./services/profileService');
 
 const app = express();
 const server = http.createServer(app);
@@ -45,7 +46,7 @@ function sendPushNotification(address, payload) {
 }
 
 app.set('sendPushNotification', sendPushNotification);
-app.set('getProfileDirectory', getProfileDirectory);
+app.set('getProfileDirectory', () => profileService.getProfileDirectory());
 
 // ==========================================
 // SYSTEM DIAGNOSTIC TOOL (For Server Debugging)
@@ -128,7 +129,7 @@ app.post('/api/network/block', (req, res) => {
         
         // Incrementally update the profile cache instead of rebuilding from scratch
         block.transactions.forEach(tx => {
-            if (tx.type === 'PROFILE_UPDATE') updateProfileCache(tx);
+            if (tx.type === 'PROFILE_UPDATE') profileService.getProfileDirectory(); // This will invalidate and rebuild the cache if needed
             
             extractAndSyncHashes(tx);
         });
@@ -186,36 +187,6 @@ function saveDBMemory() {
     } catch (e) { console.error('Error saving DB file:', e); }
 }
 
-let profileCache = null;
-let lastCachedChainLength = 0;
-
-function getProfileDirectory() {
-    const chain = blockchainService.getChain();
-    if (profileCache && chain.length === lastCachedChainLength) return profileCache;
-    
-    profileCache = {}; 
-    lastCachedChainLength = chain.length;
-    chain.forEach(block => {
-        block.transactions.forEach(tx => {
-            updateProfileCache(tx);
-        });
-    });
-    return profileCache;
-}
-
-function updateProfileCache(tx) {
-    if (!profileCache) profileCache = {};
-    if (!profileCache[tx.sender]) profileCache[tx.sender] = { username: `Node_${tx.sender.substring(0,6)}`, avatarHash: '', joined: tx.timestamp, tags: [] };
-    if (tx.receiver && tx.receiver !== '0x00' && !profileCache[tx.receiver]) {
-        profileCache[tx.receiver] = { username: `Node_${tx.receiver.substring(0,6)}`, avatarHash: '', joined: tx.timestamp, tags: [] };
-    }
-    if (tx.type === 'PROFILE_UPDATE') {
-        if (tx.data.username) profileCache[tx.sender].username = tx.data.username;
-        if (tx.data.avatarHash) profileCache[tx.sender].avatarHash = tx.data.avatarHash;
-        if (tx.data.tags) profileCache[tx.sender].tags = tx.data.tags;
-    }
-}
-
 function broadcastSwarmUpdate() {
     const uniqueNodes = {};
     for (const id in dbMemory.connectedNodes) {
@@ -233,7 +204,7 @@ io.on('connection', (socket) => {
 
     socket.on('register_node', (data) => {
         dbMemory.connectedNodes[socket.id] = { address: data.address, status: 'online', activity: null };
-        socket.emit('profile_directory', getProfileDirectory());
+        socket.emit('profile_directory', profileService.getProfileDirectory());
         socket.emit('zine_update', dbMemory.zineArticles);
         
         // Sync offline / historical DMs securely to the registered node
@@ -256,6 +227,7 @@ io.on('connection', (socket) => {
             body: data.body,
             price: data.price,
             author: data.author,
+            tags: data.tags || '',
             ownersList: [],
             likes: 0,
             timestamp: Date.now()
@@ -275,7 +247,7 @@ io.on('connection', (socket) => {
             // --- NOTIFICATION ---
             const likerNode = dbMemory.connectedNodes[socket.id];
             if (likerNode && article.author !== likerNode.address) {
-                const likerProfile = getProfileDirectory()[likerNode.address] || { username: `Node_${likerNode.address.substring(0,6)}` };
+                const likerProfile = profileService.getProfileDirectory()[likerNode.address] || { username: `Node_${likerNode.address.substring(0,6)}` };
                 sendPushNotification(article.author, {
                     title: 'Zine Article Liked ❤️',
                     body: `${likerProfile.username} liked your article: "${article.title.substring(0, 40)}..."`
@@ -285,7 +257,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('request_profile_directory', () => {
-        socket.emit('profile_directory', getProfileDirectory());
+        socket.emit('profile_directory', profileService.getProfileDirectory());
     });
 
     socket.on('update_presence', (data) => {
@@ -485,7 +457,7 @@ io.on('connection', (socket) => {
         if (targetSocketId) {
             io.to(targetSocketId).emit('crew_request_received', { from });
         }
-        const fromProfile = getProfileDirectory()[from] || { username: `Node_${from.substring(0,6)}` };
+        const fromProfile = profileService.getProfileDirectory()[from] || { username: `Node_${from.substring(0,6)}` };
         sendPushNotification(target, {
             title: 'New Crew Request 🤝',
             body: `${fromProfile.username} wants to lock in with you!`
@@ -580,7 +552,7 @@ server.listen(PORT, () => {
                         if (data.chain && data.chain.length > blockchainService.getChain().length) {
                             console.log(`📥 Downloaded larger ledger from ${peerUrl}`);
                             blockchainService.saveChain(data.chain);
-                            profileCache = null; // Clear the blank memory cache
+                            profileService.getProfileDirectory(); // Invalidate cache
                             io.emit('blockchain_update', { type: 'SYSTEM_SYNC' }); // Tell browsers to refresh!
                             data.chain.forEach(block => block.transactions.forEach(extractAndSyncHashes));
                         }
