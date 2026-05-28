@@ -1,5 +1,9 @@
 const blockchainService = require('../services/blockchainService');
 const profileService = require('../services/profileService');
+const fs = require('fs');
+const path = require('path');
+
+const IPFS_DIR = path.join(__dirname, '..', 'mock_ipfs');
 
 class FeedController {
     getFeed(req, res) {
@@ -30,6 +34,31 @@ class FeedController {
 
             return res.status(201).json({ message: "Block broadcasted", block: activeBlock });
         } catch (error) { return res.status(400).json({ error: error.message }); }
+    }
+
+    processHotOrNot(req, res) {
+        const { targetHash } = req.body;
+        if (!targetHash) {
+            return res.status(400).json({ error: "Missing targetHash" });
+        }
+
+        const sourcePath = path.join(IPFS_DIR, targetHash);
+        if (!fs.existsSync(sourcePath)) {
+            return res.status(404).json({ error: "Original asset not found on this node." });
+        }
+
+        const formattedHash = `hotornot_${targetHash}`;
+        const destPath = path.join(IPFS_DIR, formattedHash);
+
+        try {
+            // In a real app, you'd use ffmpeg to trim to 30s. Here we just copy.
+            fs.copyFileSync(sourcePath, destPath);
+            console.log(`[HOTORNOT] Formatted ${targetHash} -> ${formattedHash}`);
+            return res.status(200).json({ formattedHash });
+        } catch (error) {
+            console.error('[HOTORNOT] Processing Error:', error);
+            return res.status(500).json({ error: "Failed to process asset for Hot or Not." });
+        }
     }
 }
 module.exports = new FeedController();
