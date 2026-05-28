@@ -14,7 +14,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-const IPFS_DIR = path.join(process.cwd(), 'mock_ipfs');
+const IPFS_DIR = path.join(__dirname, 'mock_ipfs');
 if (!fs.existsSync(IPFS_DIR)) {
     fs.mkdirSync(IPFS_DIR);
 }
@@ -120,7 +120,7 @@ app.post('/api/network/block', (req, res) => {
 // 5. WEBSOCKETS (Chat & Anti-Cheat Mining)
 // ==========================================
 
-const CHAT_DB_FILE = path.join(process.cwd(), 'chat_db.json');
+const CHAT_DB_FILE = path.join(__dirname, 'chat_db.json');
 
 // Temporary Memory for Chat & Mining Sessions
 const dbMemory = {

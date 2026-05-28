@@ -562,7 +562,7 @@ class ProfileService {
             if (isOld && s.score < 5) {
                 if (s.targetHash && s.targetHash.startsWith('hotornot_')) {
                     const fs = require('fs'); const path = require('path');
-                    const filePath = path.join(process.cwd(), 'mock_ipfs', s.targetHash);
+                    const filePath = path.join(__dirname, '..', 'mock_ipfs', s.targetHash);
                     if (fs.existsSync(filePath)) { try { fs.unlinkSync(filePath); } catch(e) {} }
                 }
                 return false;

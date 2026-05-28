@@ -32,8 +32,23 @@ class BlockchainService extends EventEmitter {
     }
 
     getChain() {
-        const data = fs.readFileSync(CHAIN_FILE, 'utf8');
-        return JSON.parse(data);
+        try {
+            const data = fs.readFileSync(CHAIN_FILE, 'utf8');
+            return JSON.parse(data);
+        } catch (error) {
+            console.error(`[BLOCKCHAIN ERROR] Failed to read or parse ${CHAIN_FILE}:`, error.message);
+            console.error("Falling back to a fresh Genesis block to prevent server crash.");
+            return [
+                {
+                    index: 0,
+                    timestamp: 1700000000000,
+                    transactions: [],
+                    previousHash: "0",
+                    nonce: 0,
+                    hash: "00000"
+                }
+            ];
+        }
     }
 
     saveChain(chain) {
