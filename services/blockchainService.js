@@ -299,7 +299,7 @@ class BlockchainService extends EventEmitter {
 
         const currentBalance = this.calculateBalance(sender, chain);
         // Skip balance checks for certain types that don't consume balance
-        const balanceRequired = !['FOLLOW_USER', 'PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'SHOUTBOX_POST', 'ADMIN_MINT', 'SUBMIT_HOT_OR_NOT', 'VOTE_HOT_OR_NOT', 'STORY_POST'].includes(type);
+        const balanceRequired = !['FOLLOW_USER', 'PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'SHOUTBOX_POST', 'ADMIN_MINT', 'SUBMIT_HOT_OR_NOT', 'VOTE_HOT_OR_NOT', 'STORY_POST', 'REPOST_POST'].includes(type);
 
         if (type === 'ADMIN_MINT') {
             const adminAddress = this.getAdminAddress(chain);

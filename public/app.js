@@ -401,33 +401,58 @@ async function loadMainGlobalFeed() {
         displayablePosts.forEach(item => {
             const postEl = document.createElement('div');
             postEl.className = 'card post';
+
             const timeStr = new Date(item.timestamp).toLocaleString();
-            const roles = item.roles || [];
-            const isOwner = item.sender === window.CoreEngine.userKeys.publicKey;
-            const deleteBtn = isOwner ? `<button class="interaction-btn" onclick="window.ActionEngine.deletePost('${item.transactionHash}')">🗑️</button>` : '';
-            const editBtn = isOwner ? `<button class="interaction-btn" onclick="window.ActionEngine.promptEditPostMetadata('${item.transactionHash}', '${escapeJsArg(item.data.metadata || '')}')">✏️ Edit Tags</button>` : '';
+            const originalSender = item.sender; // The creator of the content
+            const actionTaker = item.isRepost ? item.reposter : item.sender; // The person who performed the action we're seeing (post or repost)
+            const actionHash = item.transactionHash; // The hash of the post or repost action
+
+            const isMyContent = originalSender === window.CoreEngine.userKeys.publicKey;
+            const iAmActionTaker = actionTaker === window.CoreEngine.userKeys.publicKey;
+
+            const canDelete = iAmActionTaker; // You can delete your own post or your own repost
+            const deleteBtn = canDelete ? `<button class="interaction-btn" onclick="window.ActionEngine.deletePost('${actionHash}')">🗑️</button>` : '';
+
+            // You can only edit the original post, not a repost of it.
+            const canEdit = isMyContent && !item.isRepost;
+            const editBtn = canEdit ? `<button class="interaction-btn" onclick="window.ActionEngine.promptEditPostMetadata('${actionHash}', '${escapeJsArg(item.data.metadata || '')}')">✏️ Edit Tags</button>` : '';
+
+            const canRepost = !iAmActionTaker;
+            const originalHashForRepost = item.isRepost ? item.data.originalTxHash : item.transactionHash;
+            const repostBtn = canRepost ? `<button class="interaction-btn" onclick="window.ActionEngine.repostPost('${originalHashForRepost}')">🔁 Repost</button>` : '';
+
+            const canTip = !isMyContent;
+            const tipBtn = canTip ? `<button class="interaction-btn" onclick="window.WalletEngine.promptSendCoins('${originalSender}')">💸 Tip</button>` : '';
+
+            const repostHeader = item.isRepost ? `<div class="repost-header" style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px; display: flex; align-items: center; gap: 5px; padding-left: 45px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink: 0;"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"></path></svg>
+                <span style="cursor:pointer;" onclick="inspectTargetNode('${actionTaker}')">${resolveProfile(actionTaker).username} reposted</span>
+            </div>` : '';
+
             postEl.innerHTML = `
-                <div class="post-avatar" onclick="inspectTargetNode('${item.sender}')" style="cursor:pointer;"><img src="${getAvatarUrl(item.sender)}"></div>
+                ${repostHeader}
+                <div class="post-avatar" onclick="inspectTargetNode('${originalSender}')" style="cursor:pointer;"><img src="${getAvatarUrl(originalSender)}"></div>
                 <div style="flex: 1;">
                     <div class="post-header">
-                        <span class="post-name" onclick="inspectTargetNode('${item.sender}')">${resolveProfile(item.sender).username}</span>
-                        ${renderBadges(roles)}
-                        <span class="post-meta" style="margin-left:auto;">${item.sender.substring(0,10)}... • ${timeStr}</span>
-                        ${!isOwner ? `<button class="secondary" style="padding: 2px 5px; font-size: 10px; margin-left: 10px;" onclick="toggleBlockNode('${item.sender}')">Block</button>` : ''}
+                        <span class="post-name" onclick="inspectTargetNode('${originalSender}')">${resolveProfile(originalSender).username}</span>
+                        ${renderBadges(item.roles || [])}
+                        <span class="post-meta" style="margin-left:auto;">${originalSender.substring(0,10)}... • ${new Date(item.isRepost ? item.data.timestamp : item.timestamp).toLocaleString()}</span>
+                        ${!isMyContent ? `<button class="secondary" style="padding: 2px 5px; font-size: 10px; margin-left: 10px;" onclick="toggleBlockNode('${originalSender}')">Block</button>` : ''}
                     </div>
                     ${renderPostContent(item)}
                     <div class="post-interactions">
-                        <button class="interaction-btn" onclick="window.ActionEngine.toggleLike('${item.transactionHash}', '${item.sender}')">🔥 <span id="like-count-${item.transactionHash}">${item.likeCount || 0}</span></button>
-                        <button class="interaction-btn" onclick="toggleReplyBox('${item.transactionHash}')">💬 Reply</button>
+                        <button class="interaction-btn" onclick="window.ActionEngine.toggleLike('${actionHash}', '${actionTaker}')">🔥 <span id="like-count-${actionHash}">${item.likeCount || 0}</span></button>
+                        <button class="interaction-btn" onclick="toggleReplyBox('${actionHash}')">💬 Reply</button>
+                        ${repostBtn}
                         ${editBtn}
-                        ${!isOwner ? `<button class="interaction-btn" onclick="window.WalletEngine.promptSendCoins('${item.sender}')">💸 Tip</button>` : ''}
+                        ${tipBtn}
                         ${deleteBtn}
                     </div>
-                    <div class="reply-box" id="reply-box-${item.transactionHash}">
+                    <div class="reply-box" id="reply-box-${actionHash}">
                         <textarea placeholder="Write a reply..."></textarea>
-                        <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${item.transactionHash}', '${item.sender}')">Post Reply</button>
-                        <div id="replies-list-${item.transactionHash}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
-                            ${(item.replies || []).map(r => `<div style="font-size: 13px; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 8px;"><strong>${resolveProfile(r.sender).username}:</strong> ${parseMentions(r.text)}</div>`).join('')}
+                        <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${actionHash}', '${actionTaker}')">Post Reply</button>
+                        <div id="replies-list-${actionHash}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+                            ${renderThreadedReplies(item.replies, 0, actionHash)}
                         </div>
                     </div>
                 </div>

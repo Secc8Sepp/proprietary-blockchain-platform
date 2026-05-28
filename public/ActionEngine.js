@@ -794,5 +794,17 @@ window.ActionEngine = {
                 btn.disabled = false;
             }
         }
+    },
+
+    async repostPost(txHash) {
+        if (!window.CoreEngine.userKeys.publicKey) return alert("You must login first.");
+        if (!confirm("Are you sure you want to repost this to your followers?")) return;
+        try {
+            await window.CoreEngine.sendSignedTransaction('REPOST_POST', '0x00', { originalTxHash: txHash });
+            alert("Post successfully reposted!");
+            loadMainGlobalFeed();
+        } catch (err) {
+            alert("Failed to repost: " + err.message);
+        }
     }
 };
