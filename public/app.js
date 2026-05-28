@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.ActionEngine.init(socket);
     window.AudioEngine.init(socket);
     window.LayoutEngine.init();
+    window.StemSplitterEngine.init(socket);
     initLocalLedgerNode();
     
     if ('serviceWorker' in navigator) {
@@ -45,11 +46,11 @@ function initializeApplicationListeners() {
 
     // Dynamically load WaveSurfer.js and regions plugin
     const wsScript = document.createElement('script');
-    wsScript.src = 'https://unpkg.com/wavesurfer.js';
+    wsScript.src = 'https://unpkg.com/wavesurfer.js@6.6.4/dist/wavesurfer.js';
     document.head.appendChild(wsScript);
     wsScript.onload = () => {
         const regionsScript = document.createElement('script');
-        regionsScript.src = 'https://unpkg.com/wavesurfer.js/dist/plugin/wavesurfer.regions.min.js';
+        regionsScript.src = 'https://unpkg.com/wavesurfer.js@6.6.4/dist/plugin/wavesurfer.regions.min.js';
         document.head.appendChild(regionsScript);
         regionsScript.onload = () => console.log('[INIT] ✓ Waveform Engine ready.');
     };
@@ -874,21 +875,16 @@ function switchTab(tabName, element, targetKey = null) {
     currentView = tabName;
     const container = document.querySelector('.container');
     if (container) container.classList.remove('chat-mode'); // Auto-close fullscreen chat when navigating
-
-    document.getElementById('view-feed').classList.add('hidden');
-    document.getElementById('view-profile').classList.add('hidden');
-    const walletView = document.getElementById('view-wallet');
-    if (walletView) walletView.classList.add('hidden');
-    document.getElementById('view-zine').classList.add('hidden');
-    const views = ['wallet', 'market', 'events', 'zine', 'hotornot'];
-    views.forEach(v => {
-        const el = document.getElementById('view-' + v);
-        if (el) el.classList.add('hidden');
-    });
     
+    // Hide all main views to ensure a clean slate
+    document.querySelectorAll('.main-content > div[id^="view-"]').forEach(view => {
+        view.classList.add('hidden');
+    });
+
     document.querySelectorAll('.side-nav-item').forEach(i => i.classList.remove('active'));
 
-    document.getElementById('view-' + tabName).classList.remove('hidden');
+    const targetView = document.getElementById('view-' + tabName);
+    if (targetView) targetView.classList.remove('hidden');
     if(element) element.classList.add('active');
 
     // Revert to personal theme when leaving someone else's profile
@@ -929,6 +925,7 @@ function switchTab(tabName, element, targetKey = null) {
     if (tabName === 'zine') renderZine();
     if (tabName === 'hotornot') window.BattleEngines.loadHotOrNot();
     if (tabName === 'feed') window.loadMainGlobalFeed();
+    if (tabName === 'tools' && window.StemSplitterEngine) window.StemSplitterEngine.render();
     if (tabName === 'wallet' && window.WalletEngine) window.WalletEngine.renderWalletDashboard();
 }
 
@@ -2532,3 +2529,92 @@ function promptNewDM() {
         alert("User not found on the network.");
     }
 }
+
+// ==========================================
+// MARKETPLACE UI ENGINE
+// ==========================================
+
+window.switchMarketTab = function(tab) {
+    document.getElementById('market-sec-commission').classList.add('hidden');
+    document.getElementById('market-sec-buy').classList.add('hidden');
+    document.getElementById('market-sec-sell').classList.add('hidden');
+    
+    document.getElementById('tab-btn-commission').className = 'secondary';
+    document.getElementById('tab-btn-buy').className = 'secondary';
+    document.getElementById('tab-btn-sell').className = 'secondary';
+
+    document.getElementById('tab-btn-' + tab).className = '';
+    document.getElementById('tab-btn-' + tab).style.background = 'var(--primary)';
+    document.getElementById('tab-btn-' + tab).style.color = '#000';
+    
+    document.getElementById('market-sec-' + tab).classList.remove('hidden');
+    if(tab !== 'sell') window.renderMarketplace();
+};
+
+window.loadMarketplace = async function() {
+    try {
+        const res = await fetch('/api/social/market');
+        window.marketDataCache = await res.json();
+        window.renderMarketplace();
+    } catch(err) { console.error("Market load error:", err); }
+};
+
+window.renderMarketplace = function() {
+    // Render Bounties
+    const commContainer = document.getElementById('ui-market-bounties');
+    if (commContainer && window.marketDataCache && window.marketDataCache.bounties) {
+        let bounties = [...window.marketDataCache.bounties];
+        const orderFilter = document.getElementById('comm-order-filter') ? document.getElementById('comm-order-filter').value : 'newest';
+        const sortFilter = document.getElementById('comm-sort-filter') ? document.getElementById('comm-sort-filter').value : 'newest';
+
+        if (orderFilter === 'yours-first' && window.CoreEngine && window.CoreEngine.userKeys) {
+            bounties.sort((a,b) => (b.creator === window.CoreEngine.userKeys.publicKey ? 1 : 0) - (a.creator === window.CoreEngine.userKeys.publicKey ? 1 : 0));
+        } else if (orderFilter === 'others-first' && window.CoreEngine && window.CoreEngine.userKeys) {
+            bounties.sort((a,b) => (a.creator === window.CoreEngine.userKeys.publicKey ? 1 : 0) - (b.creator === window.CoreEngine.userKeys.publicKey ? 1 : 0));
+        }
+
+        if (sortFilter === 'newest') bounties.sort((a,b) => b.timestamp - a.timestamp);
+        else if (sortFilter === 'oldest') bounties.sort((a,b) => a.timestamp - b.timestamp);
+        else if (sortFilter === 'highest') bounties.sort((a,b) => b.amount - a.amount);
+
+        commContainer.innerHTML = bounties.map(b => {
+            const isOwner = window.CoreEngine && b.creator === window.CoreEngine.userKeys.publicKey;
+            const statusHtml = b.awarded ? `<span style="color:var(--warning);">🏆 Awarded to Node_${b.winner.substring(0,6)}</span>` : `<span style="color:var(--success);">🟢 Open</span>`;
+            return `<div class="card" style="margin-bottom:0;"><div class="card-body">
+                <div style="display:flex; justify-content:space-between;">
+                    <h4 style="color:var(--primary); margin:0;">${b.amount} $VOD</h4>
+                    ${statusHtml}
+                </div>
+                <p style="font-size:13px; margin: 10px 0;">${escapeHtml(b.description)}</p>
+                <div style="font-size:11px; color:var(--text-muted); margin-bottom: 10px;">By Node_${b.creator.substring(0,6)}</div>
+                ${!b.awarded && !isOwner ? `<button style="padding:5px 15px; font-size:12px;" onclick="window.ActionEngine.submitToBounty('${b.id}')">Submit Work</button>` : ''}
+                ${isOwner && !b.awarded ? `<div style="font-size:12px; color:var(--primary); margin-top:10px;">Awaiting submissions...</div>` : ''}
+            </div></div>`;
+        }).join('') || '<div style="color:var(--text-muted);">No open commissions found.</div>';
+    }
+
+    // Render Items
+    const itemsContainer = document.getElementById('ui-market-items');
+    if (itemsContainer && window.marketDataCache && window.marketDataCache.items) {
+        let items = [...window.marketDataCache.items];
+        const search = document.getElementById('buy-search-filter') ? document.getElementById('buy-search-filter').value.toLowerCase() : '';
+        const sort = document.getElementById('buy-sort-filter') ? document.getElementById('buy-sort-filter').value : 'newest';
+
+        if (search) items = items.filter(i => i.title.toLowerCase().includes(search) || i.assetHash === search);
+
+        if (sort === 'newest') items.sort((a,b) => b.timestamp - a.timestamp);
+        else if (sort === 'price-low') items.sort((a,b) => a.price - b.price);
+        else if (sort === 'price-high') items.sort((a,b) => b.price - a.price);
+        else if (sort === 'popular') items.sort((a,b) => (b.sales || 0) - (a.sales || 0));
+
+        itemsContainer.innerHTML = items.map(i => {
+            return `<div class="card" style="margin-bottom:0;"><div class="card-body" style="text-align:center;">
+                <div style="font-size:30px; margin-bottom:10px;">📦</div>
+                <div style="font-weight:bold; color:#fff; margin-bottom:5px;">${escapeHtml(i.title)}</div>
+                <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Type: ${escapeHtml(i.itemType)}</div>
+                <div style="color:var(--primary); font-weight:bold; margin-bottom:15px;">${i.price} $VOD</div>
+                <button style="width:100%;" onclick="window.ActionEngine.buyDigitalItem('${i.id}', ${i.price}, '${i.seller}')">Purchase Asset</button>
+            </div></div>`;
+        }).join('') || '<div style="color:var(--text-muted); grid-column: 1 / -1; text-align:center;">No assets match your search.</div>';
+    }
+};

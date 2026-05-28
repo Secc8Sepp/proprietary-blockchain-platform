@@ -11,6 +11,7 @@ const feedRoutes = require('./routes/feed');
 const blockchainService = require('./services/blockchainService');
 const profileService = require('./services/profileService');
 
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -52,6 +53,11 @@ const IPFS_DIR = path.join(__dirname, 'mock_ipfs');
 if (!fs.existsSync(IPFS_DIR)) {
     fs.mkdirSync(IPFS_DIR);
 }
+const TMP_DIR = path.join(__dirname, 'tmp');
+if (!fs.existsSync(TMP_DIR)) {
+    fs.mkdirSync(TMP_DIR);
+}
+
 
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
@@ -105,6 +111,7 @@ app.get('/api/debug/system', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/social', socialRoutes);
 app.use('/api/feed', feedRoutes);
+app.use('/api/tools', require('./routes/tools'));
 
 app.get('/api/social/hotornot', (req, res) => {
     res.json(require('./services/profileService').getHotOrNotEngine());
@@ -125,6 +132,7 @@ app.use('/tracks/:filename', (req, res, next) => {
 
 // 3. STATIC ASSETS
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/tmp', express.static(path.join(__dirname, 'tmp'))); // Serve temporary stems
 
 // 4. FALLBACK
 app.get('*', (req, res) => {

@@ -15,6 +15,11 @@ class BlockchainService extends EventEmitter {
     constructor() {
         super();
         this.initializeChainFile();
+        this.stemSplitUsage = {
+            lastReset: Date.now(),
+            globalCount: 0,
+            userCounts: {}
+        };
     }
 
     initializeChainFile() {
@@ -93,6 +98,22 @@ class BlockchainService extends EventEmitter {
             console.error("Signature verification failed:", error);
             return false;
         }
+    }
+
+    calculateStemSplitCost(publicKey) {
+        const now = Date.now();
+        if (now - this.stemSplitUsage.lastReset > 24 * 60 * 60 * 1000) {
+            this.stemSplitUsage = { lastReset: now, globalCount: 0, userCounts: {} };
+        }
+
+        const baseCost = 100000;
+        const userUsageToday = this.stemSplitUsage.userCounts[publicKey] || 0;
+        const globalUsageToday = this.stemSplitUsage.globalCount || 0;
+
+        const personalEscalation = Math.pow(userUsageToday, 2) * 10000; 
+        const networkCongestion = globalUsageToday * 500; 
+
+        return baseCost + personalEscalation + networkCongestion;
     }
 
     // THE ATTENTION ECONOMY CALCULATOR
@@ -272,6 +293,11 @@ class BlockchainService extends EventEmitter {
                     if (tx.receiver === publicKey) balance += amt; // Lock ERC-20 to mint local VOD
                 }
 
+                // --- TOOLS ---
+                if (tx.type === 'STEM_SPLIT') {
+                    if (tx.sender === publicKey) balance -= tx.data.cost;
+                }
+
                 // --- ADMIN OTC MINTING (INVESTORS) ---
                 if (tx.type === 'ADMIN_MINT') {
                     if (tx.sender === adminAddress && tx.receiver === publicKey) {
@@ -323,6 +349,12 @@ class BlockchainService extends EventEmitter {
             if (type === 'CREATE_BOUNTY' && currentBalance < parseFloat(data.amount)) throw new Error("Insufficient funds for bounty.");
             if (type === 'PURCHASE_ZINE_RIGHTS' && currentBalance < parseFloat(data.price)) throw new Error("Insufficient funds to purchase Zine rights.");
             if (type === 'BRIDGE_WITHDRAW' && currentBalance < parseFloat(data.amount)) throw new Error("Insufficient funds for bridge withdrawal.");
+            if (type === 'STEM_SPLIT') {
+                const expectedCost = this.calculateStemSplitCost(sender);
+                // Security check: ensure user isn't submitting a fraudulent (lower) cost
+                if (data.cost !== expectedCost) throw new Error(`Cost mismatch. Network expects ${expectedCost}, you sent ${data.cost}.`);
+                if (currentBalance < expectedCost) throw new Error(`Insufficient funds for Stem Split. You need ${expectedCost.toLocaleString()} $VOD.`);
+            }
         }
 
         if (type === 'SUBMIT_HOT_OR_NOT') {
@@ -363,6 +395,13 @@ class BlockchainService extends EventEmitter {
         const newBlock = { index: nextIndex, timestamp: nextTimestamp, transactions, previousHash: latestBlock.hash, nonce, hash };
         chain.push(newBlock);
         this.saveChain(chain);
+
+        // Post-transaction state updates
+        if (type === 'STEM_SPLIT') {
+            this.stemSplitUsage.globalCount++;
+            this.stemSplitUsage.userCounts[sender] = (this.stemSplitUsage.userCounts[sender] || 0) + 1;
+        }
+
         this.emit('new_block', newBlock);
         return newBlock;
     }

@@ -337,6 +337,7 @@
                     <div class="side-nav-item" onclick="switchTab('events', this)">📅 Events</div>
                     <div class="side-nav-item" id="nav-wallet-tab" onclick="switchTab('wallet', this)">💼 Wallet & Escrow</div>
                     <div class="side-nav-item" id="nav-market-tab" onclick="switchTab('market', this)">🛒 Digital Marketplace</div>
+                    <div class="side-nav-item" onclick="switchTab('tools', this)">🛠️ Tools</div>
                 </div>
                 
                 <div class="side-card" id="card-chat-module">
@@ -700,6 +701,11 @@
                     <!-- This container is now populated dynamically by BattleEngines.js -->
                 </div>
 
+                <!-- VIEW 9: TOOLS -->
+                <div id="view-tools" class="hidden">
+                    <!-- StemSplitterEngine.js will render its content here -->
+                </div>
+
             </div>
 
             <div class="resizer" id="resizer-right"></div>
@@ -803,6 +809,7 @@
     <script src="/ActionEngine.js"></script>
     <script src="/GlobalTagEngine.js"></script>
     <script src="/BattleEngines.js"></script>
+    <script src="/StemSplitterEngine.js"></script>
     <script src="/app.js"></script>
 </body>
 </html>
