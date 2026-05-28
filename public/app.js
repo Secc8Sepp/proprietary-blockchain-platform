@@ -638,7 +638,7 @@ function renderPostContent(item) {
                 }
             });
 
-            wavesurfer.load(`/tracks/${audioHash}`);
+            wavesurfer.load(`/tracks/${encodeURIComponent(audioHash)}`);
 
         }, 500);
 
@@ -704,7 +704,7 @@ function renderPostContent(item) {
         return `
             <div class="post-body">
                 ${item.data.caption ? `<div style="margin-bottom: 10px;">${escapeHtml(item.data.caption)}</div>` : ''}
-                <img src="/tracks/${item.data.imageHash}" style="max-width: 100%; border-radius: 8px; border: 1px solid var(--border); margin-top: 10px;" loading="lazy">
+                <img src="/tracks/${encodeURIComponent(item.data.imageHash)}" style="max-width: 100%; border-radius: 8px; border: 1px solid var(--border); margin-top: 10px;" loading="lazy">
                 ${item.data.metadata && window.GlobalTagEngine ? `<div style="font-size:12px; color:var(--text-muted); margin-top: 10px;">${window.GlobalTagEngine.renderTags(item.data.metadata)}</div>` : ''}
             </div>
         `;
@@ -712,7 +712,7 @@ function renderPostContent(item) {
         return `
             <div class="post-body">
                 ${item.data.caption ? `<div style="margin-bottom: 10px;">${escapeHtml(item.data.caption)}</div>` : ''}
-                <video src="/tracks/${item.data.videoHash}" controls preload="metadata" style="max-width: 100%; border-radius: 8px; border: 1px solid var(--border); margin-top: 10px;"></video>
+                <video src="/tracks/${encodeURIComponent(item.data.videoHash)}" controls preload="metadata" style="max-width: 100%; border-radius: 8px; border: 1px solid var(--border); margin-top: 10px;"></video>
                 ${item.data.metadata && window.GlobalTagEngine ? `<div style="font-size:12px; color:var(--text-muted); margin-top: 10px;">${window.GlobalTagEngine.renderTags(item.data.metadata)}</div>` : ''}
             </div>
         `;

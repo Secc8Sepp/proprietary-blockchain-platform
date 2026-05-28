@@ -118,14 +118,20 @@ app.get('/api/social/hotornot', (req, res) => {
 });
 
 // 2. THE STORAGE ROUTE 
-app.use('/tracks/:filename', (req, res, next) => {
-    const filePath = path.join(IPFS_DIR, req.params.filename);
+app.get('/tracks/:filename', (req, res, next) => {
+    const filename = req.params.filename;
+    if (!filename || filename.includes('..') || filename.includes('/')) {
+        return res.status(400).send('Invalid filename');
+    }
+    const filePath = path.join(IPFS_DIR, filename);
     if (fs.existsSync(filePath)) {
-        return res.sendFile(filePath, { headers: { 'Access-Control-Allow-Origin': '*' } });
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Accept-Ranges', 'bytes');
+        return res.sendFile(filePath);
     }
     const peers = req.app.get('peers') || [];
     if (peers.length > 0) {
-        return res.redirect(`${peers[0]}/tracks/${req.params.filename}`);
+        return res.redirect(`${peers[0]}/tracks/${filename}`);
     }
     res.status(404).send('Asset missing from swarm');
 });
@@ -169,13 +175,17 @@ app.post('/api/network/block', (req, res) => {
         blockchainService.saveChain(currentChain);
         
         // Incrementally update the profile cache instead of rebuilding from scratch
-        block.transactions.forEach(tx => {
-            if (tx.type === 'PROFILE_UPDATE') profileService.getProfileDirectory(); // This will invalidate and rebuild the cache if needed
-            
-            extractAndSyncHashes(tx);
-        });
+        if (block.transactions && block.transactions.length > 0) {
+            block.transactions.forEach(tx => {
+                if (tx.type === 'PROFILE_UPDATE') profileService.getProfileDirectory(); // This will invalidate and rebuild the cache if needed
+                
+                extractAndSyncHashes(tx);
+            });
 
-        io.emit('blockchain_update', { type: block.transactions[0].type, transaction: block.transactions[0] });
+            io.emit('blockchain_update', { type: block.transactions[0].type, transaction: block.transactions[0] });
+        } else {
+            io.emit('blockchain_update', { type: 'SYSTEM_SYNC' });
+        }
         console.log(`📦 Synced P2P Block from network: ${block.hash}`);
     }
     res.send('ok');
@@ -589,45 +599,51 @@ server.listen(PORT, () => {
                 }).catch(e => {});
             }
         });
-        block.transactions.forEach(extractAndSyncHashes);
+        if (block.transactions && block.transactions.length > 0) {
+            block.transactions.forEach(extractAndSyncHashes);
 
-        // Update in-memory state based on new transactions
-        block.transactions.forEach(tx => {
-            if (tx.type === 'PURCHASE_ZINE_RIGHTS') {
-                const article = dbMemory.zineArticles.find(a => a.id === tx.data.articleId);
-                if (article && !article.ownersList.includes(tx.sender)) {
-                    article.ownersList.push(tx.sender);
-                    saveDBMemory();
-                    io.emit('zine_update', dbMemory.zineArticles); // Notify all clients of the ownership change
-                    console.log(`📰 Article Rights Updated via Ledger: ${article.title} by ${tx.sender}`);
+            // Update in-memory state based on new transactions
+            block.transactions.forEach(tx => {
+                if (tx.type === 'PURCHASE_ZINE_RIGHTS') {
+                    const article = dbMemory.zineArticles.find(a => a.id === tx.data.articleId);
+                    if (article && !article.ownersList.includes(tx.sender)) {
+                        article.ownersList.push(tx.sender);
+                        saveDBMemory();
+                        io.emit('zine_update', dbMemory.zineArticles); // Notify all clients of the ownership change
+                        console.log(`📰 Article Rights Updated via Ledger: ${article.title} by ${tx.sender}`);
+                    }
                 }
-            }
-        });
+            });
+        }
     });
 });
 
 async function extractAndSyncHashes(tx) {
-    if (!tx.data) return;
-    const hashes = [tx.data.audioHash, tx.data.imageHash, tx.data.videoHash, tx.data.fileHash, tx.data.avatarHash, tx.data.bannerHash, tx.data.coverHash, tx.data.sectionImages].filter(Boolean);
-    
-    for (const hash of hashes) {
-        const filePath = path.join(IPFS_DIR, hash);
-        if (!fs.existsSync(filePath)) {
-            for (const peer of PEERS) {
-                try {
-                    const response = await fetch(`${peer}/tracks/${hash}`, {
-                        headers: {
-                            'ngrok-skip-browser-warning': 'true'
+    try {
+        if (!tx.data) return;
+        const hashes = [tx.data.audioHash, tx.data.imageHash, tx.data.videoHash, tx.data.fileHash, tx.data.avatarHash, tx.data.bannerHash, tx.data.coverHash, tx.data.sectionImages].filter(Boolean);
+        
+        for (const hash of hashes) {
+            const filePath = path.join(IPFS_DIR, hash);
+            if (!fs.existsSync(filePath)) {
+                for (const peer of PEERS) {
+                    try {
+                        const response = await fetch(`${peer}/tracks/${hash}`, {
+                            headers: {
+                                'ngrok-skip-browser-warning': 'true'
+                            }
+                        });
+                        if (response.ok) {
+                            console.log(`📥 Swarm Sync: Downloaded missing asset ${hash} from ${peer}`);
+                            const buffer = await response.arrayBuffer();
+                            fs.writeFileSync(filePath, Buffer.from(buffer));
+                            break; 
                         }
-                    });
-                    if (response.ok) {
-                        console.log(`📥 Swarm Sync: Downloaded missing asset ${hash} from ${peer}`);
-                        const buffer = await response.arrayBuffer();
-                        fs.writeFileSync(filePath, Buffer.from(buffer));
-                        break; 
-                    }
-                } catch (err) {}
+                    } catch (err) {}
+                }
             }
         }
+    } catch (err) {
+        console.error("Swarm Sync Error:", err);
     }
 }

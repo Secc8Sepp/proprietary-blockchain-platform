@@ -114,7 +114,7 @@ window.AudioEngine = {
         if (window.CoreEngine) window.CoreEngine.setPresence(undefined, 'Listening to Track', { title, hash: audioHash, creator: artistPublicKey, artistName });
 
         const player = document.getElementById('global-audio-player');
-        player.src = `/tracks/${audioHash}`;
+        player.src = `/tracks/${encodeURIComponent(audioHash)}`;
         player.play().catch(error => { console.error("Playback error:", error); alert("Streaming Error: Track not found on network."); });
         
         const titleEl = document.getElementById('global-track-title');
