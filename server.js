@@ -201,13 +201,14 @@ function getProfileDirectory() {
 
 function updateProfileCache(tx) {
     if (!profileCache) profileCache = {};
-    if (!profileCache[tx.sender]) profileCache[tx.sender] = { username: `Node_${tx.sender.substring(0,6)}`, avatarHash: '', joined: tx.timestamp };
+    if (!profileCache[tx.sender]) profileCache[tx.sender] = { username: `Node_${tx.sender.substring(0,6)}`, avatarHash: '', joined: tx.timestamp, tags: [] };
     if (tx.receiver && tx.receiver !== '0x00' && !profileCache[tx.receiver]) {
-        profileCache[tx.receiver] = { username: `Node_${tx.receiver.substring(0,6)}`, avatarHash: '', joined: tx.timestamp };
+        profileCache[tx.receiver] = { username: `Node_${tx.receiver.substring(0,6)}`, avatarHash: '', joined: tx.timestamp, tags: [] };
     }
     if (tx.type === 'PROFILE_UPDATE') {
         if (tx.data.username) profileCache[tx.sender].username = tx.data.username;
         if (tx.data.avatarHash) profileCache[tx.sender].avatarHash = tx.data.avatarHash;
+        if (tx.data.tags) profileCache[tx.sender].tags = tx.data.tags;
     }
 }
 

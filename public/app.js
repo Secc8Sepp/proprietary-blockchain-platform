@@ -652,9 +652,27 @@ function executeGlobalSearch(query) {
         if (tags.length > 0) return window.GlobalTagEngine.filterFeedByTag(tags[0]);
     }
     const q = query.toLowerCase();
+    
+    let matches = [];
     for (let addr in networkProfiles) {
-        if (addr.toLowerCase() === q || networkProfiles[addr].username.toLowerCase().includes(q)) return inspectTargetNode(addr);
+        const p = networkProfiles[addr];
+        let score = 0;
+        
+        if (addr.toLowerCase() === q) score += 100;
+        if (p.username.toLowerCase() === q) score += 50;
+        else if (p.username.toLowerCase().includes(q)) score += 10;
+        
+        if (p.tags && p.tags.some(t => t.toLowerCase().includes(q))) score += 20;
+        
+        if (score > 0) matches.push({ address: addr, score, ...p });
     }
+    matches.sort((a, b) => b.score - a.score);
+    
+    if (matches.length > 0) {
+        if (matches.length === 1 || matches[0].score >= 50) return inspectTargetNode(matches[0].address);
+        return window.showSearchResultsDialog(matches, query);
+    }
+
     const track = feedTracks.find(t => (t.data.trackTitle && t.data.trackTitle.toLowerCase().includes(q)) || (t.data.artist && t.data.artist.toLowerCase().includes(q)));
     if (track && window.AudioEngine) return window.AudioEngine.playTrack(track.data.trackTitle, track.data.audioHash, track.sender, track.data.artist);
     const article = zineArticles.find(a => (a.title && a.title.toLowerCase().includes(q)) || (a.body && a.body.toLowerCase().includes(q)));
@@ -722,6 +740,46 @@ async function respondToStakeRequest(requestId, type) {
         alert("Request processed successfully.");
         fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
     } catch(err) { alert(err.message); }
+}
+
+window.showSearchResultsDialog = function(matches, query) {
+    let modal = document.getElementById('search-results-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'search-results-modal';
+        modal.className = 'modal hidden';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 500px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="color: var(--primary); margin: 0;">Search Results</h3>
+                    <button class="secondary" onclick="document.getElementById('search-results-modal').classList.add('hidden')">✖</button>
+                </div>
+                <div id="search-results-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 60vh; overflow-y: auto;"></div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+    
+    const list = document.getElementById('search-results-list');
+    list.innerHTML = `<div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Showing network results for "${escapeHtml(query)}"</div>` + 
+    matches.map(m => `
+        <div style="display:flex; align-items:center; gap:10px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; transition: 0.2s;" onclick="document.getElementById('search-results-modal').classList.add('hidden'); inspectTargetNode('${m.address}')" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='transparent'">
+            <img src="${getAvatarUrl(m.address)}" style="width: 40px; height: 40px; border-radius: 50%;">
+            <div style="display: flex; flex-direction: column;">
+                <span style="font-size: 14px; font-weight: bold; color: #fff;">${escapeHtml(m.username)}</span>
+                ${m.tags && m.tags.length > 0 ? `<span style="font-size: 10px; color: var(--primary);">Tags: ${m.tags.join(', ')}</span>` : ''}
+            </div>
+        </div>
+    `).join('');
+    
+    modal.classList.remove('hidden');
+}
+
+window.showConnectionsModal = function(friendsList, followersList) {
+    let modal = document.getElementById('search-results-modal');
+    const users = friendsList.map(addr => ({ address: addr, ...resolveProfile(addr) }));
+    // Reuse the search modal UI for friends
+    showSearchResultsDialog(users, "Crew Connections");
 }
 
 async function promptEditSong(audioHash) {
@@ -1379,6 +1437,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
             setVal('input-edit-username', profile.username || "");
             setVal('input-edit-bio', profile.bio || "");
+            setVal('input-edit-tags', profile.tags ? profile.tags.join(', ') : "");
             editedTop8 = profile.top8 ? [...profile.top8] : [];
             myFollowing = profile.following || [];
             renderEditedTop8();
@@ -1503,6 +1562,10 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
         const recContainer = document.getElementById('ui-profile-recommended');
         if (recContainer) {
             let html = '';
+            
+            window.currentProfileCrew = profile.following || [];
+            window.currentProfileFans = profile.followers || [];
+
             if (viewingUserPublicKey !== window.CoreEngine.userKeys.publicKey) {
                 const isMutual = profile.following.includes(window.CoreEngine.userKeys.publicKey);
                 if (isMutual) {
@@ -1510,12 +1573,41 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                 }
             }
 
+            html += `<div style="margin-bottom: 15px; display: flex; gap: 5px; flex-wrap: wrap;">`;
+            if (profile.uploadedTracks && profile.uploadedTracks.length > 0) {
+                html += `<span style="background: var(--primary); color: #000; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">🎧 Artist</span>`;
+            }
+            if (profile.tags && profile.tags.length > 0) {
+                profile.tags.forEach(t => {
+                    html += `<span style="background: rgba(102, 252, 241, 0.1); border: 1px solid var(--primary); color: var(--primary); padding: 3px 8px; border-radius: 4px; font-size: 11px;">#${escapeHtml(t)}</span>`;
+                });
+            }
+            html += `</div>`;
+
+            let friends = window.currentProfileCrew;
+            html += `<div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px; text-transform: uppercase; font-weight: bold; display: flex; justify-content: space-between;">
+                <span>Crew Connections (${friends.length})</span>
+                ${friends.length > 8 ? `<span style="cursor:pointer; color:var(--primary);" onclick="window.showConnectionsModal(window.currentProfileCrew, window.currentProfileFans)">View All</span>` : ''}
+            </div><div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;">`;
+            
+            friends.slice(0, 8).forEach(key => {
+                html += `<div style="display:flex; flex-direction:column; align-items:center; cursor: pointer; width: 60px;" onclick="inspectTargetNode('${key}')">
+                        <img src="${getAvatarUrl(key)}" style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid ${profile.followers.includes(key) ? 'var(--success)' : 'transparent'};">
+                        <div style="font-size: 10px; color: #fff; margin-top: 4px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%;">${resolveProfile(key).username}</div>
+                    </div>`;
+            });
+            if (friends.length === 0) html += `<div style="color: var(--text-muted); font-size: 12px;">No crew connections yet.</div>`;
+            html += `</div>`;
+
             if (profile.recommended && profile.recommended.length > 0) {
                 html += `<div style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px; text-transform: uppercase; font-weight: bold;">Suggested Connections</div>`;
                 html += profile.recommended.map(key => `
-                    <div style="display:flex; align-items:center; gap:10px; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; transition: 0.2s;" onclick="inspectTargetNode('${key}')" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='transparent'">
-                        <img src="${getAvatarUrl(key)}" style="width: 30px; height: 30px; border-radius: 50%;">
-                        <div style="font-size: 13px; font-weight: bold; color: #fff;">${resolveProfile(key).username}</div>
+                    <div style="display:flex; align-items:center; gap:10px; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; transition: 0.2s; margin-bottom: 5px;" onclick="inspectTargetNode('${rec.key}')" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='transparent'">
+                        <img src="${getAvatarUrl(rec.key)}" style="width: 30px; height: 30px; border-radius: 50%;">
+                        <div style="display: flex; flex-direction: column;">
+                            <span style="font-size: 13px; font-weight: bold; color: #fff;">${resolveProfile(rec.key).username}</span>
+                            <span style="font-size: 10px; color: var(--text-muted);">${rec.mutuals} mutual connections</span>
+                        </div>
                         <div style="margin-left: auto; font-size: 10px; color: var(--primary);">+ Add</div>
                     </div>
                 `).join('');
@@ -1846,6 +1938,8 @@ function updateComposerPreview() {
 async function saveInlineEdit() {
     const userIn = document.getElementById('input-edit-username').value.trim();
     const bioIn = document.getElementById('input-edit-bio').value.trim();
+    const tagsInputEl = document.getElementById('input-edit-tags');
+    const tagsIn = tagsInputEl ? tagsInputEl.value.trim() : "";
     const avatarInput = document.getElementById('input-edit-avatar');
     const bannerInput = document.getElementById('input-edit-banner');
     const sectionBgInput = document.getElementById('input-section-bg');
@@ -1883,6 +1977,7 @@ async function saveInlineEdit() {
         let profileData = {};
         if(userIn) profileData.username = userIn;
         profileData.bio = bioIn; // Included unconditionally so users can clear their bio
+        if(tagsInputEl) profileData.tags = tagsIn.split(',').map(t => t.trim().toLowerCase().replace(/[^a-z0-9-]/g, '')).filter(t => t);
         if(finalAvatarHash) profileData.avatarHash = finalAvatarHash;
         if(finalBannerHash) profileData.bannerHash = finalBannerHash;
         if(finalSectionBgHash) profileData.sectionImages = finalSectionBgHash;
@@ -1907,11 +2002,16 @@ async function saveInlineEdit() {
     } catch (err) { alert("Update failed: " + err.message); }
 }
 
-async function executeTargetFollow(targetPeerPublicKey) {
+window.executeTargetFollow = async function(targetPeerPublicKey, isReply = false) {
     if(!targetPeerPublicKey) return;
     if (window.CoreEngine.userKeys.publicKey === targetPeerPublicKey) return alert("Cannot connect to your own node.");
     try {
         await window.CoreEngine.sendSignedTransaction('FOLLOW_USER', targetPeerPublicKey, {});
+        
+        if (!isReply && socket) {
+            socket.emit('send_crew_request', { target: targetPeerPublicKey, from: window.CoreEngine.userKeys.publicKey });
+        }
+        
         alert("Crew connection established.");
         
         // Refresh profiles to immediately update the button UI and feed priorities

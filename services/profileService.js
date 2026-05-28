@@ -181,6 +181,7 @@ class ProfileService {
                         if (tx.data.playlistOrder) profile.playlistOrder = tx.data.playlistOrder;
                         if (tx.data.sectionImages) profile.sectionImages = tx.data.sectionImages;
                         if (tx.data.layoutOrder) profile.layoutOrder = tx.data.layoutOrder;
+                        if (tx.data.tags) profile.tags = tx.data.tags;
                     }
                     if (tx.type === 'THEME_UPDATE') {
                         profile.customCss = tx.data.customCss || "";
@@ -262,7 +263,10 @@ class ProfileService {
             }
         }
         // Sort by frequency (most likely to want to add)
-        profile.recommended = Object.keys(recommendedCounts).sort((a, b) => recommendedCounts[b] - recommendedCounts[a]).slice(0, 5);
+        profile.recommended = Object.keys(recommendedCounts)
+            .sort((a, b) => recommendedCounts[b] - recommendedCounts[a])
+            .slice(0, 8)
+            .map(k => ({ key: k, mutuals: recommendedCounts[k] }));
 
         profile.activeCommissions = Object.values(allCommissions)
             .filter(c => !c.fulfilled && (c.buyer === publicKey || c.creator === publicKey))

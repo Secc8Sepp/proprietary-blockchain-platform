@@ -72,6 +72,13 @@ window.MeshEngine = {
             }
         });
 
+        socket.on('crew_request_received', (data) => {
+            const username = window.resolveProfile(data.from).username;
+            if (confirm(`🤝 ${username} just locked you in their Crew! Do you want to follow them back and become mutuals?`)) {
+                window.executeTargetFollow(data.from, true);
+            }
+        });
+
         socket.on('user_typing', (data) => {
             if (data.serverId !== this.currentChatServer || data.channelId !== this.currentChatChannel) return;
             if (data.sender === window.CoreEngine.userKeys.publicKey) return;
