@@ -763,14 +763,14 @@ window.ActionEngine = {
 
                 btn.innerText = "Formatting MP3..."; btn.disabled = true;
                 data = { category: category, targetHash: targetHash, originalHash: originalHash };
-                try {
-                    const procRes = await fetch('/api/feed/process-hotornot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetHash }) });
-                    if (procRes.ok) {
-                        const procData = await procRes.json();
-                        data.targetHash = procData.formattedHash || targetHash;
-                    }
-                } catch (e) { console.error("Formatting error:", e); }
 
+                const procRes = await fetch('/api/feed/process-hotornot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetHash }) });
+                if (!procRes.ok) {
+                    const errorBody = await procRes.text();
+                    throw new Error(`Failed to format asset. Server responded with: ${errorBody}`);
+                }
+                const procData = await procRes.json();
+                data.targetHash = procData.formattedHash || targetHash;
             } else if (category === 'looks') {
                 const fileInput = document.getElementById('hotornot-looks-upload');
                 const file = fileInput.files[0];

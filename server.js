@@ -71,7 +71,6 @@ app.get('/api/debug/system', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/social', socialRoutes);
 app.use('/api/feed', feedRoutes);
-app.post('/api/feed/process-hotornot', (req, res) => require('./controllers/feedController').processHotOrNot(req, res));
 
 app.get('/api/social/hotornot', (req, res) => {
     res.json(require('./services/profileService').getHotOrNotEngine());

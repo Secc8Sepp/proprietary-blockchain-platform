@@ -65,21 +65,6 @@ router.post('/upload-file', (req, res) => {
     });
 });
 
-// Endpoint to format the MP3 and store a copy specifically for Hot or Not
-router.post('/process-hotornot', (req, res) => {
-    const body = req.body || {};
-    const { targetHash } = body;
-    if (!targetHash) return res.status(400).json({ error: 'No hash provided' });
-    
-    const ipfsDir = path.join(process.cwd(), 'mock_ipfs');
-    const originalPath = path.join(ipfsDir, targetHash);
-    const newHash = 'hotornot_' + Date.now() + '_' + targetHash;
-    const newPath = path.join(ipfsDir, newHash);
-    
-    try {
-        if (fs.existsSync(originalPath)) fs.copyFileSync(originalPath, newPath);
-        res.json({ formattedHash: newHash });
-    } catch (e) { res.status(500).json({ error: 'Failed to format MP3.' }); }
-});
+router.post('/process-hotornot', feedController.processHotOrNot);
 
 module.exports = router;
