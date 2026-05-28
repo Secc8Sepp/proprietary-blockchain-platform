@@ -1250,6 +1250,11 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             toggleBtn.style.display = viewingUserPublicKey === window.CoreEngine.userKeys.publicKey ? 'block' : 'none';
         }
 
+        // Make profile sections draggable only for the owner
+        document.querySelectorAll('#view-profile .profile-section').forEach(section => {
+            section.setAttribute('draggable', viewingUserPublicKey === window.CoreEngine.userKeys.publicKey);
+        });
+
         const messageBtn = document.getElementById('btn-profile-message');
         if (messageBtn) {
             messageBtn.style.display = viewingUserPublicKey === window.CoreEngine.userKeys.publicKey ? 'none' : 'block';
