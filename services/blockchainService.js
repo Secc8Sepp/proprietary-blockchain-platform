@@ -93,7 +93,7 @@ class BlockchainService extends EventEmitter {
     // THE ATTENTION ECONOMY CALCULATOR
     calculateBalance(publicKey, chain) {
         let balance = 100000; // Starting faucet to afford initial transactions
-        const songShareDistribution = {};
+        const assetShareDistribution = {};
         const escrowContracts = {};
         const openBounties = {};
         const songListings = {};
@@ -107,30 +107,44 @@ class BlockchainService extends EventEmitter {
             for (const tx of block.transactions) {
                 
                 // --- DEFLATIONARY ASSET MINTING ---
-                if (tx.type === 'SONG_UPLOAD') {
-                    const audioHash = tx.data.audioHash;
-                    songShareDistribution[audioHash] = {};
-                    
-                    let remainingShares = 100;
+                if (tx.type === 'SONG_UPLOAD' || tx.type === 'IMAGE_POST' || tx.type === 'VIDEO_POST' || tx.type === 'PROJECT_FILE_POST') {
+                    const assetHash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
+                    if (!assetHash) continue;
+                    assetShareDistribution[assetHash] = assetShareDistribution[assetHash] || {};
+
+                    let remainingShares = parseInt(tx.data.totalShares) || 100;
                     if (tx.data.collaborators && Array.isArray(tx.data.collaborators)) {
                         for (const collab of tx.data.collaborators) {
                             const percent = parseInt(collab.percentage) || 0;
                             if (percent > 0 && remainingShares >= percent) {
-                                songShareDistribution[audioHash][collab.address] = (songShareDistribution[audioHash][collab.address] || 0) + percent;
+                                assetShareDistribution[assetHash][collab.address] = (assetShareDistribution[assetHash][collab.address] || 0) + percent;
                                 remainingShares -= percent;
                             }
                         }
                     }
                     if (remainingShares > 0) {
-                        songShareDistribution[audioHash][tx.sender] = (songShareDistribution[audioHash][tx.sender] || 0) + remainingShares;
+                        assetShareDistribution[assetHash][tx.sender] = (assetShareDistribution[assetHash][tx.sender] || 0) + remainingShares;
                     }
 
-                    if (tx.sender === publicKey) balance -= 50000; // Cost to mint track (50k VOD)
+                    // Minting cost varies by type
+                    if (tx.type === 'SONG_UPLOAD') {
+                        if (tx.sender === publicKey) balance -= 50000; // Cost to mint track (50k VOD)
+                    } else if (tx.type === 'IMAGE_POST') {
+                        if (tx.sender === publicKey) balance -= 5000; // Image mint cost
+                    } else if (tx.type === 'VIDEO_POST') {
+                        const baseCost = 5000000; // large cost
+                        const sizePenalty = tx.data.fileSize ? Math.floor(tx.data.fileSize / 1024) * 100 : 0;
+                        if (tx.sender === publicKey) balance -= (baseCost + sizePenalty);
+                    } else if (tx.type === 'PROJECT_FILE_POST') {
+                        if (tx.sender === publicKey) balance -= 15000;
+                    }
 
                     if (tx.data.forStake) {
-                        songListings[audioHash] = {
+                        const assetListings = songListings; // reuse existing variable name for compatibility
+                        assetListings[assetHash] = {
                             price: parseFloat(tx.data.pricePerShare) || 0,
-                            available: parseInt(tx.data.sellPercentage) || 0
+                            available: parseInt(tx.data.sellPercentage) || 0,
+                            totalShares: parseInt(tx.data.totalShares) || 100
                         };
                     }
                 }
@@ -148,19 +162,19 @@ class BlockchainService extends EventEmitter {
 
                 // --- ZERO-SUM TRANSFERS ---
                 if (tx.type === 'BUY_SONG_SHARE') {
-                    const audioHash = tx.data.audioHash;
+                    const assetHash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
                     const buyer = tx.sender;
                     const seller = tx.receiver;
                     const count = parseInt(tx.data.shareCount) || 0;
                     const totalCost = count * (parseFloat(tx.data.pricePerShare) || 0);
-                    const listing = songListings[audioHash];
+                    const listing = songListings[assetHash];
 
-                    if (listing && listing.available >= count && listing.price === parseFloat(tx.data.pricePerShare) && songShareDistribution[audioHash] && (songShareDistribution[audioHash][seller] >= count)) {
+                    if (listing && listing.available >= count && listing.price === parseFloat(tx.data.pricePerShare) && assetShareDistribution[assetHash] && (assetShareDistribution[assetHash][seller] >= count)) {
                         if (buyer === publicKey) balance -= totalCost;
                         if (seller === publicKey) balance += totalCost;
-                        songShareDistribution[audioHash][seller] -= count;
-                        if (!songShareDistribution[audioHash][buyer]) songShareDistribution[audioHash][buyer] = 0;
-                        songShareDistribution[audioHash][buyer] += count;
+                        assetShareDistribution[assetHash][seller] -= count;
+                        if (!assetShareDistribution[assetHash][buyer]) assetShareDistribution[assetHash][buyer] = 0;
+                        assetShareDistribution[assetHash][buyer] += count;
                         listing.available -= count;
                     }
                 }
@@ -177,7 +191,7 @@ class BlockchainService extends EventEmitter {
                     if (tx.sender === publicKey) balance += 5000; 
                     
                     // Dividend splits: 20,000 $VOD minted and split across shareholders
-                    const sharesTable = songShareDistribution[audioHash];
+                    const sharesTable = assetShareDistribution[audioHash];
                     if (sharesTable) {
                         for (const [holderKey, sharesOwned] of Object.entries(sharesTable)) {
                             if (sharesOwned > 0 && holderKey === publicKey) {
@@ -298,6 +312,22 @@ class BlockchainService extends EventEmitter {
             const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
             const recentSubmissions = chain.flatMap(b => b.transactions).filter(t => t.type === 'SUBMIT_HOT_OR_NOT' && t.sender === sender && t.timestamp > oneDayAgo && (t.data.category || 'music') === category);
             if (recentSubmissions.length > 0) throw new Error(`You can only submit 1 item per day to the ${category} category.`);
+        }
+
+        if (type === 'VOTE_HOT_OR_NOT') {
+            // Prevent voting for your own submission
+            try {
+                const submissionId = data.submissionId;
+                if (submissionId) {
+                    const submissionBlock = chain.find(b => b.hash === submissionId);
+                    if (submissionBlock) {
+                        const submissionTx = submissionBlock.transactions.find(t => t.type === 'SUBMIT_HOT_OR_NOT');
+                        if (submissionTx && submissionTx.sender === sender) {
+                            throw new Error('You cannot vote on your own submission.');
+                        }
+                    }
+                }
+            } catch (e) { throw e; }
         }
 
         const latestBlock = this.getLatestBlock();

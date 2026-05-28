@@ -19,7 +19,19 @@ class FeedController {
                 return res.status(400).json({ error: "Invalid feed operation profile." });
             }
             const activeBlock = blockchainService.addTransaction({ sender, receiver, type, data, timestamp, signature });
-            req.app.get('socketio').emit('blockchain_update', { type, transaction: activeBlock.transactions[0] });
+            const io = req.app.get('socketio');
+            io.emit('blockchain_update', { type, transaction: activeBlock.transactions[0] });
+
+            // Emit stake-specific notifications so frontends can surface them
+            if (type === 'REQUEST_SONG_SHARE') {
+                const reqTx = activeBlock.transactions[0];
+                const assetHash = reqTx.data.audioHash || reqTx.data.imageHash || reqTx.data.videoHash || reqTx.data.fileHash || reqTx.data.targetHash;
+                io.emit('stake_request_notification', { to: receiver, from: sender, requestId: activeBlock.hash, assetHash, shareCount: reqTx.data.shareCount, pricePerShare: reqTx.data.pricePerShare });
+            }
+            if (type === 'ACCEPT_SHARE_REQUEST' || type === 'DECLINE_SHARE_REQUEST') {
+                const respTx = activeBlock.transactions[0];
+                io.emit('stake_request_response', { to: respTx.data.requester || respTx.receiver || null, from: sender, requestId: respTx.data.requestId, accepted: type === 'ACCEPT_SHARE_REQUEST' });
+            }
             
             // Broadcast to other Full Nodes (Dedicated Servers/PCs)
             const peers = req.app.get('peers') || [];

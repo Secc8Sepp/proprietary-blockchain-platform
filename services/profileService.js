@@ -79,6 +79,9 @@ class ProfileService {
         const allShareRequests = {};
         // Pre-compute playcounts for the user's uploaded tracks
         const playCounts = {};
+        const shareDistribution = {};
+        profile._trackDetails = {};
+        
         for (const block of chain) {
             for (const tx of block.transactions) {
                 if (tx.type === 'STREAM_COMPLETED') {
@@ -91,7 +94,6 @@ class ProfileService {
         const marketData = this.getMarketData();
         const itemsList = marketData.items || [];
         profile.ownedItems = [];
-        const shareDistribution = {};
         profile._trackDetails = {};
 
         // Trace the entire ledger chronologically to compute current state variables
@@ -137,20 +139,27 @@ class ProfileService {
                     if (item) profile.ownedItems.push(item);
                 }
                 if (tx.type === 'SONG_UPLOAD') {
-                    shareDistribution[tx.data.audioHash] = {};
-                    let rem = 100;
+                    const assetHash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
+                    if (!assetHash) continue;
+                    shareDistribution[assetHash] = shareDistribution[assetHash] || {};
+                    let rem = parseInt(tx.data.totalShares) || 100;
                     if (tx.data.collaborators) {
                         for (const c of tx.data.collaborators) {
                             const p = parseInt(c.percentage) || 0;
                             if (p > 0 && rem >= p) {
-                                shareDistribution[tx.data.audioHash][c.address] = (shareDistribution[tx.data.audioHash][c.address] || 0) + p;
+                                shareDistribution[assetHash][c.address] = (shareDistribution[assetHash][c.address] || 0) + p;
                                 rem -= p;
                             }
                         }
                     }
-                    if (rem > 0) shareDistribution[tx.data.audioHash][tx.sender] = (shareDistribution[tx.data.audioHash][tx.sender] || 0) + rem;
+                    if (rem > 0) shareDistribution[assetHash][tx.sender] = (shareDistribution[assetHash][tx.sender] || 0) + rem;
 
-                    profile._trackDetails[tx.data.audioHash] = { title: tx.data.trackTitle, creator: tx.sender, artist: tx.data.artist, offPlatformCollaborator: tx.data.offPlatformCollaborator, coverHash: tx.data.coverHash };
+                    if (tx.type === 'SONG_UPLOAD') {
+                        profile._trackDetails[assetHash] = { title: tx.data.trackTitle, creator: tx.sender, artist: tx.data.artist, offPlatformCollaborator: tx.data.offPlatformCollaborator, coverHash: tx.data.coverHash };
+                    } else {
+                        // For images/projects/videos, store as generic asset details under _trackDetails for display
+                        profile._trackDetails[assetHash] = { title: tx.data.caption || tx.data.filename || 'Asset', creator: tx.sender, coverHash: tx.data.coverHash || null };
+                    }
                 }
                 if (tx.type === 'EDIT_SONG_METADATA') {
                     if (profile._trackDetails[tx.data.audioHash] && profile._trackDetails[tx.data.audioHash].creator === tx.sender) {
@@ -160,7 +169,7 @@ class ProfileService {
                     }
                 }
                 if (tx.type === 'BUY_SONG_SHARE') {
-                    const hash = tx.data.audioHash;
+                    const hash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
                     const buyer = tx.sender;
                     const seller = tx.receiver;
                     const count = parseInt(tx.data.shareCount) || 0;
@@ -172,9 +181,10 @@ class ProfileService {
                 }
                 
                 if (tx.type === 'REQUEST_SONG_SHARE') {
+                    const assetHash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
                     allShareRequests[block.hash] = {
                         id: block.hash,
-                        audioHash: tx.data.audioHash,
+                        assetHash: assetHash,
                         buyer: tx.sender,
                         seller: tx.receiver,
                         count: tx.data.shareCount,
@@ -208,18 +218,26 @@ class ProfileService {
                         profile.top8 = Array.isArray(tx.data.top8Keys) ? tx.data.top8Keys : [];
                     }
                     if (tx.type === 'SONG_UPLOAD') {
-                        const artistToUse = tx.data.artist;
-                        const titleToUse = tx.data.trackTitle;
-                        profile.uploadedTracks.push({
-                            title: titleToUse,
-                            artist: artistToUse,
-                            offPlatformCollaborator: tx.data.offPlatformCollaborator,
-                            hash: tx.data.audioHash,
-                            coverHash: tx.data.coverHash || null,
-                            timestamp: tx.timestamp,
-                            playCount: playCounts[tx.data.audioHash] || 0
-                        });
+                            const artistToUse = tx.data.artist;
+                            const titleToUse = tx.data.trackTitle;
+                            profile.uploadedTracks.push({
+                                title: titleToUse,
+                                artist: artistToUse,
+                                offPlatformCollaborator: tx.data.offPlatformCollaborator,
+                                hash: tx.data.audioHash,
+                                coverHash: tx.data.coverHash || null,
+                                timestamp: tx.timestamp,
+                                playCount: playCounts[tx.data.audioHash] || 0
+                            });
                     }
+                        if (tx.type === 'IMAGE_POST' || tx.type === 'VIDEO_POST' || tx.type === 'PROJECT_FILE_POST') {
+                            const assetHash = tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
+                            profile.uploadedImages.push({
+                                caption: tx.data.caption,
+                                hash: assetHash,
+                                timestamp: tx.timestamp
+                            });
+                        }
                     if (tx.type === 'EDIT_SONG_METADATA') {
                         const idx = profile.uploadedTracks.findIndex(t => t.hash === tx.data.audioHash);
                         if (idx !== -1) {
@@ -341,23 +359,29 @@ class ProfileService {
                 if (['SONG_UPLOAD', 'TEXT_POST', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'STORY_POST'].includes(tx.type)) {
                     postOwners[block.hash] = tx.sender;
                 }
-                if (tx.type === 'SONG_UPLOAD') {
-                    trackMetadata[tx.data.audioHash] = { title: tx.data.trackTitle, artist: tx.data.artist, offPlatformCollaborator: tx.data.offPlatformCollaborator, coverHash: tx.data.coverHash, creator: tx.sender };
-                    shareDistribution[tx.data.audioHash] = {};
-                    let rem = 100;
+                if (tx.type === 'SONG_UPLOAD' || tx.type === 'IMAGE_POST' || tx.type === 'VIDEO_POST' || tx.type === 'PROJECT_FILE_POST') {
+                    const assetHash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
+                    if (!assetHash) continue;
+                    if (tx.type === 'SONG_UPLOAD') {
+                        trackMetadata[assetHash] = { title: tx.data.trackTitle, artist: tx.data.artist, offPlatformCollaborator: tx.data.offPlatformCollaborator, coverHash: tx.data.coverHash, creator: tx.sender };
+                    } else {
+                        trackMetadata[assetHash] = { title: tx.data.caption || tx.data.filename || 'Asset', creator: tx.sender, coverHash: tx.data.coverHash };
+                    }
+                    shareDistribution[assetHash] = shareDistribution[assetHash] || {};
+                    let rem = parseInt(tx.data.totalShares) || 100;
                     if (tx.data.collaborators) {
                         for (const c of tx.data.collaborators) {
                             const p = parseInt(c.percentage) || 0;
                             if (p > 0 && rem >= p) {
-                                shareDistribution[tx.data.audioHash][c.address] = (shareDistribution[tx.data.audioHash][c.address] || 0) + p;
+                                shareDistribution[assetHash][c.address] = (shareDistribution[assetHash][c.address] || 0) + p;
                                 rem -= p;
                             }
                         }
                     }
-                    if (rem > 0) shareDistribution[tx.data.audioHash][tx.sender] = (shareDistribution[tx.data.audioHash][tx.sender] || 0) + rem;
+                    if (rem > 0) shareDistribution[assetHash][tx.sender] = (shareDistribution[assetHash][tx.sender] || 0) + rem;
 
-                    playCounts[tx.data.audioHash] = 0;
-                    if (tx.data.forStake) songListings[tx.data.audioHash] = { available: parseInt(tx.data.sellPercentage)||0, price: parseFloat(tx.data.pricePerShare)||0 };
+                    playCounts[assetHash] = playCounts[assetHash] || 0;
+                    if (tx.data.forStake) songListings[assetHash] = { available: parseInt(tx.data.sellPercentage)||0, price: parseFloat(tx.data.pricePerShare)||0, totalShares: parseInt(tx.data.totalShares)||100 };
                 }
                 if (tx.type === 'EDIT_SONG_METADATA') {
                     if (trackMetadata[tx.data.audioHash] && trackMetadata[tx.data.audioHash].creator === tx.sender) {
@@ -445,15 +469,16 @@ class ProfileService {
                     });
                     feedItem.replies = rootReplies;
 
-                    if (tx.type === 'SONG_UPLOAD') {
-                        feedItem.playCount = playCounts[tx.data.audioHash] || 0;
-                        feedItem.shares = shareDistribution[tx.data.audioHash] || {};
-                        feedItem.listing = songListings[tx.data.audioHash];
-                        if (trackMetadata[tx.data.audioHash]) {
-                            feedItem.data.trackTitle = trackMetadata[tx.data.audioHash].title;
-                            feedItem.data.artist = trackMetadata[tx.data.audioHash].artist;
-                            feedItem.data.offPlatformCollaborator = trackMetadata[tx.data.audioHash].offPlatformCollaborator;
-                            feedItem.data.coverHash = trackMetadata[tx.data.audioHash].coverHash;
+                    if (tx.type === 'SONG_UPLOAD' || tx.type === 'IMAGE_POST' || tx.type === 'VIDEO_POST' || tx.type === 'PROJECT_FILE_POST') {
+                        const assetHash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
+                        feedItem.playCount = playCounts[assetHash] || 0;
+                        feedItem.shares = shareDistribution[assetHash] || {};
+                        feedItem.listing = songListings[assetHash];
+                        if (trackMetadata[assetHash]) {
+                            feedItem.data.trackTitle = trackMetadata[assetHash].title;
+                            feedItem.data.artist = trackMetadata[assetHash].artist;
+                            feedItem.data.offPlatformCollaborator = trackMetadata[assetHash].offPlatformCollaborator;
+                            feedItem.data.coverHash = trackMetadata[assetHash].coverHash;
                         }
                     }
 

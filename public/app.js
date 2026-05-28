@@ -129,6 +129,29 @@ function initializeApplicationListeners() {
             else switchChannel(window.MeshEngine.currentChatServer, window.MeshEngine.currentChatChannel);
         }
     });
+    socket.on('stake_request_notification', (data) => {
+        try {
+            if (!window.CoreEngine || !window.CoreEngine.userKeys) return;
+            if (data.to === window.CoreEngine.userKeys.publicKey) {
+                const title = 'New Stake Request';
+                const body = `Incoming stake request from ${data.from} for ${data.shareCount}% of asset ${data.assetHash} at ${data.pricePerShare} $VOD each.`;
+                alert(`${title}\n\n${body}`);
+                // Optionally trigger a UI refresh
+                fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
+            }
+        } catch (e) {}
+    });
+    socket.on('stake_request_response', (data) => {
+        try {
+            if (!window.CoreEngine || !window.CoreEngine.userKeys) return;
+            if (data.to === window.CoreEngine.userKeys.publicKey) {
+                const title = data.accepted ? 'Stake Request Accepted' : 'Stake Request Declined';
+                const body = `${data.from} has ${data.accepted ? 'accepted' : 'declined'} your stake request (id: ${data.requestId}).`;
+                alert(`${title}\n\n${body}`);
+                fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
+            }
+        } catch (e) {}
+    });
     console.log('[INIT] Event listeners initialized');
 }
 

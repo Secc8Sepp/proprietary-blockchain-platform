@@ -76,16 +76,37 @@ window.ActionEngine = {
                 };
             } else if (imgFile) {
                 const hash = await uploadMediaAssetFile(imgFile);
+                const forStake = document.getElementById('image-stake-checkbox') ? document.getElementById('image-stake-checkbox').checked : false;
+                let sellPercentage = 0; let pricePerShare = 0; let totalShares = 100;
+                if (forStake) {
+                    sellPercentage = parseInt(document.getElementById('image-stake-percent').value) || 0;
+                    pricePerShare = parseFloat(document.getElementById('image-stake-price').value) || 0;
+                    totalShares = parseInt(document.getElementById('image-total-shares').value) || 100;
+                }
                 type = 'IMAGE_POST';
-                data = { caption: textIn, imageHash: hash };
+                data = { caption: textIn, imageHash: hash, forStake, sellPercentage, pricePerShare, totalShares };
             } else if (vidFile) {
                 const hash = await uploadMediaAssetFile(vidFile);
+                const forStake = document.getElementById('video-stake-checkbox') ? document.getElementById('video-stake-checkbox').checked : false;
+                let sellPercentage = 0; let pricePerShare = 0; let totalShares = 100;
+                if (forStake) {
+                    sellPercentage = parseInt(document.getElementById('video-stake-percent').value) || 0;
+                    pricePerShare = parseFloat(document.getElementById('video-stake-price').value) || 0;
+                    totalShares = parseInt(document.getElementById('video-total-shares').value) || 100;
+                }
                 type = 'VIDEO_POST';
-                data = { caption: textIn, videoHash: hash, fileSize: vidFile.size };
+                data = { caption: textIn, videoHash: hash, fileSize: vidFile.size, forStake, sellPercentage, pricePerShare, totalShares };
             } else if (zipFile) {
                 const hash = await uploadMediaAssetFile(zipFile);
+                const forStake = document.getElementById('file-stake-checkbox') ? document.getElementById('file-stake-checkbox').checked : false;
+                let sellPercentage = 0; let pricePerShare = 0; let totalShares = 100;
+                if (forStake) {
+                    sellPercentage = parseInt(document.getElementById('file-stake-percent').value) || 0;
+                    pricePerShare = parseFloat(document.getElementById('file-stake-price').value) || 0;
+                    totalShares = parseInt(document.getElementById('file-total-shares').value) || 100;
+                }
                 type = 'PROJECT_FILE_POST';
-                data = { caption: textIn, fileHash: hash, filename: zipFile.name };
+                data = { caption: textIn, fileHash: hash, filename: zipFile.name, forStake, sellPercentage, pricePerShare, totalShares };
             } else {
                 if (textIn.length > 200) {
                     if (confirm("This is a long post! Would you like to publish it as a Zine Article instead?")) {
@@ -685,14 +706,19 @@ window.ActionEngine = {
     },
 
     async castHotOrNotVote(submissionId, submitter, vote, targetHash) {
-        if (!window.CoreEngine.userKeys.publicKey) return alert("Must be logged in to vote.");
-        if (submitter === window.CoreEngine.userKeys.publicKey) return alert("You cannot vote on your own submission.");
+        if (!window.CoreEngine || !window.CoreEngine.userKeys || !window.CoreEngine.userKeys.publicKey) return alert('Must be logged in to vote.');
+        if (submitter === window.CoreEngine.userKeys.publicKey) return alert('You cannot vote on your own submission.');
+
         try {
+            const player = document.getElementById('global-audio-player');
+            const activeHash = window.AudioEngine && window.AudioEngine.activeTrackHash;
+            const listened = player && ((activeHash && activeHash === targetHash && player.currentTime >= 30) || player.currentTime >= 30);
+            if (!listened) return alert('You must listen to at least 30 seconds of the track before voting.');
+
             await window.CoreEngine.sendSignedTransaction('VOTE_HOT_OR_NOT', submitter, { submissionId, vote, targetHash });
-            alert(`Voted! You mined 100 $VOD.`);
-            window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, true); 
+            window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, true);
             window.BattleEngines.loadHotOrNot();
-        } catch(err) { alert("Vote failed: " + err.message); }
+        } catch(err) { console.error(err); alert('Vote failed: ' + (err.message || err)); }
     },
 
     async submitHotOrNotFromDropdown() {
