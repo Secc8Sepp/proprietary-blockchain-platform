@@ -571,7 +571,7 @@
                         <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">Mint raw $VOD directly to an investor's wallet after clearing a USD wire transfer.</p>
                         <input id="input-mint-recipient" placeholder="Investor Public Key" style="margin-bottom: 12px;" />
                         <input id="input-mint-amount" type="number" placeholder="Amount to Mint" style="margin-bottom: 12px;" />
-                        <button style="background: var(--danger); color: #fff; width: 100%;" onclick="executeAdminMint()">Mint & Transfer</button>
+                        <button style="background: var(--danger); color: #fff; width: 100%;" onclick="window.WalletEngine.executeAdminMint()">Mint & Transfer</button>
                     </div>
 
                     <h4 style="margin-top: 20px;">🤝 Incoming Stake Requests</h4>
@@ -712,6 +712,19 @@
     <div id="story-modal" class="modal-overlay hidden" style="z-index: 3000;" onclick="if(event.target===this) closeStoryModal()">
         <div class="modal-content" style="width: auto; max-width: 600px; background: rgba(11,12,16,0.95);" id="story-modal-content">
             <!-- Dynamic Content -->
+        </div>
+    </div>
+
+    <!-- Generic Form Modal -->
+    <div id="form-modal" class="modal-overlay hidden" onclick="if(event.target===this) toggleModal('form-modal')">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span id="form-modal-title" style="color: var(--primary); font-size: 18px;">Input Required</span>
+                <button class="secondary" style="padding: 2px 8px; width:auto; border-radius:6px;" onclick="toggleModal('form-modal')">✖</button>
+            </div>
+            <div class="modal-body" id="form-modal-body">
+                <!-- Dynamic form content will be injected here -->
+            </div>
         </div>
     </div>
 

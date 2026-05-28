@@ -22,15 +22,28 @@ window.WalletEngine = {
 
     async executeAdminMint() {
         if (!window.CoreEngine.userKeys.publicKey) return alert("Must be logged in.");
-        const target = prompt("Enter target public key for OTC Mint:");
-        if (!target) return;
-        const amount = prompt("Enter amount of $VOD to mint:");
-        if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) return;
+        const targetInput = document.getElementById('input-mint-recipient');
+        const amountInput = document.getElementById('input-mint-amount');
+
+        const target = targetInput.value.trim();
+        const amount = amountInput.value.trim();
+
+        if (!target) return alert("Please enter the target public key for the OTC Mint.");
+        if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) return alert("Please enter a valid positive amount to mint.");
         
         try {
             await window.CoreEngine.sendSignedTransaction('ADMIN_MINT', target, { amount: parseFloat(amount) });
-            alert(`Successfully minted ${amount} $VOD to ${target}!`);
-            if (typeof window.fetchUserProfile === 'function') window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
+            alert(`Successfully minted ${amount} $VOD to Node_${target.substring(0,6)}!`);
+            
+            targetInput.value = '';
+            amountInput.value = '';
+
+            if (typeof window.fetchUserProfile === 'function') {
+                window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
+                if (window.viewingUserPublicKey === target) {
+                    window.fetchUserProfile(target, false);
+                }
+            }
         } catch(err) { alert("OTC Mint failed: " + err.message); }
     },
 

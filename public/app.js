@@ -356,17 +356,10 @@ async function handlePublishPost(isStory = false) {
         } else {
             if (textIn.length > 200) {
                 if (confirm("This is a long post! Would you like to publish it as a Zine Article instead?")) {
-                    const title = prompt("Enter a title for your article:");
-                    if (title) {
-                        const price = prompt("Enter a curation price in $VOD for others to publish this:", "5000");
-                        if (price && !isNaN(price)) {
-                            socket.emit('publish_article', { title, body: textIn, price: parseFloat(price), author: window.CoreEngine.userKeys.publicKey });
-                            alert("Masterpiece published to the swarm as an Article!");
-                            document.getElementById('composer-text').value = '';
-                            switchTab('zine');
-                            return;
-                        }
-                    }
+                    promptPublishZineArticle(textIn);
+                    btn.innerText = isStory ? "Deploy Story" : "Broadcast Block";
+                    btn.disabled = false;
+                    return; // Stop further processing as a regular post
                 }
             }
             type = 'TEXT_POST';
@@ -419,6 +412,40 @@ function addCollaboratorField() {
         <button class="secondary" style="padding: 0 10px;" onclick="document.getElementById('collab-${id}').remove()">X</button>
     `;
     list.appendChild(div);
+}
+
+function promptPublishZineArticle(bodyText) {
+    const modalTitle = document.getElementById('form-modal-title');
+    const modalBody = document.getElementById('form-modal-body');
+    
+    modalTitle.innerText = 'Publish as Zine Article';
+    modalBody.innerHTML = `
+        <p style="font-size: 13px; color: var(--text-muted);">Your post is quite long. Publishing it as a Zine Article allows you to give it a title and set a price for others to curate and feature it.</p>
+        <label>Article Title</label>
+        <input id="form-input-zine-title" type="text" placeholder="Title of your masterpiece...">
+        <label>Curation Price ($VOD)</label>
+        <input id="form-input-zine-price" type="number" value="5000">
+        <button id="form-modal-submit" style="width: 100%; margin-top: 10px;">Publish Article</button>
+    `;
+
+    const submitBtn = document.getElementById('form-modal-submit');
+    submitBtn.onclick = () => {
+        const title = document.getElementById('form-input-zine-title').value;
+        const price = document.getElementById('form-input-zine-price').value;
+
+        if (!title.trim()) return alert("Please enter a title for your article.");
+        if (!price || isNaN(price) || price < 0) return alert("Please enter a valid, non-negative price.");
+
+        socket.emit('publish_article', { title, body: bodyText, price: parseFloat(price), author: window.CoreEngine.userKeys.publicKey });
+        alert("Masterpiece published to the swarm as an Article!");
+        
+        toggleModal('form-modal');
+        document.getElementById('composer-text').value = '';
+        updateComposerPreview();
+        switchTab('zine');
+    };
+
+    toggleModal('form-modal');
 }
 
 // ==========================================
@@ -744,18 +771,39 @@ async function deletePost(txHash) {
     }
 }
 
-async function requestSongShare(hash, seller) {
+function requestSongShare(hash, seller) {
     if (seller === window.CoreEngine.userKeys.publicKey) return alert("You already own this track's equity.");
-    const count = prompt("How many shares (percentage) do you want to request?");
-    if (!count || isNaN(count)) return;
-    const price = prompt(`What price per share in $VOD are you offering for these ${count}%?`);
-    if (!price || isNaN(price)) return;
+
+    const modalTitle = document.getElementById('form-modal-title');
+    const modalBody = document.getElementById('form-modal-body');
     
-    try {
-        await window.CoreEngine.sendSignedTransaction('REQUEST_SONG_SHARE', seller, { audioHash: hash, shareCount: parseInt(count), pricePerShare: parseFloat(price) });
-        alert(`Stake Request sent to the creator for ${count}% at ${price} $VOD each!`);
-        fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
-    } catch(err) { alert(err.message); }
+    modalTitle.innerText = 'Request Track Stake';
+    modalBody.innerHTML = `
+        <p style="font-size: 13px; color: var(--text-muted);">Make an offer to the creator to acquire a percentage of their track's streaming royalties.</p>
+        <label>Shares to Request (%)</label>
+        <input id="form-input-share-count" type="number" placeholder="e.g., 10" min="1" max="100" style="margin-bottom: 15px;">
+        <label>Offer Price per Share ($VOD)</label>
+        <input id="form-input-share-price" type="number" placeholder="e.g., 5000" style="margin-bottom: 15px;">
+        <button id="form-modal-submit" style="width: 100%;">Send Stake Request</button>
+    `;
+
+    const submitBtn = document.getElementById('form-modal-submit');
+    submitBtn.onclick = async () => {
+        const count = document.getElementById('form-input-share-count').value;
+        const price = document.getElementById('form-input-share-price').value;
+
+        if (!count || isNaN(count) || count <= 0) return alert("Please enter a valid percentage to request.");
+        if (!price || isNaN(price) || price <= 0) return alert("Please enter a valid price to offer.");
+
+        try {
+            await window.CoreEngine.sendSignedTransaction('REQUEST_SONG_SHARE', seller, { audioHash: hash, shareCount: parseInt(count), pricePerShare: parseFloat(price) });
+            alert(`Stake Request sent to the creator for ${count}% at ${price} $VOD each!`);
+            toggleModal('form-modal');
+            fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
+        } catch(err) { alert(err.message); }
+    };
+
+    toggleModal('form-modal');
 }
 
 async function buySongShareDirect(hash, seller, price) {
@@ -818,21 +866,46 @@ window.showConnectionsModal = function(friendsList, followersList) {
     showSearchResultsDialog(users, "Crew Connections");
 }
 
-async function promptEditSong(audioHash) {
-    if (!window.CoreEngine.userKeys.publicKey) return;
-    const newTitle = prompt("Enter new track title:");
-    const newArtist = prompt("Enter artist name:");
-    const newOffCollab = prompt("Enter off-platform collaborator (optional):");
-    if (!newTitle && !newArtist && !newOffCollab) return;
+function promptEditSong(audioHash) {
+    if (!window.CoreEngine.userKeys.publicKey || !currentViewedProfile) return;
 
-    try {
-        let data = { audioHash: audioHash };
-        if (newTitle) data.title = newTitle;
-        if (newArtist) data.artist = newArtist;
-        if (newOffCollab) data.offPlatformCollaborator = newOffCollab;
-        await window.CoreEngine.sendSignedTransaction('EDIT_SONG_METADATA', '0x00', data);
-        alert("Metadata updated!"); fetchUserProfile(window.CoreEngine.userKeys.publicKey, false); loadMainGlobalFeed();
-    } catch(err) { alert("Failed to edit: " + err.message); }
+    const track = currentViewedProfile.uploadedTracks.find(t => t.hash === audioHash);
+    if (!track) return alert("Track details not found.");
+
+    const modalTitle = document.getElementById('form-modal-title');
+    const modalBody = document.getElementById('form-modal-body');
+    
+    modalTitle.innerText = 'Edit Track Metadata';
+    modalBody.innerHTML = `
+        <p style="font-size: 13px; color: var(--text-muted);">Update the details for your track. This will be recorded as a new transaction on the ledger.</p>
+        <label>Track Title</label>
+        <input id="form-input-edit-title" type="text" value="${escapeHtml(track.title || '')}">
+        <label>Artist Name</label>
+        <input id="form-input-edit-artist" type="text" value="${escapeHtml(track.artist || '')}">
+        <label>Off-Platform Collaborator (optional)</label>
+        <input id="form-input-edit-offcollab" type="text" value="${escapeHtml(track.offPlatformCollaborator || '')}">
+        <button id="form-modal-submit" style="width: 100%; margin-top: 10px;">Update Metadata</button>
+    `;
+
+    const submitBtn = document.getElementById('form-modal-submit');
+    submitBtn.onclick = async () => {
+        const newTitle = document.getElementById('form-input-edit-title').value;
+        const newArtist = document.getElementById('form-input-edit-artist').value;
+        const newOffCollab = document.getElementById('form-input-edit-offcollab').value;
+
+        try {
+            let data = { audioHash: audioHash };
+            if (newTitle) data.title = newTitle;
+            if (newArtist) data.artist = newArtist;
+            if (newOffCollab !== undefined) data.offPlatformCollaborator = newOffCollab;
+            await window.CoreEngine.sendSignedTransaction('EDIT_SONG_METADATA', '0x00', data);
+            alert("Metadata updated!"); 
+            toggleModal('form-modal');
+            fetchUserProfile(window.CoreEngine.userKeys.publicKey, false); 
+            loadMainGlobalFeed();
+        } catch(err) { alert("Failed to edit: " + err.message); }
+    };
+    toggleModal('form-modal');
 }
 
 function switchTab(tabName, element, targetKey = null) {
@@ -2159,17 +2232,37 @@ async function buyDigitalItem(itemId, price, seller) {
     } catch(err) { alert("Purchase failed: " + err.message); }
 }
 
-async function createOpenBounty() {
-    const amount = prompt("How much $VOD are you locking up for this bounty?");
-    if (!amount || isNaN(parseFloat(amount))) return;
-    const desc = prompt("Describe what you want (e.g., 'Need a 16-bar verse for this track'):");
-    if (!desc) return;
-    try {
-        await window.CoreEngine.sendSignedTransaction('CREATE_BOUNTY', '0x00', { amount: parseFloat(amount), description: desc });
-        alert("Bounty posted securely to the ledger!");
-        window.loadMarketplace();
-        fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
-    } catch(err) { alert("Bounty failed: " + err.message); }
+function createOpenBounty() {
+    const modalTitle = document.getElementById('form-modal-title');
+    const modalBody = document.getElementById('form-modal-body');
+    
+    modalTitle.innerText = 'Create Open Commission Bounty';
+    modalBody.innerHTML = `
+        <p style="font-size: 13px; color: var(--text-muted);">Post a public request for work. The funds will be locked in escrow until you award the bounty to a submission.</p>
+        <label>Bounty Amount ($VOD)</label>
+        <input id="form-input-bounty-amount" type="number" placeholder="e.g., 100000">
+        <label>Bounty Description</label>
+        <textarea id="form-input-bounty-desc" rows="3" placeholder="e.g., 'Need a 16-bar verse for this track...'"></textarea>
+        <button id="form-modal-submit" style="width: 100%; margin-top: 10px;">Post Bounty to Ledger</button>
+    `;
+
+    const submitBtn = document.getElementById('form-modal-submit');
+    submitBtn.onclick = async () => {
+        const amount = document.getElementById('form-input-bounty-amount').value;
+        const desc = document.getElementById('form-input-bounty-desc').value.trim();
+
+        if (!amount || isNaN(parseFloat(amount)) || amount <= 0) return alert("Please enter a valid bounty amount.");
+        if (!desc) return alert("Please provide a description for the bounty.");
+
+        try {
+            await window.CoreEngine.sendSignedTransaction('CREATE_BOUNTY', '0x00', { amount: parseFloat(amount), description: desc });
+            alert("Bounty posted securely to the ledger!");
+            toggleModal('form-modal');
+            window.loadMarketplace();
+            fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
+        } catch(err) { alert("Bounty failed: " + err.message); }
+    };
+    toggleModal('form-modal');
 }
 
 function submitToBounty(bountyId) {
