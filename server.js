@@ -62,6 +62,10 @@ if (!fs.existsSync(TMP_DIR)) {
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
+// BEST PRACTICE: Serve static files before any other routes to ensure
+// requests for images, CSS, etc., are handled first.
+app.use(express.static(path.join(__dirname, 'public')));
+
 // ==========================================
 // WEB PUSH API SETUP
 // ==========================================
@@ -143,8 +147,7 @@ app.get('/tracks/:filename', (req, res, next) => {
 });
 
 // 3. STATIC ASSETS
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/tmp', express.static(path.join(__dirname, 'tmp'))); // Serve temporary stems
+app.use('/tmp', express.static(path.join(__dirname, 'tmp')));
 
 // 4. FALLBACK
 app.get('*', (req, res) => {
