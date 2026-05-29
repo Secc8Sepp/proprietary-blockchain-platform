@@ -100,7 +100,6 @@ window.AudioEngine = {
         try {
             await window.CoreEngine.sendSignedTransaction('STREAM_COMPLETED', this.activeTrackArtist, { audioHash: this.activeTrackHash });
             if (typeof window.fetchUserProfile === 'function') window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, true);
-            if (typeof window.loadMainGlobalFeed === 'function') window.loadMainGlobalFeed();
         } catch(err) { console.error("Mining rejected:", err); }
     },
 
