@@ -139,8 +139,12 @@ window.CoreEngine = {
         // so we MUST sign the stringified version of the exact same object here to ensure the hashes match.
         const sig = await window.generateClientSignature(this.userKeys.privateKey, JSON.stringify(msgData));
         const txFields = { ...msgData, signature: sig };
-        // ADMIN actions are routed through the general-purpose feed controller.
-        const endpoint = ['PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'FOLLOW_USER'].includes(type) ? '/api/social/action' : '/api/feed/interact';
+        
+        const socialActions = ['PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'FOLLOW_USER', 'CREATE_PLAYLIST', 'ADD_TO_PLAYLIST', 'UPDATE_PLAYLIST_DETAILS', 'DELETE_PLAYLIST', 'REORDER_PLAYLIST_TRACKS', 'REPOST_POST', 'DELETE_POST', 'LIKE_SONG', 'UNLIKE_SONG'];
+        const endpoint = socialActions.includes(type)
+            ? '/api/social/action'
+            : '/api/feed/interact';
+
         console.log(`[CoreEngine] Sending ${type} to ${endpoint}`, txFields);
         const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
         if (!res.ok) {

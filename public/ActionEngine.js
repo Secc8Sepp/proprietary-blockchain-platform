@@ -788,4 +788,85 @@ window.ActionEngine = {
             }
         }
     },
+
+    promptAddToPlaylist(trackHash) {
+        if (!window.CoreEngine.userKeys.publicKey) return alert("Please login to manage playlists.");
+        if (typeof window.showAddToPlaylistModal === 'function') {
+            window.showAddToPlaylistModal(trackHash);
+        } else {
+            console.error("showAddToPlaylistModal function not found.");
+        }
+    },
+
+    async createPlaylist(title, isPublic, initialTrackHash = null) {
+        if (!title.trim()) return alert("Playlist title cannot be empty.");
+        try {
+            const data = { title, isPublic, type: 'listener', initialTrackHash };
+            // The backend will handle the two-step process of creating and adding the initial track
+            await window.CoreEngine.sendSignedTransaction('CREATE_PLAYLIST', '0x00', data);
+
+            alert(`Playlist "${title}" created!`);
+            
+            // Refresh the current user's profile to get the new playlist data for UI updates
+            if (window.fetchUserProfile) window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
+            
+            // Close the modal if it's open
+            const modal = document.getElementById('add-to-playlist-modal');
+            if (modal) modal.classList.add('hidden');
+
+        } catch (err) {
+            console.error("Failed to create playlist:", err);
+            alert("Failed to create playlist: " + err.message);
+        }
+    },
+
+    async addTrackToPlaylist(playlistId, trackHash) {
+        try {
+            await window.CoreEngine.sendSignedTransaction('ADD_TO_PLAYLIST', '0x00', { playlistId, trackHash });
+            alert("Track added to playlist!");
+            const modal = document.getElementById('add-to-playlist-modal');
+            if (modal) modal.classList.add('hidden');
+        } catch (err) {
+            console.error("Failed to add track:", err);
+            alert("Failed to add track: " + err.message);
+        }
+    },
+
+    async deletePlaylist(playlistId) {
+        if (!confirm("Are you sure you want to delete this playlist? This cannot be undone.")) return;
+        await window.CoreEngine.sendSignedTransaction('DELETE_PLAYLIST', '0x00', { playlistId });
+        alert("Playlist deleted.");
+        if (window.fetchUserProfile) window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
+    },
+
+    async promptRepostPost(originalTxHash) {
+        if (!window.CoreEngine.userKeys.publicKey) return alert("Please login to repost.");
+        const caption = prompt("Add a caption to your repost (optional):");
+        // The user can press cancel, in which case caption will be null. An empty string is fine.
+        if (caption !== null) {
+            try {
+                await window.CoreEngine.sendSignedTransaction('REPOST_POST', '0x00', { originalTxHash, caption });
+                alert("Successfully reposted!");
+                if (currentView === 'feed') loadMainGlobalFeed();
+                if (currentView === 'profile') fetchUserProfile(viewingUserPublicKey, false);
+            } catch (err) {
+                alert("Failed to repost: " + err.message);
+            }
+        }
+    },
+
+    async toggleLikeSong(songId, isLiked) { // isLiked is the new state after click
+        if (!window.CoreEngine.userKeys.publicKey) return alert("Please login to like tracks.");
+        const type = isLiked ? 'LIKE_SONG' : 'UNLIKE_SONG';
+        try {
+            await window.CoreEngine.sendSignedTransaction(type, '0x00', { songId });
+            // Refresh my own profile in the background to update the 'Tracks You Like' playlist state
+            if (window.fetchUserProfile) {
+                fetchUserProfile(window.CoreEngine.userKeys.publicKey, true);
+            }
+        } catch (err) {
+            console.error(`Failed to ${type}:`, err);
+            alert(`Failed to ${type}: ` + err.message);
+        }
+    }
 };

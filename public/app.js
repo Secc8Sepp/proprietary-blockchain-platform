@@ -19,6 +19,7 @@ let localDB = null;
 let editedTop8 = [];
 let pendingCrewRequests = [];
 window.activeWaveform = null;
+window.myPlaylists = [];
 window.waveformInstances = {};
 window.userNotifications = [];
 window.unreadNotificationCount = 0;
@@ -78,6 +79,12 @@ function initializeApplicationListeners() {
             }
         });
         console.log('[INIT] ✓ Search input wired');
+    }
+
+    const discoverBtn = document.getElementById('nav-discover-tab');
+    if (discoverBtn) {
+        discoverBtn.addEventListener('click', () => switchTab('discover', discoverBtn));
+        console.log('[INIT] ✓ Discover tab wired');
     }
 
     // Unified Media Composer
@@ -468,15 +475,25 @@ async function loadMainGlobalFeed() {
             const iAmActionTaker = actionTaker === window.CoreEngine.userKeys.publicKey;
 
             const canDelete = iAmActionTaker; // You can delete your own post or your own repost
+
+            // --- Phase 2: Social Controls Injection ---
+            const isSongPost = item.type === 'SONG_UPLOAD';
+            const likedTracksPlaylist = (window.myPlaylists || []).find(p => p.id.startsWith('liked-tracks-'));
+            const isLiked = isSongPost && likedTracksPlaylist && likedTracksPlaylist.tracks.some(t => t.data.audioHash === item.data.audioHash);
+            const heartIcon = isLiked ? '♥' : '♡';
+
+            const likeButtonHtml = isSongPost
+                ? `<button class="interaction-btn ${isLiked ? 'liked' : ''}" onclick="this.classList.toggle('liked'); this.innerHTML = this.classList.contains('liked') ? '♥' : '♡'; window.ActionEngine.toggleLikeSong('${item.data.audioHash}', this.classList.contains('liked'))">${heartIcon} <span id="like-count-${actionHash}">${item.likeCount || 0}</span></button>`
+                : `<button class="interaction-btn" onclick="window.ActionEngine.toggleLike('${actionHash}', '${actionTaker}')">🔥 <span id="like-count-${actionHash}">${item.likeCount || 0}</span></button>`;
+            
+            const originalHashForRepost = item.isRepost ? item.data.originalTxHash : item.transactionHash;
+            const repostBtn = `<button class="interaction-btn" onclick="window.ActionEngine.promptRepostPost('${originalHashForRepost}')">🔁 Repost</button>`;
+
             const deleteBtn = canDelete ? `<button class="interaction-btn" onclick="window.ActionEngine.deletePost('${actionHash}')">🗑️</button>` : '';
 
             // You can only edit the original post, not a repost of it.
             const canEdit = isMyContent && !item.isRepost;
             const editBtn = canEdit ? `<button class="interaction-btn" onclick="window.ActionEngine.promptEditPostMetadata('${actionHash}', '${escapeJsArg(item.data.metadata || '')}')">✏️ Edit Tags</button>` : '';
-
-            const canRepost = !iAmActionTaker;
-            const originalHashForRepost = item.isRepost ? item.data.originalTxHash : item.transactionHash;
-            const repostBtn = canRepost ? `<button class="interaction-btn" onclick="window.ActionEngine.promptRepostPost('${originalHashForRepost}')">🔁 Repost</button>` : '';
 
             const canTip = !isMyContent;
             const tipBtn = canTip ? `<button class="interaction-btn" onclick="window.WalletEngine.promptSendCoins('${originalSender}')">💸 Tip</button>` : '';
@@ -502,9 +519,9 @@ async function loadMainGlobalFeed() {
                         </div>
                         ${renderPostContent(item)}
                         <div class="post-interactions">
-                            <button class="interaction-btn" onclick="window.ActionEngine.toggleLike('${actionHash}', '${actionTaker}')">🔥 <span id="like-count-${actionHash}">${item.likeCount || 0}</span></button>
-                            <button class="interaction-btn" onclick="toggleReplyBox('${actionHash}')">💬 Reply</button>
+                            ${likeButtonHtml}
                             ${repostBtn}
+                            <button class="interaction-btn" onclick="toggleReplyBox('${actionHash}')">💬 Reply</button>
                             ${editBtn}
                             ${tipBtn}
                             ${deleteBtn}
@@ -740,9 +757,12 @@ function renderPostContent(item) {
                     <div id="comments-overlay-${transactionHash}" style="position: absolute; top: -10px; right: 0; width: 250px; height: calc(100% + 20px); pointer-events: none; z-index: 5;"></div>
                 </div>
 
-                <div style="display: flex; gap: 10px; margin-bottom: 10px; align-items: center;">
+                <div style="display: flex; gap: 10px; margin-bottom: 10px; align-items: stretch;">
                     <button id="play-btn-${transactionHash}" style="background:#66fcf1; color:#000; padding:8px 15px; flex-grow: 1;">
                         ▶ Play
+                    </button>
+                    <button class="secondary" style="padding: 8px; aspect-ratio: 1 / 1; flex-shrink: 0; font-size: 16px; line-height: 1;" title="Add to Playlist" onclick="window.ActionEngine.promptAddToPlaylist('${item.data.audioHash}')">
+                        +
                     </button>
                 </div>
                 <div style="display: flex; gap: 10px;">
@@ -979,6 +999,7 @@ function switchTab(tabName, element, targetKey = null) {
     if (tabName === 'market') window.loadMarketplace();
     if (tabName === 'zine') renderZine();
     if (tabName === 'hotornot') window.BattleEngines.loadHotOrNot();
+    if (tabName === 'discover') window.loadDiscoverFeed();
     if (tabName === 'feed') window.loadMainGlobalFeed();
     if (tabName === 'tools' && window.StemSplitterEngine) window.StemSplitterEngine.render();
     if (tabName === 'wallet' && window.WalletEngine) window.WalletEngine.renderWalletDashboard();
@@ -1383,34 +1404,129 @@ function appendChatMessage(msg) { // NOSONAR
     }
 }
 
-function playProfileTrack(index) {
-    if (!currentViewedProfile || !currentViewedProfile.uploadedTracks) return;
+window.profilePlaylistContext = {};
+
+function renderProfileTrackRow(track, index, contextId) {
+    // This function generates HTML for a single track row.
+    const playCount = track.playCount || 0;
+    const isOwner = window.currentViewedProfile.publicKey === window.CoreEngine.userKeys.publicKey;
     
-    // Use the same sorting logic as the renderer in fetchUserProfile
-    let sortedTracks = currentViewedProfile.uploadedTracks.slice();
-    if (currentViewedProfile.playlistOrder) {
-        sortedTracks.sort((a, b) => {
-            const idxA = currentViewedProfile.playlistOrder.indexOf(a.hash);
-            const idxB = currentViewedProfile.playlistOrder.indexOf(b.hash);
-            if (idxA === -1 && idxB === -1) return b.timestamp - a.timestamp;
-            if (idxA === -1) return 1;
-            if (idxB === -1) return -1;
-            return idxA - idxB;
-        });
-    } else {
-        sortedTracks.sort((a,b) => b.timestamp - a.timestamp);
+    // The track object here is a full feed item from profileService enrichment.
+    const trackData = track.data;
+    if (!trackData || !trackData.audioHash) return '';
+
+    const repostBadge = track.isRepost ? `
+        <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; display: flex; align-items: center; gap: 5px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"></path></svg>
+            Reposted by ${window.currentViewedProfile.username}
+        </div>` : '';
+
+    return `
+        <div class="playlist-item" data-hash="${trackData.audioHash}" style="background: rgba(0,0,0,0.8); border: 1px solid var(--border); padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 15px; margin-bottom: 5px;">
+            <div class="anthem-play-btn" style="width:30px; height:30px; font-size:14px;" onclick="window.AudioEngine.playQueue(window.profilePlaylistContext['${contextId}'], ${index})">▶</div>
+            <div style="flex: 1; min-width: 0;">
+                <div style="font-size: 14px; font-weight: bold; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(trackData.trackTitle)}</div>
+                <div style="font-size: 11px; color: var(--text-muted);">${playCount.toLocaleString()} Streams</div>
+            </div>
+            ${repostBadge}
+            <button class="secondary" style="padding: 4px 8px; font-size: 10px; flex-shrink: 0;" onclick="window.ActionEngine.promptAddToPlaylist('${trackData.audioHash}')">Add to Playlist</button>
+            ${isOwner ? `<button class="secondary" style="padding: 4px 8px; font-size: 10px; flex-shrink: 0;" onclick="window.ActionEngine.promptEditSong('${trackData.audioHash}')">Edit</button>` : ''}
+        </div>
+    `;
+}
+
+function renderProfileTrackList(tracks, container, contextId) {
+    // Store tracks in context for the player
+    window.profilePlaylistContext[contextId] = tracks;
+
+    if (!tracks || tracks.length === 0) {
+        container.innerHTML = '<div style="color:var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">No tracks to display.</div>';
+        return;
     }
 
-    const track = sortedTracks[index];
-    let artistName = track.artist || currentViewedProfile.username;
-    if (track.offPlatformCollaborator) artistName += ` ft. ${track.offPlatformCollaborator}`;
-    
-    if (track) {
-        const select = document.getElementById('playlist-selector');
-        if (select) { select.value = 'profile'; window.AudioEngine.changePlaylistContext('profile'); }
-        window.AudioEngine.playTrack(track.title, track.hash, currentViewedProfile.publicKey, artistName, track.coverHash);
+    container.innerHTML = tracks.map((track, index) => renderProfileTrackRow(track, index, contextId)).join('');
+}
+
+function handleProfilePlaylistFilterChange() {
+    const selector = document.getElementById('profile-playlist-selector');
+    if (!selector) return;
+
+    const selectedValue = selector.value;
+    const wrapper = document.getElementById('profile-playlist-content-wrapper');
+    const profile = window.currentViewedProfile;
+    const isOwner = profile.publicKey === window.CoreEngine.userKeys.publicKey;
+
+    if (!wrapper || !profile) return;
+
+    wrapper.innerHTML = '<div style="color:var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">Loading...</div>';
+
+    if (selectedValue === 'all_activity') {
+        const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        
+        // Get uploads and reposts by this user
+        const allUserActivity = (profile.posts || [])
+            .filter(p => (p.type === 'SONG_UPLOAD' && p.sender === profile.publicKey) || (p.isRepost && p.reposter === profile.publicKey))
+            .sort((a, b) => b.timestamp - a.timestamp);
+
+        let recentActivity = allUserActivity.filter(p => p.timestamp >= thirtyDaysAgo);
+
+        // Resolve original post for reposts to get track data
+        const recentTracks = recentActivity.map(activity => {
+            if (activity.isRepost) {
+                // The activity object is already the enriched, combined object from getFeedEngine
+                return activity;
+            }
+            return activity; // It's a direct song upload
+        }).filter(Boolean); // Filter out any reposts where original couldn't be found
+
+        renderProfileTrackList(recentTracks, wrapper, 'all_activity');
+    } else if (selectedValue === 'liked_tracks' || selectedValue === 'reposts') {
+        const playlist = profile.playlists.find(p => p.id === `${selectedValue}-${profile.publicKey}`);
+        renderProfileTrackList(playlist ? playlist.tracks : [], wrapper, selectedValue);
+    } else { // A specific playlist ID is selected
+        const playlist = profile.playlists.find(p => p.id === selectedValue);
+        if (playlist) {
+            renderProfileTrackList(playlist.tracks, wrapper, playlist.id);
+        } else {
+            wrapper.innerHTML = '<div style="color:var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">Could not find the selected playlist.</div>';
+        }
     }
 }
+
+function openProfilePlaylistTab(evt, tabName) {
+    const parent = evt.target.closest('.profile-section');
+    parent.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+    parent.querySelectorAll('.tab-link').forEach(b => b.classList.remove('active'));
+    parent.querySelector(`#playlist-tab-${tabName}`).style.display = 'block';
+    evt.currentTarget.classList.add('active');
+}
+
+function renderPlaylistCard(playlist, isOwner) {
+    if (!playlist || !playlist.tracks) return '';
+    const trackCount = playlist.tracks.length;
+    const coverArt = playlist.tracks.length > 0 && playlist.tracks[0].data.coverHash 
+        ? `/tracks/${playlist.tracks[0].data.coverHash}` 
+        : getAvatarUrl(playlist.user_id);
+
+    const deleteBtn = isOwner && playlist.type === 'listener' ? `<button class="secondary" style="padding: 4px 8px; font-size: 10px;" onclick="window.ActionEngine.deletePlaylist('${playlist.id}')">Delete</button>` : '';
+
+    return `
+        <div class="playlist-card" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); padding: 15px; border-radius: 8px; display: flex; align-items: center; gap: 15px;">
+            <img src="${coverArt}" style="width: 60px; height: 60px; border-radius: 6px; object-fit: cover;">
+            <div style="flex: 1;">
+                <div style="font-size: 16px; font-weight: bold; color: #fff;">${escapeHtml(playlist.title)}</div>
+                <div style="font-size: 12px; color: var(--text-muted);">${trackCount} tracks</div>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                ${deleteBtn}
+                <button style="padding: 8px 15px;" onclick="window.AudioEngine.playQueue(window.currentViewedProfile.playlists.find(p => p.id === '${playlist.id}').tracks, 0)">
+                    ▶ Play
+                </button>
+            </div>
+        </div>
+    `;
+}
+
 
 function toggleInlineEdit() {
     const displayMode = document.getElementById('profile-display-mode');
@@ -1493,6 +1609,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             if(balDisp) balDisp.innerText = profile.balance.toLocaleString();
         }
 
+
         // Always update the composer avatar if it's our profile
         if (profile.publicKey === window.CoreEngine.userKeys.publicKey) {
             const adminPanel = document.getElementById('ui-admin-panel');
@@ -1502,6 +1619,9 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             }
 
                 window.currentUserIsAdmin = !!profile.isAdmin;
+
+            window.myPlaylists = profile.playlists || [];
+            renderMyPlaylistsWidget();
 
             const composerAvatar = document.getElementById('composer-avatar');
             if (composerAvatar) {
@@ -1545,9 +1665,9 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
         // PRE-RENDER SANITIZATION: Clear all dynamic containers to prevent data bleed from previous profile view
         // =================================================================
         const containersToClear = [
-            'ui-profile-top8', 'ui-profile-recommended', 'ui-profile-shoutbox', 
+            'ui-profile-top8', 'ui-profile-recommended', 'ui-profile-shoutbox', 'ui-profile-playlist',
             'ui-tx-history', 'ui-active-commissions', 'ui-wallet-stake-requests',
-            'ui-profile-commissions', 'ui-profile-feed', 'ui-profile-playlist',
+            'ui-profile-commissions', 'ui-profile-feed', 'ui-profile-playlists-section',
             'ui-profile-gallery', 'ui-profile-vst'
         ];
         containersToClear.forEach(id => {
@@ -1892,35 +2012,59 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             }
         }
 
-        // Render Profile Playlist
-        const playlistContainer = document.getElementById('ui-profile-playlist');
-        if (playlistContainer) {
-            if (profile.uploadedTracks && profile.uploadedTracks.length > 0) {
-                let sortedTracks = profile.uploadedTracks.slice().sort((a,b) => b.timestamp - a.timestamp);
-                if (profile.playlistOrder) {
-                    sortedTracks.sort((a, b) => {
-                        const idxA = profile.playlistOrder.indexOf(a.hash);
-                        const idxB = profile.playlistOrder.indexOf(b.hash);
-                        if (idxA === -1 && idxB === -1) return b.timestamp - a.timestamp;
-                        if (idxA === -1) return 1;
-                        if (idxB === -1) return -1;
-                        return idxA - idxB;
-                    });
-                }
-                playlistContainer.innerHTML = sortedTracks.map((track, idx) => `
-                    <div class="playlist-item" data-hash="${track.hash}" draggable="${viewingUserPublicKey === window.CoreEngine.userKeys.publicKey ? 'true' : 'false'}" style="background: rgba(0,0,0,0.8); border: 1px solid var(--border); padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 15px; margin-bottom: 5px;">
-                        ${viewingUserPublicKey === window.CoreEngine.userKeys.publicKey ? '<div style="cursor:grab; font-size:16px;">☰</div>' : ''}
-                        <div class="anthem-play-btn" style="width:30px; height:30px; font-size:14px;" onclick="playProfileTrack(${idx})">▶</div>
-                        <div style="flex: 1;">
-                            <div style="font-size: 14px; font-weight: bold; color: #fff;">${escapeHtml(track.title)}</div>
-                            <div style="font-size: 11px; color: var(--text-muted);">${track.playCount || 0} Streams</div>
-                        </div>
-                        ${viewingUserPublicKey === window.CoreEngine.userKeys.publicKey ? `<button class="secondary" style="padding: 4px 8px; font-size: 10px;" onclick="window.ActionEngine.promptEditSong('${track.hash}')">Edit</button>` : ''}
-                    </div>
-                `).join('');
-            } else {
-                playlistContainer.innerHTML = '<div style="color:var(--text-muted); font-size: 13px;">No tracks uploaded yet.</div>';
+        // Render Profile Playlist / Discography Section
+        const playlistSectionContainer = document.getElementById('ui-profile-playlist');
+        if (playlistSectionContainer) {
+            const isOwner = profile.publicKey === window.CoreEngine.userKeys.publicKey;
+            let playlistsToRender = profile.playlists || [];
+
+            if (!isOwner) {
+                playlistsToRender = playlistsToRender.filter(p => p.is_public);
             }
+            
+            const artistPlaylists = playlistsToRender.filter(p => p.type === 'artist');
+            const listenerPlaylists = playlistsToRender.filter(p => p.type === 'listener');
+            const hasCuratedContent = listenerPlaylists.some(p => !p.isAutoPlaylist) || playlistsToRender.some(p => p.id.startsWith('liked-tracks-') || p.id.startsWith('reposts-'));
+
+            // Build the dropdown selector
+            let selectorHtml = `<div style="margin-bottom: 15px;">
+                <select id="profile-playlist-selector" onchange="handleProfilePlaylistFilterChange()" style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid var(--border);">`;
+
+            // Artist Discography
+            selectorHtml += `<optgroup label="Artist Discography">`;
+            selectorHtml += `<option value="all_activity" selected>All Activity (30 Days)</option>`;
+            artistPlaylists.forEach(p => {
+                const title = p.title === "Uploaded Tracks" ? "All Uploaded Tracks" : p.title;
+                selectorHtml += `<option value="${p.id}">${escapeHtml(title)}</option>`;
+            });
+            selectorHtml += `</optgroup>`;
+
+            // Curated Tastes (only if they have any)
+            if (hasCuratedContent) {
+                selectorHtml += `<optgroup label="Curated Tastes">`;
+
+                const likedPlaylist = playlistsToRender.find(p => p.id.startsWith('liked-tracks-'));
+                if (likedPlaylist?.tracks.length > 0) {
+                    selectorHtml += `<option value="liked_tracks">Tracks You Like</option>`;
+                }
+
+                const repostsPlaylist = playlistsToRender.find(p => p.id.startsWith('reposts-'));
+                if (repostsPlaylist?.tracks.length > 0) {
+                    selectorHtml += `<option value="reposts">My Reposts</option>`;
+                }
+
+                listenerPlaylists.forEach(p => {
+                    if (!p.isAutoPlaylist) { // Don't show the auto-playlists twice
+                        selectorHtml += `<option value="${p.id}">${escapeHtml(p.title)}</option>`;
+                    }
+                });
+                selectorHtml += `</optgroup>`;
+            }
+
+            selectorHtml += `</select></div>`;
+            const contentWrapperHtml = `<div id="profile-playlist-content-wrapper" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 15px; min-height: 100px;"></div>`;
+            playlistSectionContainer.innerHTML = selectorHtml + contentWrapperHtml;
+            handleProfilePlaylistFilterChange();
         }
 
         // Render Gallery
@@ -2592,6 +2736,119 @@ function promptNewDM() {
         sendDM(targetAddr);
     } else {
         alert("User not found on the network.");
+    }
+}
+
+function renderMyPlaylistsWidget() {
+    const container = document.getElementById('ui-my-playlists-widget');
+    if (!container) return;
+
+    if (!window.CoreEngine.userKeys.publicKey) {
+        container.innerHTML = '<div class="card-body-item" style="font-size:12px; color:var(--text-muted);">Login to see your playlists.</div>';
+        return;
+    }
+
+    const playlists = window.myPlaylists || [];
+    if (playlists.length === 0) {
+        container.innerHTML = '<div class="card-body-item" style="font-size:12px; color:var(--text-muted);">No playlists yet.</div>';
+        return;
+    }
+
+    container.innerHTML = playlists.map(p => {
+        const icon = p.type === 'artist' ? '🎤' : '🎧';
+        return `
+            <div class="playlist-widget-item" onclick="window.AudioEngine.playQueue(window.myPlaylists.find(pl=>pl.id === '${p.id}').tracks, 0)">
+                <div style="display:flex; align-items:center; gap: 8px; min-width: 0;">
+                    <span style="font-size: 14px;">${icon}</span>
+                    <span style="font-size: 13px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(p.title)}</span>
+                </div>
+                <span style="font-size: 11px; color: var(--text-muted);">${p.tracks.length}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+window.showAddToPlaylistModal = function(trackHash) {
+    if (!window.CoreEngine.userKeys.publicKey) return alert("Please login to use playlists.");
+
+    let modal = document.getElementById('add-to-playlist-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'add-to-playlist-modal';
+        modal.className = 'modal hidden';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 400px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="color: var(--primary); margin: 0;">Add to Playlist</h3>
+                    <button class="secondary" onclick="document.getElementById('add-to-playlist-modal').classList.add('hidden')">✖</button>
+                </div>
+                <div id="playlist-modal-list" style="display: flex; flex-direction: column; gap: 5px; max-height: 30vh; overflow-y: auto; margin-bottom: 20px;"></div>
+                <div id="playlist-modal-creator">
+                    <h4 style="color: #fff; margin-bottom: 10px; font-size: 14px;">Create New Playlist</h4>
+                    <input type="text" id="playlist-modal-new-name" placeholder="My Awesome Mix" style="width: 100%; margin-bottom: 10px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+                         <label for="playlist-modal-public-toggle" style="font-size: 13px; color: var(--text-muted); display:flex; align-items:center; gap: 5px;">
+                            <input type="checkbox" id="playlist-modal-public-toggle"> Make Public
+                         </label>
+                         <button id="playlist-modal-create-btn">Create & Add</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    const listContainer = document.getElementById('playlist-modal-list');
+    const listenerPlaylists = (window.myPlaylists || []).filter(p => p.type === 'listener');
+
+    if (listenerPlaylists.length > 0) {
+        listContainer.style.display = 'flex';
+        listContainer.innerHTML = listenerPlaylists.map(p => `
+            <button class="secondary" style="text-align: left;" onclick="window.ActionEngine.addTrackToPlaylist('${p.id}', '${trackHash}')">
+                ${escapeHtml(p.title)}
+            </button>
+        `).join('');
+    } else {
+        listContainer.innerHTML = '<p style="font-size:13px; color:var(--text-muted); text-align:center;">You don\'t have any curated playlists yet.</p>';
+    }
+
+    const createBtn = document.getElementById('playlist-modal-create-btn');
+    createBtn.onclick = () => {
+        const title = document.getElementById('playlist-modal-new-name').value;
+        const isPublic = document.getElementById('playlist-modal-public-toggle').checked;
+        window.ActionEngine.createPlaylist(title, isPublic, trackHash);
+    };
+
+    modal.classList.remove('hidden');
+}
+
+window.loadDiscoverFeed = async function() {
+    const container = document.getElementById('view-discover');
+    if (!container) return;
+    container.innerHTML = '<div class="card"><div class="card-body">Loading fresh tracks from the swarm...</div></div>';
+
+    try {
+        const res = await fetch(`/api/feed/discover?publicKey=${window.CoreEngine.userKeys.publicKey || ''}`);
+        const items = await res.json();
+        container.innerHTML = ''; // Clear loading
+        items.forEach(item => {
+            const postEl = document.createElement('div');
+            postEl.className = 'card post';
+            postEl.innerHTML = `<div style="display: flex; gap: 15px;">
+                <div class="post-avatar" onclick="inspectTargetNode('${item.sender}')" style="cursor:pointer;"><img src="${getAvatarUrl(item.sender)}"></div>
+                <div style="flex: 1; min-width: 0;">
+                    <div class="post-header">
+                        <span class="post-name" onclick="inspectTargetNode('${item.sender}')">${resolveProfile(item.sender).username}</span>
+                        <span class="post-meta" style="margin-left:auto;">${new Date(item.timestamp).toLocaleString()}</span>
+                    </div>
+                    ${renderPostContent(item)}
+                </div>
+            </div>`;
+            container.appendChild(postEl);
+        });
+    } catch (err) {
+        container.innerHTML = '<div class="card"><div class="card-body">Error loading discover feed.</div></div>';
+        console.error(err);
     }
 }
 

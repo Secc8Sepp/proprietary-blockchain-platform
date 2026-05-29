@@ -162,8 +162,12 @@ class ProfileService {
             top8: [],
             shoutbox: [],
             transactions: [],
-            activeCommissions: []
+            activeCommissions: [],
+            playlists: []
         };
+
+        const userLikes = new Set();
+        const userReposts = [];
         
         const allShareRequests = {};
         // Pre-compute playcounts for the user's uploaded tracks
@@ -185,6 +189,20 @@ class ProfileService {
         const marketData = this.getMarketData();
         const itemsList = marketData.items || [];
         profile.ownedItems = [];
+
+        // --- Playlist Aggregation ---
+        const allPlaylists = {}; // { [playlistId]: playlistObject }
+        // Create a default "artist" playlist for their own uploads
+        const artistPlaylistId = `artist-playlist-${publicKey}`;
+        allPlaylists[artistPlaylistId] = {
+            id: artistPlaylistId,
+            user_id: publicKey,
+            title: "Uploaded Tracks",
+            type: 'artist',
+            is_public: true, // Default public for uploaded tracks
+            track_order: [],
+            created_at: profile.joined,
+        };
         profile._trackDetails = {};
 
         // Trace the entire ledger chronologically to compute current state variables
@@ -193,6 +211,23 @@ class ProfileService {
                 // Ignore transactions sent by a deleted user, but still process transactions *sent to* them (e.g. for balance calculations of others)
                 const isSenderDeleted = deletedUsers.has(tx.sender);
                 
+                // Track likes/unlikes and reposts for the current profile user
+                if (tx.sender === publicKey && !isSenderDeleted) {
+                    if (tx.type === 'LIKE_SONG') {
+                        userLikes.add(tx.data.songId);
+                    }
+                    if (tx.type === 'UNLIKE_SONG') {
+                        userLikes.delete(tx.data.songId);
+                    }
+                    if (tx.type === 'REPOST_POST') {
+                        userReposts.push({
+                            originalTxHash: tx.data.originalTxHash,
+                            timestamp: tx.timestamp,
+                            repostTxHash: block.hash
+                        });
+                    }
+                }
+
                 // Populate Personal Transaction History
                 if (tx.sender === publicKey || tx.receiver === publicKey) {
                     let txAmt = tx.data.amount || null;
@@ -293,6 +328,42 @@ class ProfileService {
                     allShareRequests[tx.data.requestId].status = 'declined';
                 }
 
+                // Playlist state mutations
+                if (tx.type === 'CREATE_PLAYLIST' && tx.sender === publicKey) {
+                    allPlaylists[block.hash] = {
+                        id: block.hash,
+                        user_id: tx.sender,
+                        title: tx.data.title,
+                        type: tx.data.type || 'listener',
+                        is_public: tx.data.isPublic,
+                        track_order: tx.data.initialTrackHash ? [tx.data.initialTrackHash] : [],
+                        created_at: tx.timestamp,
+                        updated_at: tx.timestamp
+                    };
+                }
+                if (tx.type === 'ADD_TO_PLAYLIST' && tx.sender === publicKey) {
+                    const playlist = allPlaylists[tx.data.playlistId];
+                    if (playlist && !playlist.track_order.includes(tx.data.trackHash)) {
+                        playlist.track_order.push(tx.data.trackHash);
+                        playlist.updated_at = tx.timestamp;
+                    }
+                }
+                if (tx.type === 'UPDATE_PLAYLIST_DETAILS' && tx.sender === publicKey) {
+                    const playlist = allPlaylists[tx.data.playlistId];
+                    if (playlist) {
+                        if (tx.data.title) playlist.title = tx.data.title;
+                        if (typeof tx.data.isPublic === 'boolean') playlist.is_public = tx.data.isPublic;
+                        playlist.updated_at = tx.timestamp;
+                    }
+                }
+                if (tx.type === 'DELETE_PLAYLIST' && tx.sender === publicKey) {
+                    delete allPlaylists[tx.data.playlistId];
+                }
+                if (tx.type === 'REORDER_PLAYLIST_TRACKS' && tx.sender === publicKey) {
+                    const playlist = allPlaylists[tx.data.playlistId];
+                    if (playlist && Array.isArray(tx.data.trackOrder)) playlist.track_order = tx.data.trackOrder;
+                }
+
                 // 1. Process mutations belonging to this specific user profile
                 if (tx.sender === publicKey && !isSenderDeleted) {
                     if (tx.type === 'PROFILE_UPDATE') {
@@ -301,6 +372,10 @@ class ProfileService {
                         if (tx.data.playlistOrder) profile.playlistOrder = tx.data.playlistOrder;
                         if (tx.data.sectionImages) profile.sectionImages = tx.data.sectionImages;
                         if (tx.data.layoutOrder) profile.layoutOrder = tx.data.layoutOrder;
+                        // Allow toggling privacy of main artist playlist
+                        if (allPlaylists[artistPlaylistId] && typeof tx.data.artistPlaylistIsPublic === 'boolean') {
+                            allPlaylists[artistPlaylistId].is_public = tx.data.artistPlaylistIsPublic;
+                        }
                     }
                     if (tx.type === 'THEME_UPDATE') {
                         profile.customCss = tx.data.customCss || "";
@@ -400,7 +475,7 @@ class ProfileService {
             .sort((a,b) => b.timestamp - a.timestamp);
 
         profile.bounties = this.getMarketData().bounties.filter(b => b.creator === publicKey);
-        profile.posts = this.getFeedEngine().filter(item => item.sender === publicKey);
+        profile.posts = this.getFeedEngine().filter(item => item.sender === publicKey || item.reposter === publicKey);
         
         profile.shareRequestsReceived = Object.values(allShareRequests).filter(r => r.seller === publicKey && r.status === 'pending');
 
@@ -416,6 +491,71 @@ class ProfileService {
             }
         }
         delete profile._trackDetails;
+
+        // --- Final Playlist Enrichment ---
+        allPlaylists[artistPlaylistId].track_order = profile.playlistOrder || profile.uploadedTracks.map(t => t.hash);
+
+        const allFeedItems = this.getFeedEngine();
+        const trackMap = allFeedItems
+            .filter(item => item.type === 'SONG_UPLOAD')
+            .reduce((map, item) => {
+                map[item.data.audioHash] = item;
+                return map;
+            }, {});
+
+        // Create "Tracks You Like" auto-playlist
+        const likedTracksPlaylist = {
+            id: `liked-tracks-${publicKey}`,
+            user_id: publicKey,
+            title: "Tracks You Like",
+            type: 'listener',
+            is_public: false, // Likes are private by default
+            track_order: Array.from(userLikes), // userLikes is a Set of songIds (audioHashes)
+            created_at: profile.joined,
+            isAutoPlaylist: true
+        };
+        allPlaylists[likedTracksPlaylist.id] = likedTracksPlaylist;
+
+        // Create "My Reposts" auto-playlist
+        const postMapForReposts = allFeedItems.reduce((map, item) => {
+            map[item.transactionHash] = item;
+            return map;
+        }, {});
+        const repostedTrackHashes = userReposts
+            .map(repost => postMapForReposts[repost.originalTxHash])
+            .filter(post => post && post.type === 'SONG_UPLOAD')
+            .map(post => post.data.audioHash);
+
+        const repostsPlaylist = {
+            id: `reposts-${publicKey}`,
+            user_id: publicKey,
+            title: "My Reposts",
+            type: 'listener',
+            is_public: true, // Reposts are public
+            track_order: repostedTrackHashes,
+            created_at: profile.joined,
+            isAutoPlaylist: true
+        };
+        allPlaylists[repostsPlaylist.id] = repostsPlaylist;
+
+        const finalPlaylists = [];
+        for (const playlistId in allPlaylists) {
+            const playlist = allPlaylists[playlistId];
+            // Only filter out private playlists if the user ID doesn't match the profile being viewed.
+            // This allows users to see their own private playlists.
+            if (!playlist.is_public && playlist.user_id !== publicKey) {
+                continue;
+            }
+
+            // Enrich with full track objects
+            playlist.tracks = playlist.track_order
+                .map(hash => trackMap[hash])
+                .filter(Boolean); // Filter out deleted/invalid tracks
+            delete playlist.track_order; // Clean up intermediate data
+            finalPlaylists.push(playlist);
+        }
+
+        profile.playlists = finalPlaylists.sort((a,b) => (b.updated_at || b.created_at) - (a.updated_at || a.created_at));
 
         const adminAddress = blockchainService.getAdminAddress(chain);
         profile.isAdmin = (publicKey === adminAddress);

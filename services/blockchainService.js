@@ -344,6 +344,16 @@ class BlockchainService extends EventEmitter {
             throw new Error("Invalid transaction signature.");
         }
 
+        if (type === 'LIKE_SONG' || type === 'UNLIKE_SONG') {
+            if (!data.songId) throw new Error('Missing songId for like action.');
+        }
+
+        if (type === 'REPOST_POST') {
+            if (!data.originalTxHash) throw new Error('Missing originalTxHash for repost action.');
+            // Optional caption validation
+            if (data.caption && (typeof data.caption !== 'string' || data.caption.length > 280)) throw new Error('Invalid repost caption (max 280 chars).');
+        }
+
         const currentBalance = this.calculateBalance(sender, chain);
         // Skip balance checks for certain types that don't consume balance
         const balanceRequired = !BALANCE_EXEMPT_ACTIONS.includes(type);

@@ -3,7 +3,9 @@ window.AudioEngine = {
     activeTrackArtist: '',
     listenTrackingInterval: null,
     playedTracks: new Set(),
-    currentPlaylistMode: 'global',
+    currentPlaylistMode: 'global', // 'global', 'profile', 'queue'
+    currentQueue: [],
+    currentQueueIndex: -1,
     lastClientPing: 0,
     isPreviewMode: false,
     socket: null,
@@ -16,6 +18,20 @@ window.AudioEngine = {
     changePlaylistContext(mode) {
         this.currentPlaylistMode = mode;
         console.log(`[PLAYER] Playlist context changed to: ${mode}`);
+    },
+
+    playQueue(tracks, startIndex = 0) {
+        if (!tracks || tracks.length === 0) return;
+        this.currentQueue = tracks;
+        this.currentQueueIndex = startIndex;
+        this.changePlaylistContext('queue');
+
+        const trackToPlay = this.currentQueue[this.currentQueueIndex];
+        if (trackToPlay) {
+            let artistName = trackToPlay.data.artist || window.resolveProfile(trackToPlay.sender).username;
+            if (trackToPlay.data.offPlatformCollaborator) artistName += ` ft. ${trackToPlay.data.offPlatformCollaborator}`;
+            this.playTrack(trackToPlay.data.trackTitle, trackToPlay.data.audioHash, trackToPlay.sender, artistName, trackToPlay.data.coverHash);
+        }
     },
 
     initializeAudioPlayerEngine() {
@@ -157,6 +173,22 @@ window.AudioEngine = {
     },
 
     playNextTrackAdvanced() {
+        // Priority 1: Service the custom queue if it's active
+        if (this.currentPlaylistMode === 'queue' && this.currentQueue.length > 0) {
+            this.currentQueueIndex++;
+            if (this.currentQueueIndex < this.currentQueue.length) {
+                const nextTrack = this.currentQueue[this.currentQueueIndex];
+                let artistName = nextTrack.data.artist || window.resolveProfile(nextTrack.sender).username;
+                if (nextTrack.data.offPlatformCollaborator) artistName += ` ft. ${nextTrack.data.offPlatformCollaborator}`;
+                this.playTrack(nextTrack.data.trackTitle, nextTrack.data.audioHash, nextTrack.sender, artistName, nextTrack.data.coverHash);
+                return; // Exit here, we've played from the queue
+            } else {
+                // Queue finished, fall back to global discovery mode
+                this.currentQueue = [];
+                this.currentQueueIndex = -1;
+                this.changePlaylistContext('global');
+            }
+        }
         let pool = [];
         if (this.currentPlaylistMode === 'profile' && window.currentViewedProfile && window.currentViewedProfile.uploadedTracks) {
             pool = window.currentViewedProfile.uploadedTracks.map(t => ({ title: t.title, artist: t.artist, offPlatformCollaborator: t.offPlatformCollaborator, audioHash: t.hash, coverHash: t.coverHash, sender: window.currentViewedProfile.publicKey, timestamp: t.timestamp }));

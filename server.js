@@ -136,6 +136,24 @@ app.get('/api/social/hotornot', (req, res) => {
     res.json(require('./services/profileService').getHotOrNotEngine());
 });
 
+app.get('/api/feed/discover', (req, res) => {
+    const { publicKey } = req.query;
+    const feed = profileService.getFeedEngine();
+
+    // Filter for recent public song uploads
+    let discoverItems = feed.filter(item =>
+        item.type === 'SONG_UPLOAD' &&
+        (!publicKey || item.sender !== publicKey) // Exclude user's own tracks if logged in
+    );
+
+    // Simple randomization for now
+    discoverItems.sort(() => 0.5 - Math.random());
+
+    // Add a limit to avoid sending a huge payload
+    res.json(discoverItems.slice(0, 50));
+});
+
+
 // 2. THE STORAGE ROUTE 
 app.get('/tracks/:filename', (req, res, next) => {
     const filename = req.params.filename;

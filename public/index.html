@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>VOD Social // Vibe or Die</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#66fcf1">
     
@@ -78,6 +79,7 @@
             <div class="side-nav left" id="side-nav-left">
                 <div class="side-card" id="card-main-nav" style="padding: 0; background: transparent; border: none;">
                     <div class="side-nav-item active" onclick="switchTab('feed', this)">🏠 The Global Feed</div>
+                <div class="side-nav-item" id="nav-discover-tab" onclick="switchTab('discover', this)">🌊 Discover Feed</div>
                     <div class="side-nav-item" onclick="switchTab('profile', this)">👤 My Profile (MySpace)</div>
                     <div class="side-nav-item" onclick="switchTab('events', this)">📅 Events</div>
                     <div class="side-nav-item" id="nav-wallet-tab" onclick="switchTab('wallet', this)">💼 Wallet & Escrow</div>
@@ -254,7 +256,7 @@
                         <!-- Left Column: Playlist, Feed, Shoutbox -->
                         <div style="display: flex; flex-direction: column; gap: 25px;" id="profile-col-left" class="profile-sortable">
                             <div class="card profile-section" id="profile-section-playlist" draggable="true" style="background-color: var(--bg-card);">
-                                <h3 style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 8px;"><span>🎵</span> Uploaded Playlist</h3>
+                                <h3 style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 8px;"><span>🎵</span> Playlists & Discography</h3>
                                 <div id="ui-profile-playlist" style="display:flex; flex-direction:column; gap:10px; margin-top: 15px;"></div>
                             </div>
                             <div class="card profile-section" id="profile-section-feed" draggable="true" style="background-color: var(--bg-card);">
@@ -466,6 +468,10 @@
                 <div class="side-card" id="card-tx-history">
                     <h3 class="side-card-header" draggable="true">Global Activity</h3>
                     <div class="tx-history-container" id="ui-sidebar-tx-history" style="max-height: 300px; overflow-y: auto; padding: 5px; border-radius: 8px; background: rgba(0,0,0,0.2);"></div>
+                </div>
+                <div class="side-card" id="card-my-playlists">
+                    <h3 class="side-card-header" draggable="true">My Rotation</h3>
+                    <div id="ui-my-playlists-widget" class="card-body-list"></div>
                 </div>
                 <div class="side-card" id="card-online-users">
                     <h3 class="side-card-header" draggable="true" id="ui-online-count">Online in Swarm — 0</h3>

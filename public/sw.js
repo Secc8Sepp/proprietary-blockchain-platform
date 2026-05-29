@@ -46,35 +46,37 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // We only want to handle GET requests for http/https protocols
-  if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) {
-    return;
-  }
-
   // For API calls and socket.io, always go to the network.
   if (event.request.url.includes('/api/') || event.request.url.includes('/socket.io/')) {
+    // Do not use the cache for these. Let the browser handle it.
     return;
   }
 
+  // For all other GET requests, use a cache-first strategy.
   event.respondWith(
     caches.match(event.request).then(cachedResponse => {
       // If we have a cached response, return it immediately.
       if (cachedResponse) {
         return cachedResponse;
       }
-
-      // If not in cache, fetch from the network.
-      return fetch(event.request).then(networkResponse => {
-        // After fetching, put a copy in the cache for next time.
-        // We only cache successful responses.
-        if (networkResponse && networkResponse.status === 200) {
+      
+      // If not in cache, fetch from the network and cache the response.
+      return fetch(event.request).then(
+        networkResponse => {
+          // Check if we received a valid response to cache
+          // Allow caching of cross-origin (CORS) responses, like from a CDN.
+          if (!networkResponse || networkResponse.status !== 200) {
+            return networkResponse;
+          }
+          
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then(cache => {
             cache.put(event.request, responseToCache);
           });
+          
+          return networkResponse;
         }
-        return networkResponse;
-      });
+      );
     }).catch(() => {
       // For navigation requests when offline and not in cache, return the app shell.
       if (event.request.mode === 'navigate') {
