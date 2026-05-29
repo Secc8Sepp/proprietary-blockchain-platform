@@ -123,11 +123,24 @@ window.CoreEngine = {
 
     async sendSignedTransaction(type, receiver, data) {
         type = (type || '').toString().trim().toUpperCase();
-        const msgData = { sender: this.userKeys.publicKey, receiver: receiver || '0x00', type, data, timestamp: Date.now() };
-        const sig = await window.generateClientSignature(this.userKeys.privateKey, msgData);
+
+        // 1. Define the exact data payload to be signed, with a fresh timestamp.
+        // This object structure must match what the backend's `blockchainService.addTransaction`
+        // reconstructs for verification.
+        const msgData = {
+            sender: this.userKeys.publicKey,
+            receiver: receiver || '0x00',
+            type,
+            data,
+            timestamp: Date.now()
+        };
+
+        // 2. Generate the signature. The backend verification process uses `JSON.stringify` on the payload,
+        // so we MUST sign the stringified version of the exact same object here to ensure the hashes match.
+        const sig = await window.generateClientSignature(this.userKeys.privateKey, JSON.stringify(msgData));
         const txFields = { ...msgData, signature: sig };
-        // ADMIN actions can safely be routed through the feed controller, which already supports them.
-        const endpoint = ['PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'FOLLOW_USER', 'ADMIN_MINT', 'ADMIN_DELETE_USER'].includes(type) ? '/api/social/action' : '/api/feed/interact';
+        // ADMIN actions are routed through the general-purpose feed controller.
+        const endpoint = ['PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'FOLLOW_USER'].includes(type) ? '/api/social/action' : '/api/feed/interact';
         console.log(`[CoreEngine] Sending ${type} to ${endpoint}`, txFields);
         const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
         if (!res.ok) {

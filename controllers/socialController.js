@@ -1,5 +1,6 @@
 const blockchainService = require('../services/blockchainService');
 const profileService = require('../services/profileService');
+const { ALL_SOCIAL_ACTIONS } = require('../config/txTypes');
 
 class SocialController {
     getProfileData(req, res) {
@@ -25,8 +26,7 @@ class SocialController {
  
             // Whitelist actions that are explicitly for identity and social graph management.
             // This provides a security layer and ensures this controller only handles its designated tasks.
-            const validSocialActions = ['PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'FOLLOW_USER', 'ADMIN_MINT', 'ADMIN_DELETE_USER'];
-            if (!validSocialActions.includes(type)) {
+            if (!ALL_SOCIAL_ACTIONS.includes(type)) {
                 return res.status(400).json({ error: `Invalid action type for social controller: ${type}` });
             }
 

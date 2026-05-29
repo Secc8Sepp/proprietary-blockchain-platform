@@ -2,6 +2,7 @@ const blockchainService = require('../services/blockchainService');
 const profileService = require('../services/profileService');
 const fs = require('fs');
 const path = require('path');
+const { ALL_FEED_ACTIONS } = require('../config/txTypes');
 
 const IPFS_DIR = path.join(__dirname, '..', 'mock_ipfs');
 
@@ -16,9 +17,14 @@ class FeedController {
             let { sender, receiver, type, data, timestamp, signature } = req.body;
             type = (type || '').toString().trim().toUpperCase();
             console.log('[FeedController] submitInteraction payload:', { sender, receiver, type, data, timestamp, signature });
+
+            // Explicitly verify signature at the controller level to provide clear errors.
+            if (!blockchainService.verifySignature(sender, { sender, receiver, type, data, timestamp }, signature)) {
+                return res.status(400).json({ error: "Invalid transaction signature. Verification failed at controller." });
+            }
+
             // Whitelist all market and media transaction types
-            const validTypes = ['SONG_UPLOAD', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'STORY_POST', 'TEXT_POST', 'LIKE_IMAGE', 'LIKE_POST', 'REPLY_POST', 'DELETE_POST', 'STREAM_COMPLETED', 'BUY_SONG_SHARE', 'TRANSFER_COIN', 'SHOUTBOX_POST', 'CREATE_COMMISSION', 'FULFILL_COMMISSION', 'CREATE_BOUNTY', 'SUBMIT_BOUNTY', 'AWARD_BOUNTY', 'LIST_ITEM', 'BUY_ITEM', 'BRIDGE_WITHDRAW', 'BRIDGE_DEPOSIT', 'ADMIN_MINT', 'ADMIN_DELETE_USER', 'REQUEST_SONG_SHARE', 'ACCEPT_SHARE_REQUEST', 'DECLINE_SHARE_REQUEST', 'VOTE_HOT_OR_NOT', 'SUBMIT_HOT_OR_NOT', 'PURCHASE_ZINE_RIGHTS', 'EDIT_POST_METADATA', 'EDIT_SONG_METADATA', 'REPOST_POST', 'STEM_SPLIT'];
-            if (!validTypes.includes(type)) {
+            if (!ALL_FEED_ACTIONS.includes(type)) {
                 console.error(`[FeedController] Invalid feed operation type: ${type} (typeof ${typeof type})`);
                 return res.status(400).json({ error: `Invalid feed operation profile: ${type}` });
             }

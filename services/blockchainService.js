@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const EventEmitter = require('events');
 
 const Wallet = require('../core/wallet');
+const { BALANCE_EXEMPT_ACTIONS, ADMIN_ACTIONS } = require('../config/txTypes');
 
 function normalizeAddress(address) {
     if (!address || typeof address !== 'string') return null;
@@ -345,11 +346,10 @@ class BlockchainService extends EventEmitter {
 
         const currentBalance = this.calculateBalance(sender, chain);
         // Skip balance checks for certain types that don't consume balance
-        const balanceRequired = !['FOLLOW_USER', 'PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'SHOUTBOX_POST', 'ADMIN_MINT', 'ADMIN_DELETE_USER', 'SUBMIT_HOT_OR_NOT', 'VOTE_HOT_OR_NOT', 'STORY_POST', 'REPOST_POST'].includes(type);
+        const balanceRequired = !BALANCE_EXEMPT_ACTIONS.includes(type);
 
         // --- Centralized Admin Action Authorization ---
-        const adminActions = ['ADMIN_MINT', 'ADMIN_DELETE_USER'];
-        if (adminActions.includes(type)) {
+        if (ADMIN_ACTIONS.includes(type)) {
             const adminAddress = this.getAdminAddress(chain);
             const normalizedSender = normalizeAddress(sender);
             console.log(`[ADMIN ACTION] Type: ${type}, Sender: ${normalizedSender ? normalizedSender.substring(0,8) + '...' : sender}, AdminAddr: ${adminAddress ? adminAddress.substring(0,8) + '...' : 'NONE'}`);

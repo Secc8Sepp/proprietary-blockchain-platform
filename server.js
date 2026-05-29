@@ -3,9 +3,9 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
+require('dotenv').config();
 const webpush = require('web-push');
 
-const authRoutes = require('./routes/auth');
 const socialRoutes = require('./routes/social');
 const feedRoutes = require('./routes/feed');
 const blockchainService = require('./services/blockchainService');
@@ -69,11 +69,16 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ==========================================
 // WEB PUSH API SETUP
 // ==========================================
-const vapidKeys = webpush.generateVAPIDKeys();
-webpush.setVapidDetails('mailto:admin@vod.network', vapidKeys.publicKey, vapidKeys.privateKey);
+if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
+    console.warn("⚠️ VAPID keys not found in environment variables. Push notifications will be disabled. Run 'npx web-push generate-vapid-keys' to create them.");
+} else {
+    webpush.setVapidDetails('mailto:admin@vod.network', process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
+}
 const pushSubscriptions = {};
 
-app.get('/api/push/vapidPublicKey', (req, res) => res.json({ publicKey: vapidKeys.publicKey }));
+app.get('/api/push/vapidPublicKey', (req, res) => {
+    res.json({ publicKey: process.env.VAPID_PUBLIC_KEY });
+});
 app.post('/api/push/subscribe', (req, res) => {
     const body = req.body || {};
     const { address, subscription } = body;
@@ -81,6 +86,11 @@ app.post('/api/push/subscribe', (req, res) => {
     if (!pushSubscriptions[address]) pushSubscriptions[address] = [];
     pushSubscriptions[address].push(subscription);
     res.status(201).json({});
+});
+
+app.get('/api/config/maps', (req, res) => {
+    // Expose the public Google Maps API key to the frontend
+    res.json({ apiKey: process.env.GOOGLE_MAPS_API_KEY });
 });
 
 function sendPushNotification(address, payload) {
@@ -112,7 +122,6 @@ app.get('/api/debug/system', (req, res) => {
 });
 
 // 1. API ROUTES
-app.use('/api/auth', authRoutes);
 app.use('/api/social', socialRoutes);
 app.use('/api/feed', feedRoutes);
 try {
@@ -201,6 +210,74 @@ app.post('/api/network/block', (req, res) => {
 });
 
 // ==========================================
+// ATOMIC STATE MUTATORS
+// ==========================================
+
+/**
+ * Safely finds and increments the like count for a Zine article.
+ * This is a synchronous, atomic operation within Node's event loop.
+ * @param {string} articleId The ID of the article to like.
+ * @returns {object|null} The updated article object or null if not found.
+ */
+function incrementArticleLike(articleId) {
+    if (!articleId) return null;
+    const article = dbMemory.zineArticles.find(a => a.id === articleId);
+    if (article) {
+        // This read-modify-write operation is atomic for a single event loop tick.
+        article.likes = (article.likes || 0) + 1;
+        return article;
+    }
+    return null;
+}
+
+function addReactionToMessage(serverId, channelId, msgId, emoji) {
+    const msg = dbMemory.servers[serverId]?.channels[channelId]?.messages.find(m => (m.time + '_' + (m.sender || '').substring(0, 5)) === msgId);
+    if (!msg) return false;
+    if (!msg.reactions) msg.reactions = [];
+    msg.reactions.push(emoji);
+    return true;
+}
+
+/**
+ * Scrubs all data related to a deleted user from the in-memory database
+ * and disconnects their active sockets.
+ * @param {string} deletedUserAddress The public key of the user to purge.
+ */
+function purgeDeletedUserData(deletedUserAddress) {
+    if (!deletedUserAddress) return;
+    console.log(`[PURGE] Executing data purge for deleted user: ${deletedUserAddress.substring(0,8)}...`);
+
+    // 1. Disconnect active sockets for the user
+    for (const socketId in dbMemory.connectedNodes) {
+        if (dbMemory.connectedNodes[socketId].address === deletedUserAddress) {
+            const targetSocket = io.sockets.sockets.get(socketId);
+            if (targetSocket) {
+                targetSocket.emit('force_logout', { message: 'Your account has been deleted by an administrator.' });
+                targetSocket.disconnect(true);
+                console.log(`[PURGE] Disconnected active socket ${socketId} for deleted user.`);
+            }
+        }
+    }
+
+    // 2. Purge from in-memory chat servers and messages
+    for (const serverId in dbMemory.servers) {
+        const server = dbMemory.servers[serverId];
+        for (const channelId in server.channels) {
+            server.channels[channelId].messages = server.channels[channelId].messages.filter(msg => msg.sender !== deletedUserAddress);
+        }
+    }
+
+    // 3. Purge from direct messages and zine articles
+    dbMemory.directMessages = (dbMemory.directMessages || []).filter(msg => msg.sender !== deletedUserAddress && msg.to !== deletedUserAddress);
+    dbMemory.zineArticles = (dbMemory.zineArticles || []).filter(art => art.author !== deletedUserAddress);
+    dbMemory.zineArticles.forEach(art => { art.ownersList = art.ownersList.filter(owner => owner !== deletedUserAddress); });
+
+    saveDBMemory(); // Persist the cleanup
+    profileService.getProfileDirectory(); // Invalidate and rebuild profile cache to reflect deletion
+    console.log(`[PURGE] Completed data purge for ${deletedUserAddress.substring(0,8)}...`);
+}
+
+// ==========================================
 // 5. WEBSOCKETS (Chat & Anti-Cheat Mining)
 // ==========================================
 
@@ -249,13 +326,16 @@ io.on('connection', (socket) => {
     });
 
     socket.on('publish_article', (data) => {
-        if (!data || !data.title || !data.body || !data.price || !data.author) return;
+        const senderNode = dbMemory.connectedNodes[socket.id];
+        if (!senderNode || !senderNode.address) return console.error(`[SECURITY] 'publish_article' from unauthenticated socket ${socket.id}`);
+
+        if (!data || !data.title || !data.body || !data.price) return;
         const article = {
             id: 'art_' + Date.now(),
             title: data.title,
             body: data.body,
             price: data.price,
-            author: data.author,
+            author: senderNode.address,
             tags: data.tags || '',
             ownersList: [],
             likes: 0,
@@ -267,10 +347,8 @@ io.on('connection', (socket) => {
     });
 
     socket.on('like_article', (articleId) => {
-        if (!articleId) return;
-        const article = dbMemory.zineArticles.find(a => a.id === articleId);
+        const article = incrementArticleLike(articleId);
         if (article) {
-            article.likes = (article.likes || 0) + 1;
             saveDBMemory();
             io.emit('zine_update', dbMemory.zineArticles);
 
@@ -312,14 +390,17 @@ io.on('connection', (socket) => {
     });
 
     socket.on('create_server', (data) => {
-        if (!data || !data.serverName || !data.address) return;
-        const { serverName, address } = data;
+        const senderNode = dbMemory.connectedNodes[socket.id];
+        if (!senderNode || !senderNode.address) return console.error(`[SECURITY] 'create_server' from unauthenticated socket ${socket.id}`);
+
+        if (!data || !data.serverName) return;
+        const { serverName } = data;
         const serverId = 'srv_' + Date.now() + Math.floor(Math.random()*1000);
         const generalChannelId = 'ch_' + Date.now();
         dbMemory.servers[serverId] = {
             id: serverId,
             name: serverName,
-            owner: address,
+            owner: senderNode.address,
             channels: {}
         };
         dbMemory.servers[serverId].channels[generalChannelId] = { id: generalChannelId, name: 'general', locked: false, messages: [] };
@@ -344,8 +425,11 @@ io.on('connection', (socket) => {
     });
 
     socket.on('join_channel', (data) => {
-        if (!data || !data.serverId || !data.channelId || !data.address) return;
-        const { serverId, channelId, address } = data;
+        const senderNode = dbMemory.connectedNodes[socket.id];
+        if (!senderNode || !senderNode.address) return console.error(`[SECURITY] 'join_channel' from unauthenticated socket ${socket.id}`);
+
+        if (!data || !data.serverId || !data.channelId) return;
+        const { serverId, channelId } = data;
         
         const server = dbMemory.servers[serverId];
         if (server && server.channels[channelId]) {
@@ -356,8 +440,8 @@ io.on('connection', (socket) => {
                 const chain = blockchainService.getChain();
                 const adminAddress = blockchainService.getAdminAddress(chain);
                 
-                if (address !== adminAddress) {
-                    const balance = blockchainService.calculateBalance(address, chain);
+                if (senderNode.address !== adminAddress) {
+                    const balance = blockchainService.calculateBalance(senderNode.address, chain);
                     if (balance < 10000) {
                         return socket.emit('chat_error', { 
                             message: `Access Denied: The #${channel.name} Backroom requires 10,000 $VOD. Your balance: ${balance.toFixed(0)}` 
@@ -373,32 +457,30 @@ io.on('connection', (socket) => {
         
         const roomName = `${serverId}_${channelId}`;
         socket.join(roomName);
-        
-            socket.emit('chat_history', channel.messages.slice(-50));
+
+        socket.emit('chat_history', channel.messages.slice(-50));
         }
     });
 
     socket.on('send_message', (data) => {
-        if (!data || !data.serverId || !data.channelId || !data.address || typeof data.text === 'undefined') return;
-        const { serverId, channelId, address, text } = data;
+        const senderNode = dbMemory.connectedNodes[socket.id];
+        if (!senderNode || !senderNode.address) return console.error(`[SECURITY] 'send_message' from unauthenticated socket ${socket.id}`);
+
+        if (!data || !data.serverId || !data.channelId || typeof data.text === 'undefined') return;
+        const { serverId, channelId, text } = data;
         const server = dbMemory.servers[serverId];
         if (server && server.channels[channelId]) {
             const chain = blockchainService.getChain();
             const adminAddress = blockchainService.getAdminAddress(chain);
-            const balance = blockchainService.calculateBalance(address, chain);
+            const balance = blockchainService.calculateBalance(senderNode.address, chain);
             const roles = [];
-            if (address === adminAddress) roles.push('admin');
+            if (senderNode.address === adminAddress) roles.push('admin');
             if (balance >= 10000) roles.push('whale');
-            const msg = { sender: address, text, time: Date.now(), roles };
+            const msg = { sender: senderNode.address, text, time: Date.now(), roles };
             server.channels[channelId].messages.push(msg);
             saveDBMemory();
             io.to(`${serverId}_${channelId}`).emit('new_message', msg);
         }
-    });
-
-    socket.on('trigger_push', (data) => {
-        if (!data || !data.target || !data.payload) return;
-        sendPushNotification(data.target, data.payload);
     });
 
     socket.on('user_typing', (data) => {
@@ -466,25 +548,23 @@ io.on('connection', (socket) => {
     socket.on('add_message_reaction', (data) => {
         if (!data || !data.serverId || !data.channelId || !data.msgId || !data.emoji) return;
         const { serverId, channelId, msgId, emoji } = data;
-        const server = dbMemory.servers[serverId];
-        if (server && server.channels[channelId]) {
-            const msg = server.channels[channelId].messages.find(m => (m.time + '_' + (m.sender || '').substring(0, 5)) === msgId);
-            if (msg) {
-                if (!msg.reactions) msg.reactions = [];
-                msg.reactions.push(emoji);
-                saveDBMemory();
-            }
+        
+        if (addReactionToMessage(serverId, channelId, msgId, emoji)) {
+            saveDBMemory();
+            io.to(`${serverId}_${channelId}`).emit('new_reaction', { msgId, emoji });
         }
-        io.to(`${serverId}_${channelId}`).emit('new_reaction', { msgId, emoji });
     });
 
     // --- NOTIFICATIONS, LIKES & CREW REQUESTS ---
     socket.on('notify_mention', (data) => {
-        if (!data || !data.target || !data.from) {
+        const senderNode = dbMemory.connectedNodes[socket.id];
+        if (!senderNode || !senderNode.address) return console.error(`[SECURITY] 'notify_mention' from unauthenticated socket ${socket.id}`);
+
+        if (!data || !data.target) {
             return; // Invalid data, ignore.
         }
-        const { target, from } = data;
-        const fromProfile = profileService.getProfileDirectory()[from] || { username: `Node_${from.substring(0,6)}` };
+        const { target } = data;
+        const fromProfile = profileService.getProfileDirectory()[senderNode.address] || { username: `Node_${senderNode.address.substring(0,6)}` };
         const payload = {
             title: 'You were mentioned! 💬',
             body: `${fromProfile.username} mentioned you in a post.`
@@ -497,17 +577,20 @@ io.on('connection', (socket) => {
     });
 
     socket.on('send_crew_request', (data) => {
-        if (!data || !data.target || !data.from) {
+        const senderNode = dbMemory.connectedNodes[socket.id];
+        if (!senderNode || !senderNode.address) return console.error(`[SECURITY] 'send_crew_request' from unauthenticated socket ${socket.id}`);
+
+        if (!data || !data.target) {
             return; // Invalid data, ignore.
         }
-        const { target, from } = data;
+        const { target } = data;
         const targetSocketId = Object.keys(dbMemory.connectedNodes).find(
             id => dbMemory.connectedNodes[id].address === target
         );
         if (targetSocketId) {
-            io.to(targetSocketId).emit('crew_request_received', { from });
+            io.to(targetSocketId).emit('crew_request_received', { from: senderNode.address });
         }
-        const fromProfile = profileService.getProfileDirectory()[from] || { username: `Node_${from.substring(0,6)}` };
+        const fromProfile = profileService.getProfileDirectory()[senderNode.address] || { username: `Node_${senderNode.address.substring(0,6)}` };
         sendPushNotification(target, {
             title: 'New Crew Request 🤝',
             body: `${fromProfile.username} wants to lock in with you!`
@@ -626,8 +709,8 @@ server.listen(PORT, () => {
                                 }
                             });
                         }
-                    }).catch(e => {
-                        console.log(`⚠️ Peer offline: ${peerUrl} - Retrying in 30s...`);
+                    }).catch(e => { // NOSONAR
+                        console.error(`[P2P] Bootstrap failed for peer ${peerUrl}:`, e.message, `- Retrying in 30s...`);
                         setTimeout(bootstrapSwarm, 30000);
                     });
                 }
@@ -644,7 +727,9 @@ server.listen(PORT, () => {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
                     body: JSON.stringify({ block })
-                }).catch(e => {});
+                }).catch(e => {
+                    console.error(`[P2P] Failed to broadcast block to peer ${peerUrl}:`, e.message);
+                });
             }
         });
         if (block.transactions && block.transactions.length > 0) {
@@ -660,7 +745,10 @@ server.listen(PORT, () => {
                         io.emit('zine_update', dbMemory.zineArticles); // Notify all clients of the ownership change
                         console.log(`📰 Article Rights Updated via Ledger: ${article.title} by ${tx.sender}`);
                     }
-                }
+                } else if (tx.type === 'ADMIN_DELETE_USER' && tx.receiver) {
+                    // Trigger the purge of the user's data from the in-memory database
+                    purgeDeletedUserData(tx.receiver);
+                    }
             });
         }
     });
@@ -687,7 +775,9 @@ async function extractAndSyncHashes(tx) {
                             fs.writeFileSync(filePath, Buffer.from(buffer));
                             break; 
                         }
-                    } catch (err) {}
+                    } catch (err) {
+                        console.error(`[P2P] Asset sync failed for ${hash} from peer ${peer}:`, err.message);
+                    }
                 }
             }
         }

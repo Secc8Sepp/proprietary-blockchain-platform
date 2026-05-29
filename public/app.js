@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initializeApplicationListeners() {
     console.log('[INIT] Wiring up event listeners...');
+    loadGoogleMapsScript();
 
     // Dynamically load WaveSurfer.js and regions plugin
     const wsScript = document.createElement('script');
@@ -221,6 +222,28 @@ function handleKeyFileUpload(event) {
         }
     };
     reader.readAsText(file);
+}
+
+async function loadGoogleMapsScript() {
+    try {
+        const res = await fetch('/api/config/maps');
+        if (!res.ok) throw new Error('Failed to fetch Maps API config');
+        const { apiKey } = await res.json();
+        if (!apiKey) {
+            console.warn('[MAPS] Google Maps API key not provided by server. Events map will be disabled.');
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry&v=beta`;
+        script.async = true;
+        script.defer = true;
+        // The initEventsMap function already has a retry loop, so we can just append.
+        document.head.appendChild(script);
+        console.log('[INIT] ✓ Google Maps script injected dynamically.');
+    } catch (error) {
+        console.error('[MAPS] Error loading Google Maps script:', error);
+    }
 }
 
 // ==========================================
