@@ -346,11 +346,12 @@ class BlockchainService extends EventEmitter {
             const adminAddress = this.getAdminAddress(chain);
             console.log(`[ADMIN ACTION] Type: ${type}, Sender: ${sender.substring(0,8)}..., AdminAddr: ${adminAddress ? adminAddress.substring(0,8) + '...' : 'NONE'}`);
             if (!adminAddress) {
-                // Bootstrap: If no admin exists, allow this first user to become admin
                 console.log(`[BOOTSTRAP] No admin found. Sender ${sender.substring(0,8)}... is becoming the network admin.`);
             } else if (sender !== adminAddress) {
                 console.error(`[AUTH FAILED] ${sender.substring(0,8)}... attempted ${type} but admin is ${adminAddress.substring(0,8)}...`);
                 throw new Error(`Unauthorized: Only the network admin (${adminAddress.substring(0,8)}...) can perform ${type}.`);
+            } else {
+                console.log(`[AUTH SUCCESS] ${sender.substring(0,8)}... authorized for ${type}.`);
             }
         }
         

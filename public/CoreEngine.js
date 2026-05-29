@@ -126,7 +126,7 @@ window.CoreEngine = {
         const sig = await window.generateClientSignature(this.userKeys.privateKey, msgData);
         const txFields = { ...msgData, signature: sig };
         // ADMIN actions can safely be routed through the feed controller, which already supports them.
-        const endpoint = ['PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'FOLLOW_USER'].includes(type) ? '/api/social/action' : '/api/feed/interact';
+        const endpoint = ['PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'FOLLOW_USER', 'ADMIN_MINT', 'ADMIN_DELETE_USER'].includes(type) ? '/api/social/action' : '/api/feed/interact';
         console.log(`[CoreEngine] Sending ${type} to ${endpoint}`, txFields);
         const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
         if (!res.ok) {
