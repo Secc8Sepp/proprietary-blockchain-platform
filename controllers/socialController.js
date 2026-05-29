@@ -18,7 +18,7 @@ class SocialController {
     handleAction(req, res) {
         try {
             const { sender, receiver, type, data, timestamp, signature } = req.body;
-            if (!['FOLLOW_USER', 'UNFOLLOW_USER', 'PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8'].includes(type)) {
+            if (!['FOLLOW_USER', 'UNFOLLOW_USER', 'PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'ADMIN_DELETE_USER'].includes(type)) {
                 return res.status(400).json({ error: "Invalid social action block." });
             }
             const activeBlock = blockchainService.addTransaction({ sender, receiver, type, data, timestamp, signature });
