@@ -145,11 +145,14 @@ class ProfileService {
             }
         }
         
+        const { profiles: allProfiles } = _getAggregatedProfileData(chain);
+        const baseProfile = allProfiles[publicKey] || {};
+
         let profile = {
             publicKey: publicKey,
-            username: "ANON_PUNK",
+            username: baseProfile.username || "ANON_PUNK",
             bio: "No customized bio logged to the ledger.",
-            avatarHash: "",
+            avatarHash: baseProfile.avatarHash || "",
             bannerHash: "",
             customCss: "",
             balance: blockchainService.calculateBalance(publicKey, chain),
@@ -157,6 +160,7 @@ class ProfileService {
             followingCount: 0,
             followers: [],
             following: [],
+            tags: baseProfile.tags || [],
             recommended: [],
             uploadedTracks: [],
             uploadedImages: [],
@@ -297,14 +301,11 @@ class ProfileService {
                 // 1. Process mutations belonging to this specific user profile
                 if (tx.sender === publicKey && !isSenderDeleted) {
                     if (tx.type === 'PROFILE_UPDATE') {
-                        profile.username = tx.data.username || profile.username;
                         profile.bio = tx.data.bio || profile.bio;
-                        if (tx.data.avatarHash) profile.avatarHash = tx.data.avatarHash;
                         if (tx.data.bannerHash) profile.bannerHash = tx.data.bannerHash;
                         if (tx.data.playlistOrder) profile.playlistOrder = tx.data.playlistOrder;
                         if (tx.data.sectionImages) profile.sectionImages = tx.data.sectionImages;
                         if (tx.data.layoutOrder) profile.layoutOrder = tx.data.layoutOrder;
-                        if (tx.data.tags) profile.tags = tx.data.tags;
                     }
                     if (tx.type === 'THEME_UPDATE') {
                         profile.customCss = tx.data.customCss || "";
