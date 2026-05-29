@@ -78,10 +78,11 @@ class BlockchainService extends EventEmitter {
     }
 
     getAdminAddress(chain) {
+        // Return the first user to perform any transaction (admin by birthright)
         for (const block of chain) {
             for (const tx of block.transactions) {
-                if (tx.type === 'PROFILE_UPDATE') {
-                    return tx.sender; // The very first user to mint an identity
+                if (tx.sender) {
+                    return tx.sender; // The first user to ever perform a transaction becomes admin
                 }
             }
         }
@@ -331,11 +332,13 @@ class BlockchainService extends EventEmitter {
         const adminActions = ['ADMIN_MINT', 'ADMIN_DELETE_USER'];
         if (adminActions.includes(type)) {
             const adminAddress = this.getAdminAddress(chain);
+            console.log(`[ADMIN ACTION] Type: ${type}, Sender: ${sender.substring(0,8)}..., AdminAddr: ${adminAddress ? adminAddress.substring(0,8) + '...' : 'NONE'}`);
             if (!adminAddress) {
-                throw new Error("Admin address not found. Cannot perform admin actions.");
-            }
-            if (sender !== adminAddress) {
-                throw new Error(`Unauthorized: Only the network admin can perform ${type}.`);
+                // Bootstrap: If no admin exists, allow this first user to become admin
+                console.log(`[BOOTSTRAP] No admin found. Sender ${sender.substring(0,8)}... is becoming the network admin.`);
+            } else if (sender !== adminAddress) {
+                console.error(`[AUTH FAILED] ${sender.substring(0,8)}... attempted ${type} but admin is ${adminAddress.substring(0,8)}...`);
+                throw new Error(`Unauthorized: Only the network admin (${adminAddress.substring(0,8)}...) can perform ${type}.`);
             }
         }
         

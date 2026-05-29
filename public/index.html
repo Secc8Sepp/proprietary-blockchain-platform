@@ -372,9 +372,9 @@
                         <button style="background: var(--danger); color: #fff; width: 100%;" onclick="window.WalletEngine.executeAdminMint()">Mint & Transfer</button>                        
                         
                         <h4 style="color: var(--danger); margin-top: 20px;">🛑 Admin Delete User</h4>
-                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">Permanently and irrevocably delete a user and all their content from being displayed on the network. This action cannot be undone.</p>
-                        <input id="input-delete-recipient" placeholder="User Public Key to Delete" style="margin-bottom: 12px;" />
-                        <button style="background: var(--danger); color: #fff; width: 100%;" onclick="window.WalletEngine.executeAdminDelete()">Delete User From Ledger</button>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">Permanently remove a user from the network. They will be marked as deleted and will not appear in feeds, profiles, or any public views. This action cannot be undone.</p>
+                        <input id="input-delete-recipient" placeholder="Paste the exact User Public Key to delete" style="margin-bottom: 12px;" />
+                        <button style="background: var(--danger); color: #fff; width: 100%;" onclick="window.WalletEngine.executeAdminDelete()">🗑️ Delete User From Ledger</button>
                     </div>
 
                     <h4 style="margin-top: 20px;">🤝 Incoming Stake Requests</h4>

@@ -43,19 +43,13 @@ function _getAggregatedProfileData(chain) {
 function getDeletedUsers(chain) {
     const deletedUsers = new Set();
     const adminAddress = blockchainService.getAdminAddress(chain);
-    const { profiles } = _getAggregatedProfileData(chain);
 
-    // Rule: Automatically delete any user whose current name is 'test'.
-    for (const address in profiles) {
-        if (profiles[address].username && profiles[address].username.trim().toLowerCase() === 'test') {
-            deletedUsers.add(address);
-        }
-    }
-
+    // Only process explicit ADMIN_DELETE_USER transactions from the admin
     chain.forEach(block => {
         block.transactions.forEach(tx => {
             if (tx.type === 'ADMIN_DELETE_USER' && tx.sender === adminAddress) {
                 deletedUsers.add(tx.receiver);
+                console.log(`[DELETE] User ${tx.receiver.substring(0,8)}... marked as deleted by admin.`);
             }
         });
     });

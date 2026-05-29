@@ -22,6 +22,12 @@ class FeedController {
             const io = req.app.get('socketio');
             io.emit('blockchain_update', { type, transaction: activeBlock.transactions[0] });
 
+            // Skip notifications for admin operations
+            if (['ADMIN_DELETE_USER', 'ADMIN_MINT'].includes(type)) {
+                console.log(`[FeedController] Admin operation ${type} - skipping notifications`);
+                return res.status(201).json({ message: "Admin action processed", block: activeBlock });
+            }
+
             const sendPush = req.app.get('sendPushNotification');
             const getProfiles = req.app.get('getProfileDirectory');
             const socialGraph = profileService.getSocialGraph();

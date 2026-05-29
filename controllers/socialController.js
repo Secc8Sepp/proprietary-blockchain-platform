@@ -20,7 +20,7 @@ class SocialController {
             const { sender, receiver, type, data, timestamp, signature } = req.body;
  
             // For definitive debugging, log the exact action type received by the server.
-            console.log(`[SocialController] Handling action of type: "${type}"`);
+            console.log(`[SocialController] Handling ${type} from ${sender.substring(0,8)}... to ${(receiver || '0x00').substring(0,8)}...`);
  
             // Whitelist actions that are explicitly for identity and social graph management.
             // This provides a security layer and ensures this controller only handles its designated tasks.
@@ -30,13 +30,14 @@ class SocialController {
             }
 
             const activeBlock = blockchainService.addTransaction({ sender, receiver, type, data, timestamp, signature });
+            console.log(`[SocialController] ✅ ${type} accepted. Block #${activeBlock.index}`);
 
             req.app.get('socketio').emit('blockchain_update', { type, transaction: activeBlock.transactions[0] });
-            return res.status(201).json({ message: "Action broadcasted", block: activeBlock });
+            return res.status(201).json({ message: "Action broadcasted", block: activeBlock, transaction: activeBlock.transactions[0] });
         } catch (error) {
             // The service layer will throw an error if the transaction is invalid.
             // This provides much more specific and useful error messages to the client.
-            console.error(`[SocialController] Action failed for type "${req.body.type}":`, error.message);
+            console.error(`[SocialController] ❌ ${req.body.type} failed:`, error.message);
             return res.status(400).json({ error: error.message });
         }
     }

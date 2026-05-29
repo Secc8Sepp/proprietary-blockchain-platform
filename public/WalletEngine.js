@@ -30,16 +30,25 @@ window.WalletEngine = {
         if (!confirm(`ARE YOU ABSOLUTELY SURE?\n\nThis will delete the user with public key:\n${target}\n\nThis action is permanent and cannot be undone.`)) return;
 
         try {
+            console.log(`[UI] Admin Delete requested for target: ${target}`);
             // The receiver of an ADMIN_DELETE_USER transaction is the user to be deleted.
-            await window.CoreEngine.sendSignedTransaction('ADMIN_DELETE_USER', target, {});
-            alert(`Successfully submitted deletion transaction for Node_${target.substring(0,6)}! The network will now ignore this user. The UI will update on the next block.`);
+            const response = await window.CoreEngine.sendSignedTransaction('ADMIN_DELETE_USER', target, {});
+            console.log(`[UI] Delete response:`, response);
+            alert(`✅ Successfully deleted Node_${target.substring(0,6)}! They have been removed from the network. Refreshing...`);
             
             targetInput.value = '';
 
+            // Force refresh of profiles and feed
+            if (typeof window.fetchUserProfile === 'function') {
+                window.fetchUserProfile(target, false);
+            }
             if (typeof window.loadMainGlobalFeed === 'function') {
                 window.loadMainGlobalFeed();
             }
-        } catch(err) { alert("Admin Delete failed: " + err.message); }
+        } catch(err) { 
+            console.error(`[UI] Admin Delete failed:`, err);
+            alert("❌ Admin Delete failed: " + err.message); 
+        }
     },
 
     async executeAdminMint() {
