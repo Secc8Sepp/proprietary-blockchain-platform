@@ -12,6 +12,27 @@ let lastDirectoryCacheChainLength = 0;
 function getDeletedUsers(chain) {
     const deletedUsers = new Set();
     const adminAddress = blockchainService.getAdminAddress(chain);
+
+    // --- Automatic Deletion for users named "test" ---
+    // This is a server-side rule to automatically filter out any user accounts
+    // that have set their username to "test". This handles both new and existing accounts.
+    const profiles = {};
+    chain.forEach(block => {
+        block.transactions.forEach(tx => {
+            // Track the latest username for each user
+            if (tx.type === 'PROFILE_UPDATE' && tx.data && tx.data.username) {
+                if (!profiles[tx.sender]) profiles[tx.sender] = {};
+                profiles[tx.sender].username = tx.data.username;
+            }
+        });
+    });
+
+    for (const address in profiles) {
+        if (profiles[address].username && profiles[address].username.toLowerCase() === 'test') {
+            deletedUsers.add(address);
+        }
+    }
+
     chain.forEach(block => {
         block.transactions.forEach(tx => {
             if (tx.type === 'ADMIN_DELETE_USER' && tx.sender === adminAddress) {
