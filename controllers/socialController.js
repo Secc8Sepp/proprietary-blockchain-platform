@@ -18,6 +18,7 @@ class SocialController {
     handleAction(req, res) {
         try {
             const { sender, receiver, type, data, timestamp, signature } = req.body;
+            // Whitelist all social and administrative actions for this endpoint.
             if (!['FOLLOW_USER', 'UNFOLLOW_USER', 'PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'ADMIN_DELETE_USER'].includes(type)) {
                 return res.status(400).json({ error: "Invalid social action block." });
             }

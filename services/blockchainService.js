@@ -325,11 +325,16 @@ class BlockchainService extends EventEmitter {
 
         const currentBalance = this.calculateBalance(sender, chain);
         // Skip balance checks for certain types that don't consume balance
-        const balanceRequired = !['FOLLOW_USER', 'PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'SHOUTBOX_POST', 'ADMIN_MINT', 'SUBMIT_HOT_OR_NOT', 'VOTE_HOT_OR_NOT', 'STORY_POST', 'REPOST_POST'].includes(type);
+        const balanceRequired = !['FOLLOW_USER', 'PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'SHOUTBOX_POST', 'ADMIN_MINT', 'ADMIN_DELETE_USER', 'SUBMIT_HOT_OR_NOT', 'VOTE_HOT_OR_NOT', 'STORY_POST', 'REPOST_POST'].includes(type);
 
         if (type === 'ADMIN_MINT') {
             const adminAddress = this.getAdminAddress(chain);
             if (sender !== adminAddress) throw new Error("Unauthorized: Only the network admin can mint OTC VOD.");
+        }
+        if (type === 'ADMIN_DELETE_USER') {
+            const adminAddress = this.getAdminAddress(chain);
+            if (!adminAddress) throw new Error("Admin address not found. Cannot perform admin actions.");
+            if (sender !== adminAddress) throw new Error("Unauthorized: Only the network admin can delete users.");
         }
         
         if (balanceRequired) {
