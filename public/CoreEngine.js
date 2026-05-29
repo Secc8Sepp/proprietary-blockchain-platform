@@ -125,7 +125,7 @@ window.CoreEngine = {
         const msgData = { sender: this.userKeys.publicKey, receiver: receiver || '0x00', type, data, timestamp: Date.now() };
         const sig = await window.generateClientSignature(this.userKeys.privateKey, msgData);
         const txFields = { ...msgData, signature: sig };
-        const endpoint = ['PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'FOLLOW_USER', 'ADMIN_DELETE_USER'].includes(type) ? '/api/social/action' : '/api/feed/interact';
+        const endpoint = ['PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'FOLLOW_USER'].includes(type) ? '/api/social/action' : '/api/feed/interact';
         const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
         if (!res.ok) throw new Error((await res.json()).error);
         
