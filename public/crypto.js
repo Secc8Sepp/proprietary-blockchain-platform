@@ -20,9 +20,8 @@ async function generateClientSignature(privateKeyHex, messageObject) {
     const ec = new EC('secp256k1');
     const key = ec.keyFromPrivate(privateKeyHex);
     const msgStr = JSON.stringify(messageObject);
-    const hashBuffer = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(msgStr));
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const signature = key.sign(hashArray);
+    const msgBytes = new TextEncoder().encode(msgStr);
+    const signature = key.sign(msgBytes);
     return signature.toDER('hex');
 }
 

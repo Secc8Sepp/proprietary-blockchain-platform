@@ -125,9 +125,19 @@ window.CoreEngine = {
         const msgData = { sender: this.userKeys.publicKey, receiver: receiver || '0x00', type, data, timestamp: Date.now() };
         const sig = await window.generateClientSignature(this.userKeys.privateKey, msgData);
         const txFields = { ...msgData, signature: sig };
-        const endpoint = ['PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'FOLLOW_USER', 'ADMIN_MINT', 'ADMIN_DELETE_USER'].includes(type) ? '/api/social/action' : '/api/feed/interact';
+        // ADMIN actions can safely be routed through the feed controller, which already supports them.
+        const endpoint = ['PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'FOLLOW_USER'].includes(type) ? '/api/social/action' : '/api/feed/interact';
+        console.log(`[CoreEngine] Sending ${type} to ${endpoint}`, txFields);
         const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
-        if (!res.ok) throw new Error((await res.json()).error);
+        if (!res.ok) {
+            let body;
+            try {
+                body = await res.json();
+            } catch (e) {
+                body = { error: await res.text() };
+            }
+            throw new Error(body.error || `Request failed with status ${res.status}`);
+        }
         
         if (window.MeshEngine && typeof window.MeshEngine.broadcastToMesh === 'function') {
             window.MeshEngine.broadcastToMesh('P2P_BLOCK', txFields);
