@@ -51,11 +51,12 @@ window.WalletEngine = {
         }
     },
 
-    async promptAdminDeleteProfile() {
+    async promptAdminDeleteProfile(targetPublicKey) {
         if (!window.CoreEngine.userKeys.publicKey) return alert("Must be logged in.");
         if (!window.currentUserIsAdmin) return alert("Only the admin can delete profiles.");
-        const target = window.viewingUserPublicKey;
+        if (!targetPublicKey || typeof targetPublicKey !== 'string') return alert("No profile selected to delete.");
 
+        const target = targetPublicKey.trim();
         if (!target) return alert("No profile selected to delete.");
         if (target === window.CoreEngine.userKeys.publicKey) return alert("You cannot delete your own admin profile.");
         if (!confirm(`ARE YOU ABSOLUTELY SURE?\n\nThis will delete the profile for:\n${target}\n\nThis action is permanent and cannot be undone.`)) return;
