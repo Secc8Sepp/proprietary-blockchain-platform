@@ -5,6 +5,13 @@ const EventEmitter = require('events');
 
 const Wallet = require('../core/wallet');
 
+// ==========================================
+// ADMIN CONFIGURATION
+// ==========================================
+// Set your admin public key here. If configured, this address will always be recognized as the network admin.
+// If not configured (null), the first user to perform a transaction becomes admin.
+const CONFIGURED_ADMIN_ADDRESS = '3056301006072a8648ce3d020106052b8104000a034200049b412e497874ec237606ac926aaf1e70654e3155fa5d6421b1eb8f018c0c68c6ec17b5c94a9bd7ab6fc34c38760e9f02686dafe2163712416c51cf5ef6826d43';
+
 const LEDGER_DIR = path.join(__dirname, '..', 'ledger-data');
 if (!fs.existsSync(LEDGER_DIR)) {
     fs.mkdirSync(LEDGER_DIR, { recursive: true });
@@ -78,7 +85,12 @@ class BlockchainService extends EventEmitter {
     }
 
     getAdminAddress(chain) {
-        // Return the first user to perform any transaction (admin by birthright)
+        // If admin is configured, always return it
+        if (CONFIGURED_ADMIN_ADDRESS) {
+            return CONFIGURED_ADMIN_ADDRESS;
+        }
+
+        // Otherwise, return the first user to perform any transaction (fallback)
         for (const block of chain) {
             for (const tx of block.transactions) {
                 if (tx.sender) {
