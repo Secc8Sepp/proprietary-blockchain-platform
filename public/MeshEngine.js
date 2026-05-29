@@ -51,10 +51,10 @@ window.MeshEngine = {
         socket.on('blockchain_update', (payload) => {
             // Define transactions that add/remove/change visible feed content
             const feedMutatingTypes = [
-                'SONG_UPLOAD', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'STORY_POST', 'TEXT_POST', 'DELETE_POST', 'REPOST_POST', 'EDIT_POST_METADATA', 'EDIT_SONG_METADATA', 'SHOUTBOX_POST'
+                'SONG_UPLOAD', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'STORY_POST', 'TEXT_POST', 'DELETE_POST', 'REPOST_POST', 'EDIT_POST_METADATA', 'EDIT_SONG_METADATA', 'SHOUTBOX_POST', 'ADMIN_DELETE_USER'
             ];
 
-            if(payload && payload.type === 'PROFILE_UPDATE') socket.emit('request_profile_directory');
+            if(payload && (payload.type === 'PROFILE_UPDATE' || payload.type === 'ADMIN_DELETE_USER')) socket.emit('request_profile_directory');
             
             // Always update my own profile data silently (for balance changes etc.)
             if(window.CoreEngine.userKeys.publicKey) window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, true); 

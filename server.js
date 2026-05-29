@@ -186,7 +186,7 @@ app.post('/api/network/block', (req, res) => {
         // Incrementally update the profile cache instead of rebuilding from scratch
         if (block.transactions && block.transactions.length > 0) {
             block.transactions.forEach(tx => {
-                if (tx.type === 'PROFILE_UPDATE') profileService.getProfileDirectory(); // This will invalidate and rebuild the cache if needed
+                if (tx.type === 'PROFILE_UPDATE' || tx.type === 'ADMIN_DELETE_USER') profileService.getProfileDirectory(); // This will invalidate and rebuild the cache if needed
                 
                 extractAndSyncHashes(tx);
             });
