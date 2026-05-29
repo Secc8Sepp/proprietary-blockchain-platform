@@ -1,34 +1,53 @@
 const blockchainService = require('./blockchainService');
 
 // --- PERFORMANCE CACHING ---
+let aggregatedDataCache = null;
+let lastAggregatedChainLength = 0;
 let fullProfileCache = new Map();
 let lastProfileCacheChainLength = 0;
 let feedCache = null;
 let lastFeedCacheChainLength = 0;
-let profileDirectoryCache = null;
-let lastDirectoryCacheChainLength = 0;
 // --- END CACHING ---
 
-function getDeletedUsers(chain) {
-    const deletedUsers = new Set();
-    const adminAddress = blockchainService.getAdminAddress(chain);
+/**
+ * This is the new single source of truth for calculating the state of all user profiles.
+ * It iterates the chain once, caches the result, and provides a consistent data source
+ * for all other service functions, eliminating logical discrepancies.
+ */
+function _getAggregatedProfileData(chain) {
+    if (aggregatedDataCache && chain.length === lastAggregatedChainLength) {
+        return aggregatedDataCache;
+    }
 
-    // --- Automatic Deletion for users named "test" ---
-    // This is a server-side rule to automatically filter out any user accounts
-    // that have set their username to "test". This handles both new and existing accounts.
     const profiles = {};
     chain.forEach(block => {
         block.transactions.forEach(tx => {
-            // Track the latest username for each user
-            if (tx.type === 'PROFILE_UPDATE' && tx.data && tx.data.username) {
-                if (!profiles[tx.sender]) profiles[tx.sender] = {};
-                profiles[tx.sender].username = tx.data.username;
+            if (!profiles[tx.sender]) profiles[tx.sender] = { username: `Node_${tx.sender.substring(0,6)}`, avatarHash: '', joined: tx.timestamp, tags: [] };
+            if (tx.receiver && tx.receiver !== '0x00' && !profiles[tx.receiver]) {
+                profiles[tx.receiver] = { username: `Node_${tx.receiver.substring(0,6)}`, avatarHash: '', joined: tx.timestamp, tags: [] };
+            }
+            if (tx.type === 'PROFILE_UPDATE') {
+                // This robust check correctly handles username changes, including setting it to an empty string.
+                if (tx.data.username !== undefined) profiles[tx.sender].username = tx.data.username;
+                if (tx.data.avatarHash) profiles[tx.sender].avatarHash = tx.data.avatarHash;
+                if (tx.data.tags) profiles[tx.sender].tags = tx.data.tags;
             }
         });
     });
 
+    lastAggregatedChainLength = chain.length;
+    aggregatedDataCache = { profiles };
+    return aggregatedDataCache;
+}
+
+function getDeletedUsers(chain) {
+    const deletedUsers = new Set();
+    const adminAddress = blockchainService.getAdminAddress(chain);
+    const { profiles } = _getAggregatedProfileData(chain);
+
+    // Rule: Automatically delete any user whose current name is 'test'.
     for (const address in profiles) {
-        if (profiles[address].username && profiles[address].username.toLowerCase() === 'test') {
+        if (profiles[address].username && profiles[address].username.trim().toLowerCase() === 'test') {
             deletedUsers.add(address);
         }
     }
@@ -46,37 +65,17 @@ function getDeletedUsers(chain) {
 class ProfileService {
     getProfileDirectory() {
         const chain = blockchainService.getChain();
-        if (profileDirectoryCache && chain.length === lastDirectoryCacheChainLength) {
-            return profileDirectoryCache;
-        }
         const deletedUsers = getDeletedUsers(chain);
+        const { profiles: allProfiles } = _getAggregatedProfileData(chain);
 
-        const profiles = {};
-        lastDirectoryCacheChainLength = chain.length;
-
-        chain.forEach(block => {
-            block.transactions.forEach(tx => {
-                // Ensure sender profile exists
-                if (!profiles[tx.sender]) profiles[tx.sender] = { username: `Node_${tx.sender.substring(0,6)}`, avatarHash: '', joined: tx.timestamp, tags: [] };
-                // Ensure receiver profile exists if applicable
-                if (tx.receiver && tx.receiver !== '0x00' && !profiles[tx.receiver]) {
-                    profiles[tx.receiver] = { username: `Node_${tx.receiver.substring(0,6)}`, avatarHash: '', joined: tx.timestamp, tags: [] };
-                }
-                // Update profile with data from transaction
-                if (tx.type === 'PROFILE_UPDATE') {
-                    if (tx.data.username) profiles[tx.sender].username = tx.data.username;
-                    if (tx.data.avatarHash) profiles[tx.sender].avatarHash = tx.data.avatarHash;
-                    if (tx.data.tags) profiles[tx.sender].tags = tx.data.tags;
-                }
-            });
-        });
-
-        for (const deletedUser of deletedUsers) {
-            delete profiles[deletedUser];
+        // Filter out the deleted users from the master list.
+        const liveProfiles = {};
+        for (const address in allProfiles) {
+            if (!deletedUsers.has(address)) {
+                liveProfiles[address] = allProfiles[address];
+            }
         }
-
-        profileDirectoryCache = profiles;
-        return profiles;
+        return liveProfiles;
     }
 
     getSocialGraph() {
