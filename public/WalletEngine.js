@@ -51,6 +51,32 @@ window.WalletEngine = {
         }
     },
 
+    async promptAdminDeleteProfile() {
+        if (!window.CoreEngine.userKeys.publicKey) return alert("Must be logged in.");
+        if (!window.currentUserIsAdmin) return alert("Only the admin can delete profiles.");
+        const target = window.viewingUserPublicKey;
+
+        if (!target) return alert("No profile selected to delete.");
+        if (target === window.CoreEngine.userKeys.publicKey) return alert("You cannot delete your own admin profile.");
+        if (!confirm(`ARE YOU ABSOLUTELY SURE?\n\nThis will delete the profile for:\n${target}\n\nThis action is permanent and cannot be undone.`)) return;
+
+        try {
+            console.log(`[UI] Admin Delete Profile requested for target: ${target}`);
+            await window.CoreEngine.sendSignedTransaction('ADMIN_DELETE_USER', target, {});
+            alert(`✅ Successfully deleted Node_${target.substring(0,6)}! Refreshing...`);
+
+            if (typeof window.fetchUserProfile === 'function') {
+                window.fetchUserProfile(target, false);
+            }
+            if (typeof window.loadMainGlobalFeed === 'function') {
+                window.loadMainGlobalFeed();
+            }
+        } catch(err) {
+            console.error(`[UI] Admin Delete Profile failed:`, err);
+            alert("❌ Admin Delete Profile failed: " + err.message);
+        }
+    },
+
     async executeAdminMint() {
         if (!window.CoreEngine.userKeys.publicKey) return alert("Must be logged in.");
         const targetInput = document.getElementById('input-mint-recipient');

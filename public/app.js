@@ -1478,13 +1478,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                 else adminPanel.classList.add('hidden');
             }
 
-            myCustomTheme = profile.customCss || '';
-            
-            // Immediately apply personal theme if browsing global views
-            if (currentView !== 'profile' || viewingUserPublicKey === window.CoreEngine.userKeys.publicKey || !viewingUserPublicKey) {
-                const dynamicStyle = document.getElementById('ui-dynamic-user-theme');
-                if (dynamicStyle) dynamicStyle.innerHTML = myCustomTheme;
-            }
+                window.currentUserIsAdmin = !!profile.isAdmin;
 
             const composerAvatar = document.getElementById('composer-avatar');
             if (composerAvatar) {
@@ -1551,6 +1545,15 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
         const messageBtn = document.getElementById('btn-profile-message');
         if (messageBtn) {
             messageBtn.style.display = viewingUserPublicKey === window.CoreEngine.userKeys.publicKey ? 'none' : 'block';
+        }
+
+        const deleteBtn = document.getElementById('btn-admin-delete-profile');
+        if (deleteBtn) {
+            if (window.currentUserIsAdmin && viewingUserPublicKey && viewingUserPublicKey !== window.CoreEngine.userKeys.publicKey) {
+                deleteBtn.style.display = 'block';
+            } else {
+                deleteBtn.style.display = 'none';
+            }
         }
 
         const followBtn = document.getElementById('btn-profile-follow');

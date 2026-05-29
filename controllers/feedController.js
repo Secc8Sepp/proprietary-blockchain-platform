@@ -13,7 +13,8 @@ class FeedController {
 
     submitInteraction(req, res) {
         try {
-            const { sender, receiver, type, data, timestamp, signature } = req.body;
+            let { sender, receiver, type, data, timestamp, signature } = req.body;
+            type = (type || '').toString().trim().toUpperCase();
             console.log('[FeedController] submitInteraction payload:', { sender, receiver, type, data, timestamp, signature });
             // Whitelist all market and media transaction types
             const validTypes = ['SONG_UPLOAD', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'STORY_POST', 'TEXT_POST', 'LIKE_IMAGE', 'LIKE_POST', 'REPLY_POST', 'DELETE_POST', 'STREAM_COMPLETED', 'BUY_SONG_SHARE', 'TRANSFER_COIN', 'SHOUTBOX_POST', 'CREATE_COMMISSION', 'FULFILL_COMMISSION', 'CREATE_BOUNTY', 'SUBMIT_BOUNTY', 'AWARD_BOUNTY', 'LIST_ITEM', 'BUY_ITEM', 'BRIDGE_WITHDRAW', 'BRIDGE_DEPOSIT', 'ADMIN_MINT', 'ADMIN_DELETE_USER', 'REQUEST_SONG_SHARE', 'ACCEPT_SHARE_REQUEST', 'DECLINE_SHARE_REQUEST', 'VOTE_HOT_OR_NOT', 'SUBMIT_HOT_OR_NOT', 'PURCHASE_ZINE_RIGHTS', 'EDIT_POST_METADATA', 'EDIT_SONG_METADATA', 'REPOST_POST', 'STEM_SPLIT'];

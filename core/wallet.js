@@ -40,9 +40,10 @@ class Wallet {
 
     static verifySignature(publicKeyHex, dataString, signature) {
         try {
+            const normalizedKey = publicKeyHex.trim().replace(/^0x/i, '').toLowerCase();
             // Reconstruct the Public Key object directly from the sender's address
             const publicKey = crypto.createPublicKey({
-                key: Buffer.from(publicKeyHex, 'hex'),
+                key: Buffer.from(normalizedKey, 'hex'),
                 format: 'der',
                 type: 'spki'
             });

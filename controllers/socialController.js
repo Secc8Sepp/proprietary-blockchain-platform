@@ -17,10 +17,11 @@ class SocialController {
 
     handleAction(req, res) {
         try {
-            const { sender, receiver, type, data, timestamp, signature } = req.body;
+            let { sender, receiver, type, data, timestamp, signature } = req.body;
+            type = (type || '').toString().trim().toUpperCase();
  
             // For definitive debugging, log the exact action type received by the server.
-            console.log(`[SocialController] Handling ${type} from ${sender.substring(0,8)}... to ${(receiver || '0x00').substring(0,8)}...`);
+            console.log(`[SocialController] Handling ${type} from ${sender ? sender.substring(0,8) : 'unknown'}... to ${(receiver || '0x00').substring(0,8)}...`);
  
             // Whitelist actions that are explicitly for identity and social graph management.
             // This provides a security layer and ensures this controller only handles its designated tasks.

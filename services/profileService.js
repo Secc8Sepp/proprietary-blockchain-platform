@@ -47,7 +47,8 @@ function getDeletedUsers(chain) {
     // Only process explicit ADMIN_DELETE_USER transactions from the admin
     chain.forEach(block => {
         block.transactions.forEach(tx => {
-            if (tx.type === 'ADMIN_DELETE_USER' && tx.sender === adminAddress) {
+            const sender = tx.sender ? tx.sender.toString().trim().replace(/^0x/i, '').toLowerCase() : null;
+            if (tx.type === 'ADMIN_DELETE_USER' && sender === adminAddress) {
                 deletedUsers.add(tx.receiver);
                 console.log(`[DELETE] User ${tx.receiver.substring(0,8)}... marked as deleted by admin.`);
             }

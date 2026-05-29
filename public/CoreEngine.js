@@ -122,6 +122,7 @@ window.CoreEngine = {
     },
 
     async sendSignedTransaction(type, receiver, data) {
+        type = (type || '').toString().trim().toUpperCase();
         const msgData = { sender: this.userKeys.publicKey, receiver: receiver || '0x00', type, data, timestamp: Date.now() };
         const sig = await window.generateClientSignature(this.userKeys.privateKey, msgData);
         const txFields = { ...msgData, signature: sig };

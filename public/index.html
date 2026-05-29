@@ -202,7 +202,8 @@
                             <label id="btn-edit-avatar" class="hidden" style="position:absolute; bottom:0; left:0; width:100%; text-align:center; background:rgba(0,0,0,0.7); cursor:pointer; color:#fff; font-size:11px; padding:4px 0;">📷 Change<input type="file" id="input-edit-avatar" hidden accept="image/*"></label>
                         </div>
                         <div class="profile-actions">
-                        <button class="secondary" id="btn-profile-message" style="display: none;" onclick="sendDM(viewingUserPublicKey)">💬 Message</button>
+                            <button class="secondary" id="btn-profile-message" style="display: none;" onclick="sendDM(viewingUserPublicKey)">💬 Message</button>
+                            <button class="secondary" id="btn-admin-delete-profile" style="display: none;" onclick="window.WalletEngine.promptAdminDeleteProfile()">🗑️ Delete Profile</button>
                             <button class="secondary" id="btn-toggle-edit" onclick="toggleInlineEdit()">⚙️ Edit Profile</button>
                             <button id="btn-profile-follow">Lock In Crew</button>
                         </div>

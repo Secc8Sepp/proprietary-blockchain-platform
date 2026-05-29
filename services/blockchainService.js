@@ -5,12 +5,17 @@ const EventEmitter = require('events');
 
 const Wallet = require('../core/wallet');
 
+function normalizeAddress(address) {
+    if (!address || typeof address !== 'string') return null;
+    return address.trim().replace(/^0x/i, '').toLowerCase();
+}
+
 // ==========================================
 // ADMIN CONFIGURATION
 // ==========================================
 // Set your admin public key here. If configured, this address will always be recognized as the network admin.
 // If not configured (null), the first user to perform a transaction becomes admin.
-const CONFIGURED_ADMIN_ADDRESS = '3056301006072a8648ce3d020106052b8104000a034200049b412e497874ec237606ac926aaf1e70654e3155fa5d6421b1eb8f018c0c68c6ec17b5c94a9bd7ab6fc34c38760e9f02686dafe2163712416c51cf5ef6826d43';
+const CONFIGURED_ADMIN_ADDRESS = normalizeAddress('3056301006072a8648ce3d020106052b8104000a034200049b412e497874ec237606ac926aaf1e70654e3155fa5d6421b1eb8f018c0c68c6ec17b5c94a9bd7ab6fc34c38760e9f02686dafe2163712416c51cf5ef6826d43');
 
 const LEDGER_DIR = path.join(__dirname, '..', 'ledger-data');
 if (!fs.existsSync(LEDGER_DIR)) {
@@ -104,9 +109,10 @@ class BlockchainService extends EventEmitter {
     verifySignature(publicKeyStr, data, signatureHex) {
         try {
             const dataStr = JSON.stringify(data);
+            const normalizedKey = normalizeAddress(publicKeyStr);
 
             // Use the correct verification from core/wallet.js which uses ECDSA
-            return Wallet.verifySignature(publicKeyStr, dataStr, signatureHex);
+            return Wallet.verifySignature(normalizedKey, dataStr, signatureHex);
         } catch (error) {
             console.error("Signature verification failed:", error);
             return false;
@@ -329,7 +335,8 @@ class BlockchainService extends EventEmitter {
     }
 
     addTransaction(txData) {
-        const { sender, receiver, type, data, timestamp, signature } = txData;
+        const { sender, receiver, type: rawType, data, timestamp, signature } = txData;
+        const type = (rawType || '').toString().trim().toUpperCase();
         const chain = this.getChain();
 
         if (!this.verifySignature(sender, { sender, receiver, type, data, timestamp }, signature)) {
@@ -344,14 +351,15 @@ class BlockchainService extends EventEmitter {
         const adminActions = ['ADMIN_MINT', 'ADMIN_DELETE_USER'];
         if (adminActions.includes(type)) {
             const adminAddress = this.getAdminAddress(chain);
-            console.log(`[ADMIN ACTION] Type: ${type}, Sender: ${sender.substring(0,8)}..., AdminAddr: ${adminAddress ? adminAddress.substring(0,8) + '...' : 'NONE'}`);
+            const normalizedSender = normalizeAddress(sender);
+            console.log(`[ADMIN ACTION] Type: ${type}, Sender: ${normalizedSender ? normalizedSender.substring(0,8) + '...' : sender}, AdminAddr: ${adminAddress ? adminAddress.substring(0,8) + '...' : 'NONE'}`);
             if (!adminAddress) {
-                console.log(`[BOOTSTRAP] No admin found. Sender ${sender.substring(0,8)}... is becoming the network admin.`);
-            } else if (sender !== adminAddress) {
-                console.error(`[AUTH FAILED] ${sender.substring(0,8)}... attempted ${type} but admin is ${adminAddress.substring(0,8)}...`);
+                console.log(`[BOOTSTRAP] No admin found. Sender ${normalizedSender ? normalizedSender.substring(0,8) + '...' : sender} is becoming the network admin.`);
+            } else if (normalizedSender !== adminAddress) {
+                console.error(`[AUTH FAILED] ${normalizedSender ? normalizedSender.substring(0,8) + '...' : sender} attempted ${type} but admin is ${adminAddress.substring(0,8)}...`);
                 throw new Error(`Unauthorized: Only the network admin (${adminAddress.substring(0,8)}...) can perform ${type}.`);
             } else {
-                console.log(`[AUTH SUCCESS] ${sender.substring(0,8)}... authorized for ${type}.`);
+                console.log(`[AUTH SUCCESS] ${normalizedSender.substring(0,8)}... authorized for ${type}.`);
             }
         }
         
