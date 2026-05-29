@@ -1,6 +1,16 @@
 const blockchainService = require('../services/blockchainService');
 const profileService = require('../services/profileService');
 
+// For performance and clarity, define the allowed actions in a Set.
+const ALLOWED_SOCIAL_ACTIONS = new Set([
+    'FOLLOW_USER',
+    'UNFOLLOW_USER',
+    'PROFILE_UPDATE',
+    'THEME_UPDATE',
+    'SET_TOP_8',
+    'ADMIN_DELETE_USER'
+]);
+
 class SocialController {
     getProfileData(req, res) {
         try {
@@ -18,8 +28,12 @@ class SocialController {
     handleAction(req, res) {
         try {
             const { sender, receiver, type, data, timestamp, signature } = req.body;
-            // Whitelist all social and administrative actions for this endpoint.
-            if (!['FOLLOW_USER', 'UNFOLLOW_USER', 'PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'ADMIN_DELETE_USER'].includes(type)) {
+
+            // For definitive debugging, log the exact action type received by the server.
+            console.log(`[SocialController] Handling action of type: "${type}"`);
+
+            // Refactored validation for improved robustness.
+            if (!ALLOWED_SOCIAL_ACTIONS.has(type)) {
                 return res.status(400).json({ error: "Invalid social action block." });
             }
             const activeBlock = blockchainService.addTransaction({ sender, receiver, type, data, timestamp, signature });
