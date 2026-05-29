@@ -15,7 +15,6 @@ let myCustomTheme = '';
 let myFollowing = [];
 let feedFilterMode = 'global';
 let currentViewedProfile = null;
-let swRegistration = null;
 let localDB = null;
 let editedTop8 = [];
 let pendingCrewRequests = [];
@@ -23,6 +22,7 @@ window.activeWaveform = null;
 window.waveformInstances = {};
 window.userNotifications = [];
 window.unreadNotificationCount = 0;
+window.swRegistration = null;
 
 document.addEventListener('DOMContentLoaded', () => { 
     window.networkProfiles = {}; window.zineArticles = []; window.hotOrNotData = [];
@@ -33,12 +33,6 @@ document.addEventListener('DOMContentLoaded', () => {
     window.LayoutEngine.init();
     window.StemSplitterEngine.init(socket);
     initLocalLedgerNode();
-    
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js')
-            .then(reg => { swRegistration = reg; console.log('[PWA] Service Worker registered'); })
-            .catch(err => console.error('[PWA] SW Registration failed', err));
-    }
 });
 
 function initializeApplicationListeners() {
@@ -234,7 +228,7 @@ function handleKeyFileUpload(event) {
 // ==========================================
 
 async function subscribeToPush(publicKey) {
-    if (!swRegistration) return;
+    if (!window.swRegistration) return;
     try {
         const res = await fetch('/api/push/vapidPublicKey');
         const { publicKey: vapidPublicKey } = await res.json();
@@ -242,13 +236,13 @@ async function subscribeToPush(publicKey) {
 
         let subscription;
         try {
-            subscription = await swRegistration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: convertedVapidKey });
+            subscription = await window.swRegistration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: convertedVapidKey });
         } catch (err) {
             if (err.name === 'InvalidStateError') {
                 console.log('[PWA] VAPID key changed (Server restarted). Unsubscribing old push token...');
-                const oldSub = await swRegistration.pushManager.getSubscription();
+                const oldSub = await window.swRegistration.pushManager.getSubscription();
                 if (oldSub) await oldSub.unsubscribe();
-                subscription = await swRegistration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: convertedVapidKey });
+                subscription = await window.swRegistration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: convertedVapidKey });
             } else throw err;
         }
         

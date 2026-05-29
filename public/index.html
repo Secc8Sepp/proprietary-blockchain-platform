@@ -572,5 +572,15 @@
             <span style="font-size: 20px;">👤</span><br>Profile
         </button>
     </div>
+
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => { window.swRegistration = reg; console.log('[PWA] Service Worker registered successfully.'); })
+            .catch(err => console.error('[PWA] Service Worker registration failed:', err));
+        });
+      }
+    </script>
 </body>
 </html>
