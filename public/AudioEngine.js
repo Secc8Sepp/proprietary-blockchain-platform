@@ -103,7 +103,7 @@ window.AudioEngine = {
         } catch(err) { console.error("Mining rejected:", err); }
     },
 
-    playTrack(title, audioHash, artistPublicKey, artistName, isPreview = false) {
+    playTrack(title, audioHash, artistPublicKey, artistName, coverHash, isPreview = false) {
         this.stopPlaybackTrackingLoop(true);
         this.activeTrackHash = audioHash; 
         this.activeTrackArtist = artistPublicKey;
@@ -126,19 +126,43 @@ window.AudioEngine = {
         }
 
         const artEl = document.getElementById('global-track-art');
-        if (artEl) artEl.src = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(artistPublicKey)}&backgroundColor=1f2833`;
+        const artworkUrl = coverHash ? `/tracks/${coverHash}` : getAvatarUrl(artistPublicKey);
+        if (artEl) artEl.src = artworkUrl;
         
         if(document.getElementById('input-market-hash')) document.getElementById('input-market-hash').value = audioHash;
         if(document.getElementById('input-market-seller')) document.getElementById('input-market-seller').value = artistPublicKey;
+
+        // NEW: Media Session API Integration for background playback control
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: title,
+                artist: artistName,
+                album: 'VOD Social',
+                artwork: [
+                    { src: artworkUrl, sizes: '96x96', type: 'image/png' },
+                    { src: artworkUrl, sizes: '128x128', type: 'image/png' },
+                    { src: artworkUrl, sizes: '192x192', type: 'image/png' },
+                    { src: artworkUrl, sizes: '256x256', type: 'image/png' },
+                    { src: artworkUrl, sizes: '384x384', type: 'image/png' },
+                    { src: artworkUrl, sizes: '512x512', type: 'image/png' },
+                ]
+            });
+
+            navigator.mediaSession.setActionHandler('play', () => player.play());
+            navigator.mediaSession.setActionHandler('pause', () => player.pause());
+            navigator.mediaSession.setActionHandler('nexttrack', () => this.playNextTrackAdvanced());
+            // We don't have a 'previous track' function yet, so we won't set it.
+            navigator.mediaSession.setActionHandler('previoustrack', null);
+        }
     },
 
     playNextTrackAdvanced() {
         let pool = [];
         if (this.currentPlaylistMode === 'profile' && window.currentViewedProfile && window.currentViewedProfile.uploadedTracks) {
-            pool = window.currentViewedProfile.uploadedTracks.map(t => ({ title: t.title, artist: t.artist, offPlatformCollaborator: t.offPlatformCollaborator, audioHash: t.hash, sender: window.currentViewedProfile.publicKey, timestamp: t.timestamp }));
+            pool = window.currentViewedProfile.uploadedTracks.map(t => ({ title: t.title, artist: t.artist, offPlatformCollaborator: t.offPlatformCollaborator, audioHash: t.hash, coverHash: t.coverHash, sender: window.currentViewedProfile.publicKey, timestamp: t.timestamp }));
         }
         if (pool.length === 0 && window.feedTracks) {
-            pool = window.feedTracks.map(t => ({ title: t.data.trackTitle, artist: t.data.artist, offPlatformCollaborator: t.data.offPlatformCollaborator, audioHash: t.data.audioHash, sender: t.sender, timestamp: t.timestamp }));
+            pool = window.feedTracks.map(t => ({ title: t.data.trackTitle, artist: t.data.artist, offPlatformCollaborator: t.data.offPlatformCollaborator, audioHash: t.data.audioHash, coverHash: t.data.coverHash, sender: t.sender, timestamp: t.timestamp }));
         }
         let unplayedTracks = pool.filter(t => !this.playedTracks.has(t.audioHash));
         if (unplayedTracks.length === 0) { this.playedTracks.clear(); unplayedTracks = [...pool]; }
@@ -149,7 +173,7 @@ window.AudioEngine = {
         if (nextTrack) {
             let artistName = nextTrack.artist || window.resolveProfile(nextTrack.sender).username;
             if (nextTrack.offPlatformCollaborator) artistName += ` ft. ${nextTrack.offPlatformCollaborator}`;
-            this.playTrack(nextTrack.title, nextTrack.audioHash, nextTrack.sender, artistName);
+            this.playTrack(nextTrack.title, nextTrack.audioHash, nextTrack.sender, artistName, nextTrack.coverHash);
         }
     }
 };

@@ -9,12 +9,26 @@ let profileDirectoryCache = null;
 let lastDirectoryCacheChainLength = 0;
 // --- END CACHING ---
 
+function getDeletedUsers(chain) {
+    const deletedUsers = new Set();
+    const adminAddress = blockchainService.getAdminAddress(chain);
+    chain.forEach(block => {
+        block.transactions.forEach(tx => {
+            if (tx.type === 'ADMIN_DELETE_USER' && tx.sender === adminAddress) {
+                deletedUsers.add(tx.receiver);
+            }
+        });
+    });
+    return deletedUsers;
+}
+
 class ProfileService {
     getProfileDirectory() {
         const chain = blockchainService.getChain();
         if (profileDirectoryCache && chain.length === lastDirectoryCacheChainLength) {
             return profileDirectoryCache;
         }
+        const deletedUsers = getDeletedUsers(chain);
 
         const profiles = {};
         lastDirectoryCacheChainLength = chain.length;
@@ -35,17 +49,25 @@ class ProfileService {
                 }
             });
         });
+
+        for (const deletedUser of deletedUsers) {
+            delete profiles[deletedUser];
+        }
+
         profileDirectoryCache = profiles;
         return profiles;
     }
 
     getSocialGraph() {
         const chain = blockchainService.getChain();
+        const deletedUsers = getDeletedUsers(chain);
         const followers = {};
         const following = {};
 
         for (const block of chain) {
             for (const tx of block.transactions) {
+                if (deletedUsers.has(tx.sender)) continue;
+
                 if (tx.type === 'FOLLOW_USER') {
                     const actor = tx.sender;
                     const target = tx.receiver;
@@ -74,6 +96,23 @@ class ProfileService {
 
     getProfile(publicKey) {
         const chain = blockchainService.getChain();
+        const deletedUsers = getDeletedUsers(chain);
+
+        if (deletedUsers.has(publicKey)) {
+            return {
+                publicKey: publicKey,
+                username: "[Deleted User]",
+                isDeleted: true,
+                bio: "This user has been removed from the network.",
+                avatarHash: "",
+                bannerHash: "",
+                balance: 0,
+                followerCount: 0,
+                followingCount: 0,
+                posts: [],
+                transactions: [],
+            };
+        }
 
         // Invalidate entire profile cache if chain has grown
         if (chain.length !== lastProfileCacheChainLength) {
@@ -115,6 +154,8 @@ class ProfileService {
         
         for (const block of chain) {
             for (const tx of block.transactions) {
+                if (deletedUsers.has(tx.sender)) continue;
+
                 if (tx.type === 'STREAM_COMPLETED') {
                     playCounts[tx.data.audioHash] = (playCounts[tx.data.audioHash] || 0) + 1;
                 }
@@ -130,6 +171,8 @@ class ProfileService {
         // Trace the entire ledger chronologically to compute current state variables
         for (const block of chain) {
             for (const tx of block.transactions) {
+                // Ignore transactions sent by a deleted user, but still process transactions *sent to* them (e.g. for balance calculations of others)
+                const isSenderDeleted = deletedUsers.has(tx.sender);
                 
                 // Populate Personal Transaction History
                 if (tx.sender === publicKey || tx.receiver === publicKey) {
@@ -148,7 +191,7 @@ class ProfileService {
                 }
 
                 // Track Commissions for Escrow Dashboard
-                if (tx.type === 'CREATE_COMMISSION') {
+                if (tx.type === 'CREATE_COMMISSION' && !isSenderDeleted) {
                     allCommissions[block.hash] = {
                         id: block.hash,
                         buyer: tx.sender,
@@ -159,17 +202,17 @@ class ProfileService {
                         fulfilled: false
                     };
                 }
-                if (tx.type === 'FULFILL_COMMISSION') {
+                if (tx.type === 'FULFILL_COMMISSION' && !isSenderDeleted) {
                     if (allCommissions[tx.data.commissionId] && tx.sender === allCommissions[tx.data.commissionId].creator) {
                         allCommissions[tx.data.commissionId].fulfilled = true;
                     }
                 }
 
-                if (tx.type === 'BUY_ITEM' && tx.sender === publicKey) {
+                if (tx.type === 'BUY_ITEM' && tx.sender === publicKey && !isSenderDeleted) {
                     const item = itemsList.find(i => i.id === tx.data.itemId);
                     if (item) profile.ownedItems.push(item);
                 }
-                if (tx.type === 'SONG_UPLOAD') {
+                if (tx.type === 'SONG_UPLOAD' && !isSenderDeleted) {
                     const assetHash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
                     if (!assetHash) continue;
                     shareDistribution[assetHash] = shareDistribution[assetHash] || {};
@@ -192,7 +235,7 @@ class ProfileService {
                         profile._trackDetails[assetHash] = { title: tx.data.caption || tx.data.filename || 'Asset', creator: tx.sender, coverHash: tx.data.coverHash || null };
                     }
                 }
-                if (tx.type === 'EDIT_SONG_METADATA') {
+                if (tx.type === 'EDIT_SONG_METADATA' && !isSenderDeleted) {
                     if (profile._trackDetails[tx.data.audioHash] && profile._trackDetails[tx.data.audioHash].creator === tx.sender) {
                         if (tx.data.title) profile._trackDetails[tx.data.audioHash].title = tx.data.title;
                         if (tx.data.artist) profile._trackDetails[tx.data.audioHash].artist = tx.data.artist;
@@ -200,7 +243,7 @@ class ProfileService {
                         if (tx.data.metadata !== undefined) profile._trackDetails[tx.data.audioHash].metadata = tx.data.metadata;
                     }
                 }
-                if (tx.type === 'BUY_SONG_SHARE') {
+                if (tx.type === 'BUY_SONG_SHARE' && !isSenderDeleted) {
                     const hash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
                     const buyer = tx.sender;
                     const seller = tx.receiver;
@@ -212,7 +255,7 @@ class ProfileService {
                     }
                 }
                 
-                if (tx.type === 'REQUEST_SONG_SHARE') {
+                if (tx.type === 'REQUEST_SONG_SHARE' && !isSenderDeleted) {
                     const assetHash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
                     allShareRequests[block.hash] = {
                         id: block.hash,
@@ -224,15 +267,15 @@ class ProfileService {
                         status: 'pending'
                     };
                 }
-                if (tx.type === 'ACCEPT_SHARE_REQUEST' && allShareRequests[tx.data.requestId] && allShareRequests[tx.data.requestId].seller === tx.sender) {
+                if (tx.type === 'ACCEPT_SHARE_REQUEST' && !isSenderDeleted && allShareRequests[tx.data.requestId] && allShareRequests[tx.data.requestId].seller === tx.sender) {
                     allShareRequests[tx.data.requestId].status = 'accepted';
                 }
-                if (tx.type === 'DECLINE_SHARE_REQUEST' && allShareRequests[tx.data.requestId] && allShareRequests[tx.data.requestId].seller === tx.sender) {
+                if (tx.type === 'DECLINE_SHARE_REQUEST' && !isSenderDeleted && allShareRequests[tx.data.requestId] && allShareRequests[tx.data.requestId].seller === tx.sender) {
                     allShareRequests[tx.data.requestId].status = 'declined';
                 }
 
                 // 1. Process mutations belonging to this specific user profile
-                if (tx.sender === publicKey) {
+                if (tx.sender === publicKey && !isSenderDeleted) {
                     if (tx.type === 'PROFILE_UPDATE') {
                         profile.username = tx.data.username || profile.username;
                         profile.bio = tx.data.bio || profile.bio;
@@ -286,7 +329,7 @@ class ProfileService {
                 }
 
                 // 2. Collect Shoutbox messages sent TO this specific profile wall
-                if (tx.type === 'SHOUTBOX_POST' && tx.receiver === publicKey) {
+                if (tx.type === 'SHOUTBOX_POST' && tx.receiver === publicKey && !isSenderDeleted) {
                     profile.shoutbox.push({
                         sender: tx.sender,
                         message: tx.data.message,
@@ -372,6 +415,7 @@ class ProfileService {
         if (feedCache && chain.length === lastFeedCacheChainLength) {
             return feedCache;
         }
+        const deletedUsers = getDeletedUsers(chain);
 
         const feedItems = []; // Recompute if not cached
         lastFeedCacheChainLength = chain.length; // Update cache timestamp
@@ -389,6 +433,7 @@ class ProfileService {
         // Pass 1: Gather metric aggregates from the ledger
         for (const block of chain) {
             for (const tx of block.transactions) {
+                if (deletedUsers.has(tx.sender)) continue;
                 if (['SONG_UPLOAD', 'TEXT_POST', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'STORY_POST', 'REPOST_POST'].includes(tx.type)) {
                     postOwners[block.hash] = tx.sender;
                     if (tx.data.metadata) {
@@ -481,6 +526,7 @@ class ProfileService {
             if (deletedPosts.has(block.hash)) continue; // Hide deleted blocks from the feed
             
             for (const tx of block.transactions) {
+                if (deletedUsers.has(tx.sender)) continue;
                 if (['SONG_UPLOAD', 'TEXT_POST', 'PROFILE_UPDATE', 'FOLLOW_USER', 'LIKE_POST', 'LIKE_IMAGE', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'THEME_UPDATE', 'SHOUTBOX_POST', 'SET_TOP_8', 'STREAM_COMPLETED', 'BUY_SONG_SHARE', 'TRANSFER_COIN', 'REQUEST_SONG_SHARE', 'ACCEPT_SHARE_REQUEST', 'STORY_POST', 'PURCHASE_ZINE_RIGHTS', 'REPOST_POST'].includes(tx.type)) {
                     
                     const senderBalance = blockchainService.calculateBalance(tx.sender, chain);
@@ -576,11 +622,13 @@ class ProfileService {
 
     getMarketData() {
         const chain = blockchainService.getChain();
+        const deletedUsers = getDeletedUsers(chain);
         const bounties = {};
         const items = {};
 
         for (const block of chain) {
             for (const tx of block.transactions) {
+                if (deletedUsers.has(tx.sender)) continue;
                 if (tx.type === 'CREATE_BOUNTY') {
                     bounties[block.hash] = {
                         id: block.hash,
@@ -632,12 +680,14 @@ class ProfileService {
 
     getHotOrNotEngine() {
         const chain = blockchainService.getChain();
+        const deletedUsers = getDeletedUsers(chain);
         const submissions = {};
         const votes = {};
         const trackDetails = {};
 
         for (const block of chain) {
             for (const tx of block.transactions) {
+                if (deletedUsers.has(tx.sender)) continue;
                 if (tx.type === 'SONG_UPLOAD') {
                     trackDetails[tx.data.audioHash] = { title: tx.data.trackTitle, artist: tx.data.artist, creator: tx.sender, coverHash: tx.data.coverHash };
                 }

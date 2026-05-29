@@ -316,9 +316,11 @@ function showKeyModal(keys, callback) {
 
     const submitBtn = document.getElementById('form-modal-submit');
     submitBtn.onclick = () => {
-        toggleModal('form-modal');
         if (callback && typeof callback === 'function') {
-            callback();
+            callback(); // The callback is now responsible for closing the modal and handling next steps.
+        } else {
+            // Default behavior if no callback is provided
+            toggleModal('form-modal');
         }
     };
 
@@ -570,7 +572,7 @@ function renderPostContent(item) {
                 // If this is a new track, start it on the global player.
                 if (window.AudioEngine.activeTrackHash !== audioHash) {
                     if (window.AudioEngine && window.AudioEngine.playTrack) {
-                        window.AudioEngine.playTrack(item.data.trackTitle, audioHash, item.sender, displayArtist);
+                        window.AudioEngine.playTrack(item.data.trackTitle, audioHash, item.sender, displayArtist, item.data.coverHash);
                     }
                 } 
                 // If it's the same track but paused, play it.
@@ -676,7 +678,8 @@ function renderPostContent(item) {
 
         }, 500);
 
-        let coverHtml = item.data.coverHash ? `<img src="/tracks/${item.data.coverHash}" style="width: 60px; height: 60px; border-radius: 6px; object-fit: cover;">` : '';
+        const artworkUrl = item.data.coverHash ? `/tracks/${item.data.coverHash}` : getAvatarUrl(item.sender);
+        let coverHtml = `<img src="${artworkUrl}" style="width: 60px; height: 60px; border-radius: 6px; object-fit: cover;">`;
         let sharesHtml = '';
         if (item.shares) {
             sharesHtml = `<div style="font-size: 11px; margin-top: 15px; color: var(--text-muted); border-top: 1px solid rgba(69, 162, 158, 0.2); padding-top: 10px;"><strong>Shareholders:</strong> `;
@@ -831,8 +834,8 @@ function executeGlobalSearch(query) {
         if (t.data.metadata && t.data.metadata.toLowerCase().includes(q)) return true;
         return false;
     });
-    if (track && window.AudioEngine) return window.AudioEngine.playTrack(track.data.trackTitle, track.data.audioHash, track.sender, track.data.artist);
-    
+    if (track && window.AudioEngine) return window.AudioEngine.playTrack(track.data.trackTitle, track.data.audioHash, track.sender, track.data.artist, track.data.coverHash);
+
     const article = zineArticles.find(a => {
         if (a.title && a.title.toLowerCase().includes(q)) return true;
         if (a.body && a.body.toLowerCase().includes(q)) return true;
@@ -1382,7 +1385,7 @@ function playProfileTrack(index) {
     if (track) {
         const select = document.getElementById('playlist-selector');
         if (select) { select.value = 'profile'; window.AudioEngine.changePlaylistContext('profile'); }
-        window.AudioEngine.playTrack(track.title, track.hash, currentViewedProfile.publicKey, artistName);
+        window.AudioEngine.playTrack(track.title, track.hash, currentViewedProfile.publicKey, artistName, track.coverHash);
     }
 }
 
@@ -1454,6 +1457,13 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
     try {
         const response = await fetch(`/api/social/profile?publicKey=${encodeURIComponent(publicKey)}`);
         const profile = await response.json();
+
+        if (profile && profile.isDeleted) {
+            alert("This user account has been deleted from the network.");
+            const feedTab = document.querySelector('.side-nav-item'); // Get the first nav item, which is the feed
+            switchTab('feed', feedTab);
+            return;
+        }
         
         if(profile.publicKey === window.CoreEngine.userKeys.publicKey) {
             const balDisp = document.getElementById('ui-balance-display');

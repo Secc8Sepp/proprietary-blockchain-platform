@@ -49,11 +49,21 @@ window.MeshEngine = {
         });
 
         socket.on('blockchain_update', (payload) => {
+            // Define transactions that add/remove/change visible feed content
+            const feedMutatingTypes = [
+                'SONG_UPLOAD', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'STORY_POST', 'TEXT_POST', 'DELETE_POST', 'REPOST_POST', 'EDIT_POST_METADATA', 'EDIT_SONG_METADATA', 'SHOUTBOX_POST'
+            ];
+
             if(payload && payload.type === 'PROFILE_UPDATE') socket.emit('request_profile_directory');
-            if(window.CoreEngine.userKeys.publicKey) window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, true); 
-            if(window.currentView === 'feed') window.loadMainGlobalFeed();
-            if(window.currentView === 'profile' && window.viewingUserPublicKey) window.fetchUserProfile(window.viewingUserPublicKey, false);
             
+            // Always update my own profile data silently (for balance changes etc.)
+            if(window.CoreEngine.userKeys.publicKey) window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, true); 
+            
+            // Only reload the entire global feed if a relevant transaction occurred
+            if(payload && feedMutatingTypes.includes(payload.type) && window.currentView === 'feed') {
+                window.loadMainGlobalFeed();
+            }
+            if(window.currentView === 'profile' && window.viewingUserPublicKey) window.fetchUserProfile(window.viewingUserPublicKey, false);
             // CROSS-ENGINE COMMUNICATION
             if(window.GlobalTagEngine) window.GlobalTagEngine.syncTags(payload);
         });

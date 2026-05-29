@@ -38,21 +38,44 @@ window.CoreEngine = {
             
             this.userKeys = await res.json(); 
             
-            btn.innerText = "Recording to Ledger...";
-            await this.sendSignedTransaction('PROFILE_UPDATE', this.userKeys.publicKey, { username: username, bio: "Active on the Vibe or Die Network.", avatarHash: avatarHash });
+            // The profile is now created *after* the user confirms they saved their key.
+            const onKeySavedCallback = async () => {
+                const modalSubmitBtn = document.getElementById('form-modal-submit');
+                try {
+                    if (modalSubmitBtn) {
+                        modalSubmitBtn.innerText = 'RECORDING TO LEDGER...';
+                        modalSubmitBtn.disabled = true;
+                    }
+
+                    await this.sendSignedTransaction('PROFILE_UPDATE', this.userKeys.publicKey, { username: username, bio: "Active on the Vibe or Die Network.", avatarHash: avatarHash });
+                    
+                    if (window.toggleModal) window.toggleModal('form-modal');
+                    this.unlockApplication(this.userKeys.publicKey);
+
+                } catch (e) {
+                    alert('Failed to record profile to ledger: ' + e.message);
+                    if (modalSubmitBtn) {
+                        modalSubmitBtn.innerText = 'I Have Saved My Key. Continue →';
+                        modalSubmitBtn.disabled = false;
+                    }
+                }
+            };
 
             if (typeof window.showKeyModal === 'function') {
-                window.showKeyModal(this.userKeys, () => {
-                    this.unlockApplication(this.userKeys.publicKey);
-                });
+                // Reset button before showing modal, in case user closes it by clicking the overlay.
+                btn.innerText = "Mint & Download Identity";
+                btn.disabled = false;
+                window.showKeyModal(this.userKeys, onKeySavedCallback);
             } else {
                 this.promptKeyDownload(this.userKeys);
+                // If modal function isn't present, we must still create the profile and unlock.
+                await this.sendSignedTransaction('PROFILE_UPDATE', this.userKeys.publicKey, { username: username, bio: "Active on the Vibe or Die Network.", avatarHash: avatarHash });
                 this.unlockApplication(this.userKeys.publicKey);
             }
         } catch (err) { 
             console.error(err); alert("Signup Error: " + err.message); 
             const btn = document.getElementById('btn-signup');
-            btn.innerText = "Mint & Download Identity"; btn.disabled = false;
+            if (btn) { btn.innerText = "Mint & Download Identity"; btn.disabled = false; }
         }
     },
 

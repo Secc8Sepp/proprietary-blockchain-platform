@@ -20,6 +20,28 @@ window.WalletEngine = {
         this.promptSendCoins(recipient);
     },
 
+    async executeAdminDelete() {
+        if (!window.CoreEngine.userKeys.publicKey) return alert("Must be logged in.");
+        const targetInput = document.getElementById('input-delete-recipient');
+        const target = targetInput.value.trim();
+
+        if (!target) return alert("Please enter the target public key to delete.");
+        if (target === window.CoreEngine.userKeys.publicKey) return alert("You cannot delete yourself.");
+        if (!confirm(`ARE YOU ABSOLUTELY SURE?\n\nThis will delete the user with public key:\n${target}\n\nThis action is permanent and cannot be undone.`)) return;
+
+        try {
+            // The receiver of an ADMIN_DELETE_USER transaction is the user to be deleted.
+            await window.CoreEngine.sendSignedTransaction('ADMIN_DELETE_USER', target, {});
+            alert(`Successfully submitted deletion transaction for Node_${target.substring(0,6)}! The network will now ignore this user. The UI will update on the next block.`);
+            
+            targetInput.value = '';
+
+            if (typeof window.loadMainGlobalFeed === 'function') {
+                window.loadMainGlobalFeed();
+            }
+        } catch(err) { alert("Admin Delete failed: " + err.message); }
+    },
+
     async executeAdminMint() {
         if (!window.CoreEngine.userKeys.publicKey) return alert("Must be logged in.");
         const targetInput = document.getElementById('input-mint-recipient');

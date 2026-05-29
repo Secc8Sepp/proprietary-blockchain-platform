@@ -369,7 +369,12 @@
                         <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">Mint raw $VOD directly to an investor's wallet after clearing a USD wire transfer.</p>
                         <input id="input-mint-recipient" placeholder="Investor Public Key" style="margin-bottom: 12px;" />
                         <input id="input-mint-amount" type="number" placeholder="Amount to Mint" style="margin-bottom: 12px;" />
-                        <button style="background: var(--danger); color: #fff; width: 100%;" onclick="window.WalletEngine.executeAdminMint()">Mint & Transfer</button>
+                        <button style="background: var(--danger); color: #fff; width: 100%;" onclick="window.WalletEngine.executeAdminMint()">Mint & Transfer</button>                        
+                        
+                        <h4 style="color: var(--danger); margin-top: 20px;">🛑 Admin Delete User</h4>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">Permanently and irrevocably delete a user and all their content from being displayed on the network. This action cannot be undone.</p>
+                        <input id="input-delete-recipient" placeholder="User Public Key to Delete" style="margin-bottom: 12px;" />
+                        <button style="background: var(--danger); color: #fff; width: 100%;" onclick="window.WalletEngine.executeAdminDelete()">Delete User From Ledger</button>
                     </div>
 
                     <h4 style="margin-top: 20px;">🤝 Incoming Stake Requests</h4>
