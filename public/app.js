@@ -26,13 +26,16 @@ window.swRegistration = null;
 document.addEventListener('DOMContentLoaded', () => { 
     // Initialize as null to prevent premature rendering before the first directory is fetched.
     window.networkProfiles = null; window.zineArticles = []; window.hotOrNotData = [];
-    initializeApplicationListeners(); 
+
+    // CRITICAL FIX: Initialize all engines to set up socket listeners BEFORE sending any requests.
     window.MeshEngine.init(socket);
     window.ActionEngine.init(socket);
     window.AudioEngine.init(socket);
     window.NotificationEngine.init(socket);
     window.LayoutEngine.init();
     window.StemSplitterEngine.init(socket);
+    // Now that listeners are ready, we can initialize listeners that send requests.
+    initializeApplicationListeners(); 
     initLocalLedgerNode();
 });
 
@@ -509,6 +512,8 @@ async function loadMainGlobalFeed() {
     }
 
     // Destroy old waveform instances before re-rendering to prevent memory leaks and event listener conflicts.
+    const container = document.getElementById('feed-container');
+    if(!container) return;
     if (window.waveformInstances) {
         for (const hash in window.waveformInstances) {
             if (window.waveformInstances[hash] && typeof window.waveformInstances[hash].destroy === 'function') {
@@ -518,6 +523,7 @@ async function loadMainGlobalFeed() {
     }
     window.waveformInstances = {}; // Reset the container
     try {
+        container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted);">📡 Accessing Ledger...</div>';
         const res = await fetch('/api/feed');
         const responsePayload = await res.json();
         if (!responsePayload || !responsePayload.feed || !responsePayload.profiles) {
@@ -557,9 +563,6 @@ async function loadMainGlobalFeed() {
                 </div>`;
             }).join('');
         }
-        
-        const container = document.getElementById('feed-container');
-        if(!container) return;
         
         const now = Date.now();
         const activeStories = data.filter(item => item.type === 'STORY_POST' && (now - item.timestamp <= 86400000));
@@ -697,7 +700,16 @@ async function loadMainGlobalFeed() {
             `;
             container.appendChild(postEl);
         });
-    } catch (err) { console.error("Feed error:", err); }
+    } catch (err) { 
+        console.error("Feed error:", err);
+        if (container) {
+            container.innerHTML = `<div class="card" style="text-align: center; padding: 40px; color: var(--danger);">
+                <h4>Failed to Load Feed</h4>
+                <p>There was a network error fetching content from the ledger. Please check your connection and try again.</p>
+                <button onclick="window.loadMainGlobalFeed()">Retry</button>
+            </div>`;
+        }
+    }
 }
 
 function renderPostContent(item) {
