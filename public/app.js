@@ -499,9 +499,6 @@ window.showKeyModal = showKeyModal;
 // ==========================================
 
 async function loadMainGlobalFeed() {
-    // Guard against race conditions: Do not attempt to render the feed until the profile directory is loaded.
-    if (!window.networkProfiles || Object.keys(window.networkProfiles).length === 0) {
-        console.warn('[FEED] Profile directory not ready. Deferring feed load.');
     // New Guard: Wait for the MeshEngine to signal that initial data (profiles, servers) is loaded.
     // This prevents rendering with incomplete data, regardless of when this function is called.
     if (window.MeshEngine && typeof window.MeshEngine.onReady === 'function') {
