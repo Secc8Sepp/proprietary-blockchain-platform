@@ -109,11 +109,13 @@ function switchAuthTab(tabName) {
     document.getElementById('auth-view-login').classList.add('hidden');
     document.getElementById('auth-view-advanced').classList.add('hidden');
 
-    document.getElementById('tab-btn-signup').classList.remove('active');
-    document.getElementById('tab-btn-login').classList.remove('active');
+    document.querySelectorAll('.auth-tab-btn').forEach(btn => btn.classList.remove('active'));
 
-    document.getElementById(`auth-view-${tabName}`).classList.remove('hidden');
-    document.getElementById(`tab-btn-${tabName}`).classList.add('active');
+    const view = document.getElementById(`auth-view-${tabName}`);
+    if (view) view.classList.remove('hidden');
+
+    const tab = document.getElementById(`tab-btn-${tabName}`);
+    if (tab) tab.classList.add('active');
 }
 
 function toggleAdvancedLogin() {
@@ -170,7 +172,7 @@ function initializeApplicationListeners() {
         loginTextarea.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault(); // Prevent adding a newline
-                window.CoreEngine.handleLogin();
+                window.CoreEngine.handleKeyLogin();
             }
         });
     }
@@ -343,9 +345,9 @@ function handleKeyFileUpload(event) {
                 if (pkInput) {
                     pkInput.value = fileContent;
                     // Attempt to automatically log in
-                    if (window.CoreEngine && typeof window.CoreEngine.handleLogin === 'function') {
+                    if (window.CoreEngine && typeof window.CoreEngine.handleKeyLogin === 'function') {
                         console.log('Key file loaded. Attempting to log in...');
-                        window.CoreEngine.handleLogin();
+                        window.CoreEngine.handleKeyLogin();
                     } else {
                         alert('Key file loaded. Please click the login button to continue.');
                     }
