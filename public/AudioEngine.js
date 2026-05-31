@@ -29,9 +29,22 @@ window.AudioEngine = {
 
         const trackToPlay = this.currentQueue[this.currentQueueIndex];
         if (trackToPlay) {
-            let artistName = trackToPlay.data.artist || window.resolveProfile(trackToPlay.sender).username;
-            if (trackToPlay.data.offPlatformCollaborator) artistName += ` ft. ${trackToPlay.data.offPlatformCollaborator}`;
-            this.playTrack(trackToPlay.data.trackTitle, trackToPlay.data.audioHash, trackToPlay.sender, artistName, trackToPlay.data.coverHash);
+        // Handle both full feed items (with .data) and simplified track objects (without .data)
+        const isFeedItem = !!trackToPlay.data; 
+        const title = isFeedItem ? trackToPlay.data.trackTitle : trackToPlay.title;
+        const audioHash = isFeedItem ? trackToPlay.data.audioHash : trackToPlay.hash;
+        const sender = isFeedItem ? trackToPlay.sender : (trackToPlay.creator || window.viewingUserPublicKey);
+        let artistName = (isFeedItem ? trackToPlay.data.artist : trackToPlay.artist) || window.resolveProfile(sender).username;
+        const offCollab = isFeedItem ? trackToPlay.data.offPlatformCollaborator : trackToPlay.offPlatformCollaborator;
+        if (offCollab) artistName += ` ft. ${offCollab}`;
+        const coverHash = isFeedItem ? trackToPlay.data.coverHash : trackToPlay.coverHash;
+
+        if (!title || !audioHash || !sender) {
+            console.error("Could not play track from queue, missing critical data:", trackToPlay);
+            return;
+        }
+
+        this.playTrack(title, audioHash, sender, artistName, coverHash);
         }
     },
 

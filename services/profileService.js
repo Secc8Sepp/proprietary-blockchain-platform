@@ -157,6 +157,7 @@ class ProfileService {
             following: [],
             tags: baseProfile.tags || [],
             recommended: [],
+            uploadedTracks: [],
             uploadedImages: [],
             top8: [],
             shoutbox: [],
@@ -395,6 +396,34 @@ class ProfileService {
                     }
                 }
 
+                // 1. Process mutations belonging to this specific user profile
+                if (tx.sender === publicKey && !isSenderDeleted) {
+                    if (tx.type === 'SONG_UPLOAD') {
+                        const artistToUse = tx.data.artist;
+                        const titleToUse = tx.data.trackTitle;
+                        profile.uploadedTracks.push({
+                            title: titleToUse,
+                            artist: artistToUse,
+                            offPlatformCollaborator: tx.data.offPlatformCollaborator,
+                            hash: tx.data.audioHash,
+                            coverHash: tx.data.coverHash || null,
+                            timestamp: tx.timestamp,
+                            playCount: playCounts[tx.data.audioHash] || 0,
+                            metadata: tx.data.metadata || ''
+                        });
+                    }
+                    if (tx.type === 'EDIT_SONG_METADATA') {
+                        const idx = profile.uploadedTracks.findIndex(t => t.hash === tx.data.audioHash);
+                        if (idx !== -1) {
+                            if(tx.data.title) profile.uploadedTracks[idx].title = tx.data.title;
+                            if(tx.data.artist) profile.uploadedTracks[idx].artist = tx.data.artist;
+                            if(tx.data.offPlatformCollaborator !== undefined) profile.uploadedTracks[idx].offPlatformCollaborator = tx.data.offPlatformCollaborator;
+                            if(tx.data.coverHash) profile.uploadedTracks[idx].coverHash = tx.data.coverHash;
+                            if(tx.data.metadata !== undefined) profile.uploadedTracks[idx].metadata = tx.data.metadata;
+                        }
+                    }
+                }
+
                 // 2. Collect Shoutbox messages sent TO this specific profile wall
                 if (tx.type === 'SHOUTBOX_POST' && tx.receiver === publicKey && !isSenderDeleted) {
                     profile.shoutbox.push({
@@ -615,7 +644,7 @@ class ProfileService {
                     }
                 }
                 if (tx.type === 'STREAM_COMPLETED') {
-                    if (playCounts[tx.data.audioHash] !== undefined) playCounts[tx.data.audioHash]++;
+                    playCounts[tx.data.audioHash] = (playCounts[tx.data.audioHash] || 0) + 1;
                 }
                 if (tx.type === 'BUY_SONG_SHARE') {
                     const hash = tx.data.audioHash;

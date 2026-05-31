@@ -136,7 +136,7 @@
                                 <span id="btn-new-dm" style="color: var(--primary); cursor: pointer; font-size: 12px; margin-left: 10px; display: none;" onclick="promptNewDM()" title="New DM">➕ New DM</span>
                                 <span style="color: var(--success); cursor: pointer; font-size: 11px; margin-left: 10px;" onclick="joinActiveVoiceChannel()" title="Join Voice Room">🎙️ Connect Voice</span>
                                 <span style="color: var(--primary); cursor: pointer; font-size: 12px;" onclick="promptCreateChannel()" title="Create Channel">➕ Add Channel</span>
-                                <span class="chat-module-close-btn" onclick="document.querySelector('.container').classList.remove('chat-mode')">✖ Close Fullscreen</span>
+                                <span class="chat-module-close-btn" onclick="closeChatMode()">✖ Close Fullscreen</span>
                             </div>
                             <div class="chat-channels" id="ui-channel-list">
                                 <!-- Populated dynamically via JS -->

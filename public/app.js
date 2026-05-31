@@ -89,6 +89,20 @@ function openMobileSearch() {
     if (query) executeGlobalSearch(query);
 }
 
+function closeChatMode() {
+    if (window.innerWidth <= 768) {
+        document.body.classList.remove('mobile-chat-active');
+    } else {
+        const container = document.querySelector('.container');
+        if (container) {
+            container.classList.remove('chat-mode');
+        }
+    }
+    // When closing chat, switch back to the feed as a sensible default.
+    const feedTab = document.querySelector('.side-nav-item');
+    if (feedTab) switchTab('feed', feedTab);
+}
+
 function initializeApplicationListeners() {
     console.log('[INIT] Wiring up event listeners...');
     loadGoogleMapsScript();
@@ -2765,12 +2779,9 @@ function closeStoryModal() {
 function toggleDMPane() {
     switchServer('@dms');
     resetInboxBadge();
-    const container = document.querySelector('.container');
-    if (container) {
-        container.classList.add('chat-mode');
     if (window.innerWidth <= 768) {
-        // On mobile, the chat module is in the left sidebar. Just open it.
-        toggleLeftSidebar();
+        // On mobile, activate the dedicated fullscreen chat view
+        document.body.classList.add('mobile-chat-active');
     } else {
         // On desktop, enter the dedicated fullscreen chat mode.
         const container = document.querySelector('.container');

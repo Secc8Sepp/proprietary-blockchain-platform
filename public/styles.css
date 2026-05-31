@@ -363,6 +363,23 @@ input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 8px 
         padding: 15px;
     }
 
+    /* Shrink post elements to fit mobile */
+    .post {
+        gap: 10px;
+        padding: 15px 0;
+    }
+    .post-avatar {
+        width: 40px;
+        height: 40px;
+    }
+    .post-name {
+        font-size: 15px;
+    }
+    .post-body, .composer-textarea {
+        font-size: 14px;
+        line-height: 1.5;
+    }
+
     /* Switch multi-column grids to single column on mobile */
     #profile-dashboard-grid,
     #ui-zine-articles,
@@ -375,6 +392,34 @@ input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 8px 
     .composer-actions, .post-header, .post-interactions {
         flex-wrap: wrap;
         gap: 10px;
+    }
+
+    /* Mobile Fullscreen Chat Mode */
+    body.mobile-chat-active .mobile-top-nav,
+    body.mobile-chat-active .container,
+    body.mobile-chat-active #app-footer-banner {
+        display: none !important;
+    }
+
+    body.mobile-chat-active #side-nav-left {
+        display: block !important;
+        transform: translateX(0) !important; /* Override sidebar hiding */
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 10002; /* Above everything */
+        padding: 0;
+    }
+
+    body.mobile-chat-active #side-nav-left > *:not(#card-chat-module) {
+        display: none !important;
+    }
+
+    body.mobile-chat-active #card-chat-module,
+    body.mobile-chat-active .chat-module {
+        height: 100%; border: none; border-radius: 0; background: var(--bg-darker);
     }
 
     /* Make audio player mobile-friendly */

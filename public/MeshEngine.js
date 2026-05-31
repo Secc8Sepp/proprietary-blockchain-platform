@@ -9,6 +9,31 @@ window.MeshEngine = {
     dmHistory: {},
     socketIdToAddress: {},
     onlineNodes: [],
+    _initialRenderComplete: false,
+
+    _tryInitialRender() {
+        // This function will only proceed if both profiles and servers are loaded, and it hasn't run before.
+        if (this._initialRenderComplete || !window.networkProfiles || Object.keys(window.networkProfiles).length === 0 || !this.serversData || this.serversData.length === 0) {
+            return;
+        }
+
+        console.log('[MeshEngine] Profiles and Servers ready. Performing initial render.');
+        this._initialRenderComplete = true;
+
+        // Now we can safely render everything.
+        if (window.loadMainGlobalFeed) window.loadMainGlobalFeed();
+        if (window.fetchUserProfile && window.CoreEngine.userKeys.publicKey) {
+            window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, true);
+        }
+
+        window.renderServerList();
+        if (!this.currentChatServer) {
+            window.switchServer(this.serversData[0].id);
+        }
+
+        if (this.currentChatServer === '@dms') window.renderDMList();
+        if (typeof window.renderNewUsers === 'function') window.renderNewUsers();
+    },
 
     init(socket) {
         this.socket = socket;
@@ -35,26 +60,24 @@ window.MeshEngine = {
         });
 
         socket.on('server_list', (servers) => {
+            // Just store the data and attempt the initial render.
             this.serversData = servers;
-            window.renderServerList();
-            if(servers.length > 0 && !this.currentChatServer) window.switchServer(servers[0].id);
+            this._tryInitialRender();
         });
 
         socket.on('profile_directory', (dir) => {
             window.networkProfiles = dir;
-
-            // Now that we have the profiles, we can safely render everything.
-            if (window.loadMainGlobalFeed) window.loadMainGlobalFeed();
-            if (window.fetchUserProfile && window.CoreEngine.userKeys.publicKey) {
-                window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, true); 
-            }
-
-            window.renderServerList();
-            if(this.currentChatServer === '@dms') window.renderDMList();
-            if(typeof window.renderNewUsers === 'function') window.renderNewUsers();
+            this._tryInitialRender();
         });
 
         socket.on('blockchain_update', (payload) => {
+            // Guard: Do not process block updates until the initial application state is rendered.
+            // This prevents a race condition where the UI tries to render before profile data is ready.
+            if (!this._initialRenderComplete) {
+                console.warn('[MeshEngine] Received blockchain_update before initial render. Deferring.');
+                return;
+            }
+
             // Define transactions that add/remove/change visible feed content
             const feedMutatingTypes = [
                 'SONG_UPLOAD', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'STORY_POST', 'TEXT_POST', 'DELETE_POST', 'REPOST_POST', 'EDIT_POST_METADATA', 'EDIT_SONG_METADATA', 'SHOUTBOX_POST', 'ADMIN_DELETE_USER'
