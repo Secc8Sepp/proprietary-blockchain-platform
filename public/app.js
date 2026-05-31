@@ -297,19 +297,7 @@ function initializeApplicationListeners() {
     }
 
     // Request initial data
-    socket.emit('get_servers');
     socket.emit('get_zine_data');
-    socket.on('stake_request_response', (data) => {
-        try {
-            if (!window.CoreEngine || !window.CoreEngine.userKeys) return;
-            if (data.to === window.CoreEngine.userKeys.publicKey) {
-                const title = data.accepted ? 'Stake Request Accepted' : 'Stake Request Declined';
-                const body = `${data.from} has ${data.accepted ? 'accepted' : 'declined'} your stake request (id: ${data.requestId}).`;
-                alert(`${title}\n\n${body}`);
-                fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
-            }
-        } catch (e) {}
-    });
 
     // Wire up the handler for server-relayed direct messages
     socket.on('direct_message', handleDirectMessage);

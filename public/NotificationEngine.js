@@ -34,6 +34,27 @@ window.NotificationEngine = {
         this.socket.on('new_notification', (payload) => {
             this.add(payload);
         });
+
+        this.socket.on('stake_request_response', (data) => {
+            try {
+                if (!window.CoreEngine || !window.CoreEngine.userKeys || data.to !== window.CoreEngine.userKeys.publicKey) return;
+                
+                const fromUser = (window.resolveProfile && window.resolveProfile(data.from)) || { username: 'A user' };
+                const title = data.accepted ? 'Stake Request Accepted ✅' : 'Stake Request Declined ❌';
+                const body = `${fromUser.username} has ${data.accepted ? 'accepted' : 'declined'} your stake request.`;
+                
+                // Add to notification panel for history
+                this.add({ title, body });
+                
+                // Also show an alert for immediate feedback
+                alert(`${title}\n\n${body}`);
+                
+                // Refresh profile to update UI (e.g., commissions list)
+                if (typeof fetchUserProfile === 'function') {
+                    fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
+                }
+            } catch (e) { console.error("Error handling stake request response:", e); }
+        });
     },
 
     setupDOMListeners() {
