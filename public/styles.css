@@ -143,12 +143,15 @@ input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 8px 
 .chat-input-wrapper input { margin: 0; border: none; background: var(--bg-darker); border-radius: 8px; flex: 1; font-size: 13px; padding: 10px; }
 
 /* Fullscreen Discord Chat Mode */
-.container.chat-mode { grid-template-columns: 1fr; max-width: 1600px; height: calc(100vh - 100px); }
-.container.chat-mode > *:not(.side-nav) { display: none !important; }
-.container.chat-mode .side-nav { position: static; height: 100%; top: auto; display: flex; flex-direction: column; }
-.container.chat-mode .side-nav > *:not(.chat-module) { display: none !important; }
-.container.chat-mode .chat-module { height: 100%; margin: 0; border-radius: 12px; flex: 1; }
-
+.container.chat-mode { display: flex; } /* 1. Ensure container is flex */
+.container.chat-mode > *:not(#side-nav-left) { display: none !important; } /* 2. Hide everything that isn't the left sidebar */
+.container.chat-mode #side-nav-left {
+    flex-basis: 100%; /* 3. Make the left sidebar take up all available space */
+    padding: 0; /* 4. Remove sidebar padding for a true fullscreen feel */
+}
+.container.chat-mode #side-nav-left > *:not(#card-chat-module) { display: none !important; } /* 5. Inside the sidebar, hide all cards except the chat module's card */
+.container.chat-mode #card-chat-module { height: 100%; border: none; border-radius: 0; background: transparent; } /* 6. Make the chat card fill the sidebar's height */
+.container.chat-mode .chat-module { height: 100%; } /* 7. Ensure the chat module itself fills its parent card */
 .chat-module-close-btn { display: none; }
 .container.chat-mode .chat-module-close-btn { display: inline-block; color: var(--danger); cursor: pointer; font-size: 12px; margin-left: auto; font-weight: bold; }
 

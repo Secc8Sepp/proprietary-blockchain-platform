@@ -19,8 +19,8 @@ async function generateClientSignature(privateKeyHex, messageObject) {
     const EC = window.elliptic.ec;
     const ec = new EC('secp256k1');
     const key = ec.keyFromPrivate(privateKeyHex);
-    const msgStr = JSON.stringify(messageObject);
-    const msgBytes = new TextEncoder().encode(msgStr);
+    // The messageObject is already stringified by CoreEngine. Re-stringifying it creates a signature mismatch.
+    const msgBytes = new TextEncoder().encode(messageObject);
     const signature = key.sign(msgBytes);
     
     // Convert from DER format to raw format (r and s concatenated)

@@ -111,8 +111,19 @@ class FeedController {
             } else if (type === 'STREAM_COMPLETED') {
                 const feed = profileService.getFeedEngine();
                 const originalPost = feed.find(item => item.type === 'SONG_UPLOAD' && item.data.audioHash === data.audioHash);
-                if (originalPost && originalPost.sender !== sender) {
-                    sendNotification(originalPost.sender, { title: 'Royalty Dividend Paid 💎', body: `Your track "${originalPost.data.trackTitle}" was streamed, and you earned royalties!` });
+                // Check if this is the first stream of the day from this user for this track
+                if (originalPost && originalPost.sender !== sender) { // Don't notify for self-plays
+                    const notifDb = req.app.get('dailyStreamNotifs');
+                    const today = new Date().toISOString().split('T')[0]; // 'YYYY-MM-DD'
+
+                    if (!notifDb[data.audioHash]) {
+                        notifDb[data.audioHash] = {};
+                    }
+
+                    if (notifDb[data.audioHash][sender] !== today) {
+                        notifDb[data.audioHash][sender] = today; // Mark as notified for today
+                        sendNotification(originalPost.sender, { title: 'New Stream! 🎧', body: `${fromProfile.username} started streaming your track "${originalPost.data.trackTitle}"!` });
+                    }
                 }
             } else if (type === 'PURCHASE_ZINE_RIGHTS') {
                 sendNotification(receiver, { title: 'Curation Rights Sold 📰', body: `${fromProfile.username} bought the rights to your Zine article.` });

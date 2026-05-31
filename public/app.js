@@ -21,8 +21,6 @@ let pendingCrewRequests = [];
 window.activeWaveform = null;
 window.myPlaylists = [];
 window.waveformInstances = {};
-window.userNotifications = [];
-window.unreadNotificationCount = 0;
 window.swRegistration = null;
 
 document.addEventListener('DOMContentLoaded', () => { 
@@ -31,10 +29,44 @@ document.addEventListener('DOMContentLoaded', () => {
     window.MeshEngine.init(socket);
     window.ActionEngine.init(socket);
     window.AudioEngine.init(socket);
+    window.NotificationEngine.init(socket);
     window.LayoutEngine.init();
     window.StemSplitterEngine.init(socket);
     initLocalLedgerNode();
 });
+
+function handleDirectMessage(msg) {
+    const otherAddr = msg.sender === window.CoreEngine.userKeys.publicKey ? msg.to : msg.sender;
+    if (!window.MeshEngine.dmHistory[otherAddr]) window.MeshEngine.dmHistory[otherAddr] = [];
+    msg.roles = msg.roles || [];
+
+    const exists = window.MeshEngine.dmHistory[otherAddr].find(m => m.time === msg.time && m.sender === msg.sender);
+    if (!exists) {
+        window.MeshEngine.dmHistory[otherAddr].push(msg);
+    }
+
+    if (window.MeshEngine.currentChatServer === '@dms' && window.MeshEngine.currentChatChannel === otherAddr) {
+        if (!exists) {
+            appendChatMessage(msg);
+            const chatLog = document.getElementById('ui-chat-log');
+            chatLog.scrollTop = chatLog.scrollHeight;
+        }
+        if (msg.sender !== window.CoreEngine.userKeys.publicKey) {
+            socket.emit('message_read', { to: msg.sender, time: msg.time });
+        }
+    } else {
+        if (!exists) {
+            const badge = document.getElementById('ui-inbox-badge');
+            if (badge && msg.sender !== window.CoreEngine.userKeys.publicKey) { 
+                badge.innerText = parseInt(badge.innerText) + 1; 
+                badge.classList.remove('hidden'); 
+            }
+        }
+    }
+    if (window.MeshEngine.currentChatServer === '@dms') renderDMList();
+}
+// Maintain assignment to window object for any other potential dynamic calls.
+window.handleDirectMessage = handleDirectMessage;
 
 function initializeApplicationListeners() {
     console.log('[INIT] Wiring up event listeners...');
@@ -100,13 +132,6 @@ function initializeApplicationListeners() {
         console.log('[INIT] ✓ Story button wired');
     }
 
-    // This element needs to exist in index.html, wrapping the notification badge
-    const notifBtn = document.getElementById('nav-notifications-btn'); 
-    if (notifBtn) {
-        notifBtn.addEventListener('click', toggleNotificationsPanel);
-        console.log('[INIT] ✓ Notifications panel wired');
-    }
-    
     const imgUpload = document.getElementById('composer-image-upload');
     if(imgUpload) imgUpload.addEventListener('change', updateComposerPreview);
     
@@ -179,20 +204,8 @@ function initializeApplicationListeners() {
         } catch (e) {}
     });
 
-    socket.on('new_notification', (payload) => {
-        window.userNotifications.push({ ...payload, timestamp: Date.now() });
-        window.unreadNotificationCount++;
-        const badge = document.getElementById('ui-notif-badge');
-        if (badge) {
-            badge.innerText = window.unreadNotificationCount;
-            badge.classList.remove('hidden');
-        }
-        // If the panel is open, refresh it
-        const panel = document.getElementById('notifications-panel');
-        if (panel && panel.style.display !== 'none') {
-            renderNotificationsList();
-        }
-    });
+    // Wire up the handler for server-relayed direct messages
+    socket.on('direct_message', handleDirectMessage);
     console.log('[INIT] Event listeners initialized');
 }
 
@@ -367,6 +380,15 @@ window.showKeyModal = showKeyModal;
 // ==========================================
 
 async function loadMainGlobalFeed() {
+    // Destroy old waveform instances before re-rendering to prevent memory leaks and event listener conflicts.
+    if (window.waveformInstances) {
+        for (const hash in window.waveformInstances) {
+            if (window.waveformInstances[hash] && typeof window.waveformInstances[hash].destroy === 'function') {
+                window.waveformInstances[hash].destroy();
+            }
+        }
+    }
+    window.waveformInstances = {}; // Reset the container
     try {
         const res = await fetch('/api/feed');
         const data = await res.json();
@@ -597,6 +619,17 @@ function renderPostContent(item) {
             wavesurfer.on('ready', () => {
                 if (playButton) playButton.disabled = false;
                 wavesurfer.setMute(true); // Mute the visualizer
+
+                // Sync with global player state on load
+                const globalPlayer = document.getElementById('global-audio-player');
+                if (window.AudioEngine.activeTrackHash === audioHash && !globalPlayer.paused) {
+                    wavesurfer.play();
+                    const progress = globalPlayer.currentTime / globalPlayer.duration;
+                    if (isFinite(progress)) {
+                        wavesurfer.seekTo(progress);
+                    }
+                }
+
                 console.log(`[Waveform] Ready: ${transactionHash}`);
             });
 
@@ -812,7 +845,7 @@ function renderPostContent(item) {
     } else if (item.type === 'PROFILE_UPDATE') {
         return `<div class="post-body" style="color: var(--primary); font-style: italic;">Deployed a new Node Identity to the swarm.</div>`;
     } else if (item.type === 'THEME_UPDATE') {
-        return `<div class="post-body" style="color: var(--primary); font-style: italic;">Upgraded their custom MySpace theme CSS.</div>`;
+        return `<div class="post-body" style="color: var(--primary); font-style: italic;">Upgraded their custom My Spot.</div>`;
     } else if (item.type === 'SHOUTBOX_POST') {
         return `<div class="post-body" style="color: var(--text-muted);">📢 Shouted out Node_${item.receiver.substring(0,6)}: <span style="color:#fff;">"${escapeHtml(item.data.message)}"</span></div>`;
     } else if (item.type === 'SET_TOP_8') {
@@ -1527,6 +1560,30 @@ function renderPlaylistCard(playlist, isOwner) {
     `;
 }
 
+function renderPlaylistCard(playlist, isOwner) {
+    if (!playlist || !playlist.tracks) return '';
+    const trackCount = playlist.tracks.length;
+    const coverArt = playlist.tracks.length > 0 && playlist.tracks[0].data.coverHash 
+        ? `/tracks/${playlist.tracks[0].data.coverHash}` 
+        : getAvatarUrl(playlist.user_id);
+
+    const deleteBtn = isOwner && playlist.type === 'listener' ? `<button class="secondary" style="padding: 4px 8px; font-size: 10px;" onclick="window.ActionEngine.deletePlaylist('${playlist.id}')">Delete</button>` : '';
+
+    return `
+        <div class="playlist-card" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); padding: 15px; border-radius: 8px; display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
+            <img src="${coverArt}" style="width: 60px; height: 60px; border-radius: 6px; object-fit: cover;">
+            <div style="flex: 1;">
+                <div style="font-size: 16px; font-weight: bold; color: #fff;">${escapeHtml(playlist.title)}</div>
+                <div style="font-size: 12px; color: var(--text-muted);">${trackCount} tracks</div>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                ${deleteBtn}
+                <button style="padding: 8px 15px;" onclick="window.AudioEngine.playQueue(window.currentViewedProfile.playlists.find(p => p.id === '${playlist.id}').tracks, 0)">▶ Play</button>
+            </div>
+        </div>
+    `;
+}
+
 
 function toggleInlineEdit() {
     const displayMode = document.getElementById('profile-display-mode');
@@ -1974,13 +2031,24 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             
             if (displayablePosts.length > 0) {
                 displayablePosts.forEach(item => {
+                    const nodeFeedContextId = `node-feed-${profile.publicKey}`;
+                    const nodeFeedTracks = displayablePosts.filter(p => p.type === 'SONG_UPLOAD');
+                    window.profilePlaylistContext[nodeFeedContextId] = nodeFeedTracks;
+
                     const postEl = document.createElement('div');
                     postEl.className = 'post';
                     postEl.style.padding = "15px 0";
                     const timeStr = new Date(item.timestamp).toLocaleString();
                     const roles = item.roles || [];
                     const isOwner = item.sender === window.CoreEngine.userKeys.publicKey;
-                    const deleteBtn = isOwner ? `<button class="interaction-btn" onclick="window.ActionEngine.deletePost('${item.transactionHash}')">🗑️ Delete</button>` : '';
+                    const deleteBtn = isOwner ? `<button class="interaction-btn" onclick="window.ActionEngine.deletePost('${item.transactionHash}')">🗑️</button>` : '';
+
+                    let contentHtml = renderPostContent(item);
+                    if (item.type === 'SONG_UPLOAD') {
+                        const songIndex = nodeFeedTracks.findIndex(t => t.transactionHash === item.transactionHash);
+                        contentHtml = renderProfileTrackRow(item, songIndex, nodeFeedContextId);
+                    }
+
                     postEl.innerHTML = `
                         <div class="post-avatar" onclick="inspectTargetNode('${item.sender}')" style="cursor:pointer;"><img src="${getAvatarUrl(item.sender)}"></div>
                         <div style="flex: 1;">
@@ -1989,7 +2057,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                                 ${renderBadges(roles)}
                                 <span class="post-meta" style="margin-left:auto;">${item.sender.substring(0,10)}... • ${timeStr}</span>
                             </div>
-                            ${renderPostContent(item)}
+                            ${contentHtml}
                             <div class="post-interactions">
                                 <button class="interaction-btn" onclick="window.ActionEngine.toggleLike('${item.transactionHash}', '${item.sender}')">🔥 <span id="like-count-${item.transactionHash}">${item.likeCount || 0}</span></button>
                                 <button class="interaction-btn" onclick="toggleReplyBox('${item.transactionHash}')">💬 Reply</button>
@@ -2015,56 +2083,18 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
         // Render Profile Playlist / Discography Section
         const playlistSectionContainer = document.getElementById('ui-profile-playlist');
         if (playlistSectionContainer) {
-            const isOwner = profile.publicKey === window.CoreEngine.userKeys.publicKey;
-            let playlistsToRender = profile.playlists || [];
-
-            if (!isOwner) {
-                playlistsToRender = playlistsToRender.filter(p => p.is_public);
-            }
-            
-            const artistPlaylists = playlistsToRender.filter(p => p.type === 'artist');
-            const listenerPlaylists = playlistsToRender.filter(p => p.type === 'listener');
-            const hasCuratedContent = listenerPlaylists.some(p => !p.isAutoPlaylist) || playlistsToRender.some(p => p.id.startsWith('liked-tracks-') || p.id.startsWith('reposts-'));
-
-            // Build the dropdown selector
-            let selectorHtml = `<div style="margin-bottom: 15px;">
-                <select id="profile-playlist-selector" onchange="handleProfilePlaylistFilterChange()" style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid var(--border);">`;
-
-            // Artist Discography
-            selectorHtml += `<optgroup label="Artist Discography">`;
-            selectorHtml += `<option value="all_activity" selected>All Activity (30 Days)</option>`;
-            artistPlaylists.forEach(p => {
-                const title = p.title === "Uploaded Tracks" ? "All Uploaded Tracks" : p.title;
-                selectorHtml += `<option value="${p.id}">${escapeHtml(title)}</option>`;
-            });
-            selectorHtml += `</optgroup>`;
-
-            // Curated Tastes (only if they have any)
-            if (hasCuratedContent) {
-                selectorHtml += `<optgroup label="Curated Tastes">`;
-
-                const likedPlaylist = playlistsToRender.find(p => p.id.startsWith('liked-tracks-'));
-                if (likedPlaylist?.tracks.length > 0) {
-                    selectorHtml += `<option value="liked_tracks">Tracks You Like</option>`;
-                }
-
-                const repostsPlaylist = playlistsToRender.find(p => p.id.startsWith('reposts-'));
-                if (repostsPlaylist?.tracks.length > 0) {
-                    selectorHtml += `<option value="reposts">My Reposts</option>`;
-                }
-
-                listenerPlaylists.forEach(p => {
-                    if (!p.isAutoPlaylist) { // Don't show the auto-playlists twice
-                        selectorHtml += `<option value="${p.id}">${escapeHtml(p.title)}</option>`;
-                    }
-                });
-                selectorHtml += `</optgroup>`;
-            }
-
-            selectorHtml += `</select></div>`;
-            const contentWrapperHtml = `<div id="profile-playlist-content-wrapper" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 15px; min-height: 100px;"></div>`;
-            playlistSectionContainer.innerHTML = selectorHtml + contentWrapperHtml;
-            handleProfilePlaylistFilterChange();
+             const isOwner = profile.publicKey === window.CoreEngine.userKeys.publicKey;
+             let playlistsToRender = profile.playlists || [];
+ 
+             if (!isOwner) {
+                 playlistsToRender = playlistsToRender.filter(p => p.is_public);
+             }
+ 
+             if (playlistsToRender.length > 0) {
+                 playlistSectionContainer.innerHTML = playlistsToRender.map(p => renderPlaylistCard(p, isOwner)).join('');
+             } else {
+                 playlistSectionContainer.innerHTML = '<div style="color:var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">No public playlists found.</div>';
+             }
         }
 
         // Render Gallery
@@ -2525,74 +2555,6 @@ function renderThreadedReplies(repliesArray, depthLevel, txHash, audioHash = nul
         </div>
     `).join('');
 }
-
-// ==========================================
-// NOTIFICATIONS ENGINE
-// ==========================================
-
-function toggleNotificationsPanel() {
-    let panel = document.getElementById('notifications-panel');
-    if (!panel) {
-        panel = document.createElement('div');
-        panel.id = 'notifications-panel';
-        panel.style = `
-            position: fixed;
-            top: 60px;
-            right: 20px;
-            width: 350px;
-            max-height: 500px;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-            z-index: 2000;
-            display: none;
-            flex-direction: column;
-        `;
-        panel.innerHTML = `
-            <div style="padding: 15px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-                <h4 style="margin: 0; color: #fff;">Notifications</h4>
-                <button class="secondary" style="padding: 2px 8px; font-size: 11px;" onclick="clearNotifications()">Clear All</button>
-            </div>
-            <div id="notifications-list" style="overflow-y: auto; flex-grow: 1; padding: 0;"></div>
-        `;
-        document.body.appendChild(panel);
-    }
-
-    const isHidden = panel.style.display === 'none';
-    if (isHidden) {
-        renderNotificationsList();
-        panel.style.display = 'flex';
-        window.unreadNotificationCount = 0;
-        resetNotifBadge();
-    } else {
-        panel.style.display = 'none';
-    }
-}
-
-function renderNotificationsList() {
-    const listEl = document.getElementById('notifications-list');
-    if (!listEl) return;
-    if (window.userNotifications.length === 0) {
-        listEl.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px;">No notifications yet.</div>';
-        return;
-    }
-    listEl.innerHTML = window.userNotifications.slice().reverse().map(notif => `
-        <div style="padding: 12px 15px; border-bottom: 1px solid var(--border); font-size: 13px; color: #eee;">
-            <strong>${escapeHtml(notif.title)}</strong>
-            <p style="margin: 4px 0 0 0; color: var(--text-muted);">${escapeHtml(notif.body)}</p>
-            <div style="font-size: 10px; color: var(--text-muted); text-align: right; margin-top: 5px;">${new Date(notif.timestamp).toLocaleString()}</div>
-        </div>
-    `).join('');
-}
-
-function clearNotifications() {
-    window.userNotifications = [];
-    window.unreadNotificationCount = 0;
-    renderNotificationsList();
-    resetNotifBadge();
-}
-
 // ==========================================
 // ZINE ENGINE LOGIC
 // ==========================================

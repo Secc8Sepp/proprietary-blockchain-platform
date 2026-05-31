@@ -36,7 +36,8 @@ const dbMemory = {
     l2eSessions: {},
     connectedNodes: {},
     zineArticles: [],
-    directMessages: []
+    directMessages: [],
+    dailyStreamNotifs: {} // Structure: { 'trackHash': { 'userAddress': 'YYYY-MM-DD' } }
 };
 
 if (fs.existsSync(CHAT_DB_FILE)) {
@@ -45,6 +46,7 @@ if (fs.existsSync(CHAT_DB_FILE)) {
         if (data.servers) dbMemory.servers = data.servers;
         if (data.directMessages) dbMemory.directMessages = data.directMessages;
         if (data.zineArticles) dbMemory.zineArticles = data.zineArticles;
+        if (data.dailyStreamNotifs) dbMemory.dailyStreamNotifs = data.dailyStreamNotifs;
     } catch (e) {
         console.error('Error loading DB file:', e);
     }
@@ -102,6 +104,7 @@ function sendPushNotification(address, payload) {
 app.set('sendPushNotification', sendPushNotification);
 app.set('getProfileDirectory', () => profileService.getProfileDirectory());
 app.set('connectedNodes', dbMemory.connectedNodes);
+app.set('dailyStreamNotifs', dbMemory.dailyStreamNotifs);
 
 // ==========================================
 // SYSTEM DIAGNOSTIC TOOL (For Server Debugging)
@@ -317,7 +320,8 @@ function saveDBMemory() {
         fs.writeFileSync(CHAT_DB_FILE, JSON.stringify({
             servers: dbMemory.servers,
             directMessages: dbMemory.directMessages,
-            zineArticles: dbMemory.zineArticles
+            zineArticles: dbMemory.zineArticles,
+            dailyStreamNotifs: dbMemory.dailyStreamNotifs
         }, null, 2));
     } catch (e) { console.error('Error saving DB file:', e); }
 }

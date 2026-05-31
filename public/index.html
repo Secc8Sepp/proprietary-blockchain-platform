@@ -62,7 +62,7 @@
                     <div class="nav-icon" onclick="toggleDMPane()" title="Direct Messages">
                         💬 <span class="badge-counter hidden" id="ui-inbox-badge">0</span>
                     </div>
-                    <div class="nav-icon" onclick="resetNotifBadge()" title="Notifications">
+                    <div class="nav-icon" id="nav-notifications-btn" title="Notifications">
                         🔔 <span class="badge-counter hidden" id="ui-notif-badge">0</span>
                     </div>
                 </div>
@@ -79,9 +79,9 @@
             <div class="side-nav left" id="side-nav-left">
                 <div class="side-card" id="card-main-nav" style="padding: 0; background: transparent; border: none;">
                     <div class="side-nav-item active" onclick="switchTab('feed', this)">🏠 The Global Feed</div>
-                <div class="side-nav-item" id="nav-discover-tab" onclick="switchTab('discover', this)">🌊 Discover Feed</div>
-                    <div class="side-nav-item" onclick="switchTab('profile', this)">👤 My Profile (MySpace)</div>
-                    <div class="side-nav-item" onclick="switchTab('events', this)">📅 Events</div>
+                    <div class="side-nav-item" id="nav-discover-tab" onclick="switchTab('discover', this)">🌊 Discover Feed</div>
+                    <div class="side-nav-item" onclick="switchTab('profile', this)">👤 My Spot</div>
+                    <div class="side-nav-item" onclick="switchTab('events', this)"> Events</div>
                     <div class="side-nav-item" id="nav-wallet-tab" onclick="switchTab('wallet', this)">💼 Wallet & Escrow</div>
                     <div class="side-nav-item" id="nav-market-tab" onclick="switchTab('market', this)">🛒 Digital Marketplace</div>
                     <div class="side-nav-item" onclick="switchTab('tools', this)">🛠️ Tools</div>
@@ -193,7 +193,7 @@
                     <div id="feed-container"></div>
                 </div>
 
-                <!-- VIEW 2: PROFILE (MySpace Vibe) -->
+                <!-- VIEW 2: PROFILE (My Spot) -->
                 <div id="view-profile" class="hidden">
                     <div class="card" style="padding: 0; overflow: hidden; position: relative;">
                         <div class="profile-cover" id="ui-profile-cover">
@@ -563,6 +563,7 @@
     <script src="/AudioEngine.js"></script>
     <script src="/LayoutEngine.js"></script>
     <script src="/ActionEngine.js"></script>
+    <script src="/NotificationEngine.js"></script>
     <script src="/GlobalTagEngine.js"></script>
     <script src="/BattleEngines.js"></script>
     <script src="/StemSplitterEngine.js"></script>

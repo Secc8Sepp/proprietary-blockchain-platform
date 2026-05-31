@@ -2,7 +2,8 @@ window.AudioEngine = {
     activeTrackHash: '',
     activeTrackArtist: '',
     listenTrackingInterval: null,
-    playedTracks: new Set(),
+    playedTracks: new Set(), // For 'play next' logic
+    playedTracksForTx: new Set(), // For '1 play = 1 tx' logic
     currentPlaylistMode: 'global', // 'global', 'profile', 'queue'
     currentQueue: [],
     currentQueueIndex: -1,
@@ -98,8 +99,7 @@ window.AudioEngine = {
         this.socket.on('l2e_reward', (data) => {
             let indicator = document.getElementById('l2e-status-tracker');
             if (indicator) {
-                indicator.innerHTML = `💎 Proof-of-Listen Minted!`; indicator.style.color = 'var(--success)';
-                this.triggerProofOfListenMint();
+                indicator.innerHTML = `💎 Mining reward received!`; indicator.style.color = 'var(--success)';
             }
         });
     },
@@ -111,15 +111,21 @@ window.AudioEngine = {
         if (window.CoreEngine) window.CoreEngine.setPresence(undefined, null, null);
     },
 
-
-    async triggerProofOfListenMint() {
+    async triggerProofOfListenMint(trackHash, trackArtist) {
+        if (!trackHash || !trackArtist) return;
         try {
-            await window.CoreEngine.sendSignedTransaction('STREAM_COMPLETED', this.activeTrackArtist, { audioHash: this.activeTrackHash });
+            await window.CoreEngine.sendSignedTransaction('STREAM_COMPLETED', trackArtist, { audioHash: trackHash });
             if (typeof window.fetchUserProfile === 'function') window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, true);
         } catch(err) { console.error("Mining rejected:", err); }
     },
 
     playTrack(title, audioHash, artistPublicKey, artistName, coverHash, isPreview = false) {
+        // Send a "play" transaction only once per track per session to avoid spam.
+        if (!this.playedTracksForTx.has(audioHash) && !isPreview) {
+            this.triggerProofOfListenMint(audioHash, artistPublicKey);
+            this.playedTracksForTx.add(audioHash);
+        }
+
         this.stopPlaybackTrackingLoop(true);
         this.activeTrackHash = audioHash; 
         this.activeTrackArtist = artistPublicKey;
