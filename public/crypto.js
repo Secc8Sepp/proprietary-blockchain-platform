@@ -28,58 +28,9 @@ async function generateClientSignature(privateKeyHex, messageObject) {
     const signature = key.sign(new Uint8Array(msgHash)); // sign() expects a byte array
 
     // Convert from DER format to raw format (r and s concatenated)
-    // DER format: 30 [length] 02 [r-length] [r] 02 [s-length] [s]
-    // Raw format: [r-padded-to-32] [s-padded-to-32]
-    const derHex = signature.toDER('hex');
-    const rawSignature = convertDERtoRaw(derHex);
-    return rawSignature;
-}
-
-function convertDERtoRaw(derHex) {
-    // Parse DER format
-    let pos = 0;
-    
-    // Skip the 0x30 byte (SEQUENCE tag)
-    if (derHex.substring(pos, pos + 2) !== '30') {
-        throw new Error('Invalid DER signature: expected SEQUENCE tag');
-    }
-    pos += 2;
-    
-    // Skip the length
-    const length = parseInt(derHex.substring(pos, pos + 2), 16);
-    pos += 2;
-    
-    // Parse r (first INTEGER)
-    if (derHex.substring(pos, pos + 2) !== '02') {
-        throw new Error('Invalid DER signature: expected INTEGER tag for r');
-    }
-    pos += 2;
-    
-    const rLength = parseInt(derHex.substring(pos, pos + 2), 16);
-    pos += 2;
-    
-    let r = derHex.substring(pos, pos + rLength * 2);
-    pos += rLength * 2;
-    
-    // Parse s (second INTEGER)
-    if (derHex.substring(pos, pos + 2) !== '02') {
-        throw new Error('Invalid DER signature: expected INTEGER tag for s');
-    }
-    pos += 2;
-    
-    const sLength = parseInt(derHex.substring(pos, pos + 2), 16);
-    pos += 2;
-    
-    let s = derHex.substring(pos, pos + sLength * 2);
-    
-    // Remove leading zeros and pad to 32 bytes (64 hex chars) each
-    r = r.replace(/^00(?=[0-9a-fA-F])/, '');
-    s = s.replace(/^00(?=[0-9a-fA-F])/, '');
-    
-    r = r.padStart(64, '0');
-    s = s.padStart(64, '0');
-    
-    return r + s;
+    // Return the signature in standard DER format as a hex string.
+    // This is more interoperable than a custom raw format.
+    return signature.toDER('hex');
 }
 
 async function uploadMediaAssetFile(fileObject) {

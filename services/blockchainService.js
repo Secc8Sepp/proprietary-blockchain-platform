@@ -2,9 +2,10 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const EventEmitter = require('events');
+const { ec: EC } = require('elliptic');
 
 const Wallet = require('../core/wallet');
-const { BALANCE_EXEMPT_ACTIONS, ADMIN_ACTIONS } = require('../config/txTypes');
+const { BALANCE_EXEMPT_ACTIONS, ADMIN_ACTIONS } = require('./txTypes');
 
 function normalizeAddress(address) {
     if (!address || typeof address !== 'string') return null;
@@ -12,6 +13,7 @@ function normalizeAddress(address) {
 }
 
 // ==========================================
+// Elliptic Curve Setup
 // ADMIN CONFIGURATION
 // ==========================================
 // Set your admin public key here. If configured, this address will always be recognized as the network admin.
@@ -22,6 +24,7 @@ const LEDGER_DIR = path.join(__dirname, '..', 'ledger-data');
 if (!fs.existsSync(LEDGER_DIR)) {
     fs.mkdirSync(LEDGER_DIR, { recursive: true });
 }
+const ec = new EC('secp256k1');
 const CHAIN_FILE = path.join(LEDGER_DIR, 'chain.json');
 
 class BlockchainService extends EventEmitter {
@@ -109,13 +112,17 @@ class BlockchainService extends EventEmitter {
 
     verifySignature(publicKeyStr, data, signatureHex) {
         try {
+            // The data to verify is the stringified version of the transaction object.
             const dataStr = JSON.stringify(data);
-            const normalizedKey = normalizeAddress(publicKeyStr);
+            // The message that was signed was the SHA-256 hash of the data string.
+            const hash = crypto.createHash('sha256').update(dataStr).digest();
 
-            // Use the correct verification from core/wallet.js which uses ECDSA
-            return Wallet.verifySignature(normalizedKey, dataStr, signatureHex);
+            const key = ec.keyFromPublic(publicKeyStr, 'hex');
+
+            // The signature is in DER format (hex string). The `verify` method of elliptic can take this directly.
+            return key.verify(hash, signatureHex);
         } catch (error) {
-            console.error("Signature verification failed:", error);
+            console.error("Signature verification failed with error:", error);
             return false;
         }
     }
@@ -336,13 +343,19 @@ class BlockchainService extends EventEmitter {
     }
 
     addTransaction(txData) {
-        const { sender, receiver, type: rawType, data, timestamp, signature } = txData;
-        const type = (rawType || '').toString().trim().toUpperCase();
+        const { sender, receiver, type, data, timestamp, signature } = txData;
         const chain = this.getChain();
 
-        if (!this.verifySignature(sender, { sender, receiver, type: rawType, data, timestamp }, signature)) {
+        // The object for verification MUST EXACTLY match the object the client created for signing.
+        // The client uppercases the `type` before creating the object to sign.
+        // Therefore, we use the `type` from the payload directly for verification.
+        const verificationPayload = { sender, receiver, type, data, timestamp };
+        if (!this.verifySignature(sender, verificationPayload, signature)) {
             throw new Error("Invalid transaction signature.");
         }
+
+        // For all internal logic AFTER verification, use a consistently normalized type.
+        const normalizedType = (type || '').toString().trim().toUpperCase();
 
         if (type === 'LIKE_SONG' || type === 'UNLIKE_SONG') {
             if (!data.songId) throw new Error('Missing songId for like action.');
@@ -356,41 +369,41 @@ class BlockchainService extends EventEmitter {
 
         const currentBalance = this.calculateBalance(sender, chain);
         // Skip balance checks for certain types that don't consume balance
-        const balanceRequired = !BALANCE_EXEMPT_ACTIONS.includes(type);
+        const balanceRequired = !BALANCE_EXEMPT_ACTIONS.includes(normalizedType);
 
         // --- Centralized Admin Action Authorization ---
-        if (ADMIN_ACTIONS.includes(type)) {
+        if (ADMIN_ACTIONS.includes(normalizedType)) {
             const adminAddress = this.getAdminAddress(chain);
             const normalizedSender = normalizeAddress(sender);
-            console.log(`[ADMIN ACTION] Type: ${type}, Sender: ${normalizedSender ? normalizedSender.substring(0,8) + '...' : sender}, AdminAddr: ${adminAddress ? adminAddress.substring(0,8) + '...' : 'NONE'}`);
+            console.log(`[ADMIN ACTION] Type: ${normalizedType}, Sender: ${normalizedSender ? normalizedSender.substring(0,8) + '...' : sender}, AdminAddr: ${adminAddress ? adminAddress.substring(0,8) + '...' : 'NONE'}`);
             if (!adminAddress) {
                 console.log(`[BOOTSTRAP] No admin found. Sender ${normalizedSender ? normalizedSender.substring(0,8) + '...' : sender} is becoming the network admin.`);
             } else if (normalizedSender !== adminAddress) {
-                console.error(`[AUTH FAILED] ${normalizedSender ? normalizedSender.substring(0,8) + '...' : sender} attempted ${type} but admin is ${adminAddress.substring(0,8)}...`);
-                throw new Error(`Unauthorized: Only the network admin (${adminAddress.substring(0,8)}...) can perform ${type}.`);
+                console.error(`[AUTH FAILED] ${normalizedSender ? normalizedSender.substring(0,8) + '...' : sender} attempted ${normalizedType} but admin is ${adminAddress.substring(0,8)}...`);
+                throw new Error(`Unauthorized: Only the network admin (${adminAddress.substring(0,8)}...) can perform ${normalizedType}.`);
             } else {
-                console.log(`[AUTH SUCCESS] ${normalizedSender.substring(0,8)}... authorized for ${type}.`);
+                console.log(`[AUTH SUCCESS] ${normalizedSender.substring(0,8)}... authorized for ${normalizedType}.`);
             }
         }
         
-        if (balanceRequired) {
-            if (type === 'TRANSFER_COIN' && currentBalance < parseFloat(data.amount)) throw new Error("Insufficient funds for wire.");
-            if (type === 'BUY_SONG_SHARE' && currentBalance < (parseInt(data.shareCount) * parseFloat(data.pricePerShare))) throw new Error("Insufficient funds for equity trade.");
-            if (type === 'REQUEST_SONG_SHARE' && currentBalance < (parseInt(data.shareCount) * parseFloat(data.pricePerShare))) throw new Error("Insufficient funds to request equity.");
-            if (type === 'SONG_UPLOAD' && currentBalance < 50000) throw new Error("Need 50,000 $VOD to mint a track.");
-            if (type === 'VIDEO_POST') {
+        if (balanceRequired) { // Use normalizedType for all internal logic checks
+            if (normalizedType === 'TRANSFER_COIN' && currentBalance < parseFloat(data.amount)) throw new Error("Insufficient funds for wire.");
+            if (normalizedType === 'BUY_SONG_SHARE' && currentBalance < (parseInt(data.shareCount) * parseFloat(data.pricePerShare))) throw new Error("Insufficient funds for equity trade.");
+            if (normalizedType === 'REQUEST_SONG_SHARE' && currentBalance < (parseInt(data.shareCount) * parseFloat(data.pricePerShare))) throw new Error("Insufficient funds to request equity.");
+            if (normalizedType === 'SONG_UPLOAD' && currentBalance < 50000) throw new Error("Need 50,000 $VOD to mint a track.");
+            if (normalizedType === 'VIDEO_POST') {
                 const baseCost = 5000000;
                 const sizePenalty = data.fileSize ? Math.floor(data.fileSize / 1024) * 100 : 0;
                 const totalCost = baseCost + sizePenalty;
                 if (currentBalance < totalCost) throw new Error(`Need ${totalCost.toLocaleString()} $VOD to mint a video of this size.`);
             }
-            if (type === 'PROJECT_FILE_POST' && currentBalance < 15000) throw new Error("Need 15,000 $VOD to mint a project file.");
-            if (type === 'BUY_ITEM' && currentBalance < parseFloat(data.price)) throw new Error("Insufficient funds for purchase.");
-            if (type === 'LIST_ITEM' && currentBalance < 500) throw new Error("Need 500 $VOD to list an item on the market.");
-            if (type === 'CREATE_BOUNTY' && currentBalance < parseFloat(data.amount)) throw new Error("Insufficient funds for bounty.");
-            if (type === 'PURCHASE_ZINE_RIGHTS' && currentBalance < parseFloat(data.price)) throw new Error("Insufficient funds to purchase Zine rights.");
-            if (type === 'BRIDGE_WITHDRAW' && currentBalance < parseFloat(data.amount)) throw new Error("Insufficient funds for bridge withdrawal.");
-            if (type === 'STEM_SPLIT') {
+            if (normalizedType === 'PROJECT_FILE_POST' && currentBalance < 15000) throw new Error("Need 15,000 $VOD to mint a project file.");
+            if (normalizedType === 'BUY_ITEM' && currentBalance < parseFloat(data.price)) throw new Error("Insufficient funds for purchase.");
+            if (normalizedType === 'LIST_ITEM' && currentBalance < 500) throw new Error("Need 500 $VOD to list an item on the market.");
+            if (normalizedType === 'CREATE_BOUNTY' && currentBalance < parseFloat(data.amount)) throw new Error("Insufficient funds for bounty.");
+            if (normalizedType === 'PURCHASE_ZINE_RIGHTS' && currentBalance < parseFloat(data.price)) throw new Error("Insufficient funds to purchase Zine rights.");
+            if (normalizedType === 'BRIDGE_WITHDRAW' && currentBalance < parseFloat(data.amount)) throw new Error("Insufficient funds for bridge withdrawal.");
+            if (normalizedType === 'STEM_SPLIT') {
                 const expectedCost = this.calculateStemSplitCost(sender);
                 // Security check: ensure user isn't submitting a fraudulent (lower) cost
                 if (data.cost !== expectedCost) throw new Error(`Cost mismatch. Network expects ${expectedCost}, you sent ${data.cost}.`);
@@ -398,14 +411,14 @@ class BlockchainService extends EventEmitter {
             }
         }
 
-        if (type === 'SUBMIT_HOT_OR_NOT') {
+        if (normalizedType === 'SUBMIT_HOT_OR_NOT') {
             const category = data.category || 'music';
             const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
             const recentSubmissions = chain.flatMap(b => b.transactions).filter(t => t.type === 'SUBMIT_HOT_OR_NOT' && t.sender === sender && t.timestamp > oneDayAgo && (t.data.category || 'music') === category);
             if (recentSubmissions.length > 0) throw new Error(`You can only submit 1 item per day to the ${category} category.`);
         }
 
-        if (type === 'VOTE_HOT_OR_NOT') {
+        if (normalizedType === 'VOTE_HOT_OR_NOT') {
             // Prevent voting for your own submission
             try {
                 const submissionId = data.submissionId;
@@ -438,7 +451,7 @@ class BlockchainService extends EventEmitter {
         this.saveChain(chain);
 
         // Post-transaction state updates
-        if (type === 'STEM_SPLIT') {
+        if (normalizedType === 'STEM_SPLIT') {
             this.stemSplitUsage.globalCount++;
             this.stemSplitUsage.userCounts[sender] = (this.stemSplitUsage.userCounts[sender] || 0) + 1;
         }

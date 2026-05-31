@@ -537,7 +537,9 @@ class ProfileService {
         allPlaylists[repostsPlaylist.id] = repostsPlaylist;
 
         // --- Final Playlist Enrichment ---
-        allPlaylists[artistPlaylistId].track_order = profile.playlistOrder || profile.uploadedTracks.map(t => t.hash);
+        // If a custom playlist order exists and has items, use it. Otherwise, default to all uploaded tracks.
+        // The check for `.length > 0` is crucial because an empty array `[]` is truthy in JavaScript and would otherwise be incorrectly used.
+        allPlaylists[artistPlaylistId].track_order = (profile.playlistOrder && profile.playlistOrder.length > 0) ? profile.playlistOrder : profile.uploadedTracks.map(t => t.hash);
 
         const finalPlaylists = [];
         for (const playlistId in allPlaylists) {
