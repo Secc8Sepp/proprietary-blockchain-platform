@@ -738,9 +738,12 @@ function renderPostContent(item) {
             displayArtist += ` ft. ${escapeHtml(item.data.offPlatformCollaborator)}`;
         }
 
-        // Robustly defer waveform rendering until the WaveSurfer library is fully loaded.
-        // This replaces the unreliable setTimeout with a polling mechanism.
+        // Robustly defer waveform rendering until the WaveSurfer library is fully loaded
+        // and the target container is appended to the DOM.
+        let retries = 0;
         const initWaveform = () => {
+             if (retries++ > 50) return; // Prevent infinite loops
+             
              if (!window.WaveSurfer || !window.WaveSurfer.regions) {
                 // If library not ready, poll again.
                 setTimeout(initWaveform, 200);
@@ -749,7 +752,12 @@ function renderPostContent(item) {
 
              // Use transactionHash for unique DOM targeting
              const waveformContainer = document.getElementById(`waveform-${transactionHash}`);
-             if (!waveformContainer || waveformContainer.childElementCount > 0) return;
+             if (!waveformContainer) {
+                 setTimeout(initWaveform, 200);
+                 return;
+             }
+             
+             if (waveformContainer.childElementCount > 0) return;
 
              const wavesurfer = WaveSurfer.create({
                  container: waveformContainer,
