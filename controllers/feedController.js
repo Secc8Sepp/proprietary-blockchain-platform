@@ -2,7 +2,7 @@ const blockchainService = require('../services/blockchainService');
 const profileService = require('../services/profileService');
 const fs = require('fs');
 const path = require('path');
-const { ALL_FEED_ACTIONS } = require('../config/txTypes');
+const { ALL_FEED_ACTIONS } = require('../services/txTypes');
 
 const IPFS_DIR = path.join(__dirname, '..', 'mock_ipfs');
 
