@@ -7,12 +7,11 @@ const IS_MOBILE_NATIVE = window.location.protocol === 'file:' || window.location
 const API_BASE = IS_MOBILE_NATIVE ? 'http://10.0.2.2:3000' : window.location.origin; // 10.0.2.2 maps to localhost on Android emulators
 
 const originalFetch = window.fetch;
-window.fetch = async function() {
-    let [resource, config] = arguments;
-    if (typeof resource === 'string' && resource.startsWith('/')) {
-        resource = API_BASE + resource;
+window.fetch = async function(...args) {
+    if (typeof args[0] === 'string' && args[0].startsWith('/')) {
+        args[0] = API_BASE + args[0];
     }
-    return originalFetch(resource, config);
+    return originalFetch.apply(window, args);
 };
 
 const socket = io(API_BASE);
@@ -402,8 +401,9 @@ async function loadGoogleMapsScript() {
 // ==========================================
 
 async function subscribeToPush(publicKey) {
-    if (!window.swRegistration) return;
+    if (!('serviceWorker' in navigator)) return;
     try {
+        window.swRegistration = await navigator.serviceWorker.ready;
         const res = await fetch('/api/push/vapidPublicKey');
         const { publicKey: vapidPublicKey } = await res.json();
         const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
