@@ -167,7 +167,8 @@ input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 8px 
 .container.chat-mode #card-chat-module { height: 100%; border: none; border-radius: 0; background: transparent; } /* 6. Make the chat card fill the sidebar's height */
 .container.chat-mode .chat-module { height: 100%; } /* 7. Ensure the chat module itself fills its parent card */
 .chat-module-close-btn { display: none; }
-.container.chat-mode .chat-module-close-btn { display: inline-block; color: var(--danger); cursor: pointer; font-size: 12px; margin-left: auto; font-weight: bold; }
+.container.chat-mode .chat-module-close-btn,
+body.mobile-chat-active .chat-module-close-btn { display: inline-block; color: var(--danger); cursor: pointer; font-size: 12px; margin-left: auto; font-weight: bold; }
 
 /* ==========================================
    Center Content (Feed & Profile)
@@ -322,6 +323,7 @@ input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 8px 
 @media (max-width: 768px) {
     /* 0. Adjust container for new mobile top nav */
     .container {
+        display: block !important;
         height: calc(100vh - 55px); /* 55px is mobile top nav height */
         margin-top: 55px;
     }
@@ -354,14 +356,14 @@ input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 8px 
     }
 
     .side-nav {
-        position: fixed; top: 0; height: 100vh; z-index: 10001;
-        transition: transform 0.3s ease-in-out; box-shadow: 0 0 20px rgba(0,0,0,0.5);
-        width: 280px; flex-basis: 280px !important;
+        position: fixed !important; top: 0 !important; height: 100vh !important; z-index: 10001 !important;
+        transition: transform 0.3s ease-in-out !important; box-shadow: 0 0 20px rgba(0,0,0,0.5) !important;
+        width: 280px !important;
     }
-    .side-nav.left { left: 0; transform: translateX(-100%); }
-    .side-nav.left.open { transform: translateX(0); }
-    .side-nav.right { right: 0; transform: translateX(100%); }
-    .side-nav.right.open { transform: translateX(0); }
+    .side-nav.left { left: 0 !important; transform: translateX(-100%) !important; }
+    .side-nav.left.open { transform: translateX(0) !important; }
+    .side-nav.right { right: 0 !important; transform: translateX(100%) !important; }
+    .side-nav.right.open { transform: translateX(0) !important; }
 
     /* 3. Force the main feed to take up the entire phone screen */
     .main-content {
@@ -410,7 +412,8 @@ input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 8px 
 
     /* Mobile Fullscreen Chat Mode */
     body.mobile-chat-active .mobile-top-nav,
-    body.mobile-chat-active .container,
+    body.mobile-chat-active .main-content,
+    body.mobile-chat-active #side-nav-right,
     body.mobile-chat-active #app-footer-banner {
         display: none !important;
     }
