@@ -448,6 +448,12 @@ window.showKeyModal = showKeyModal;
 // ==========================================
 
 async function loadMainGlobalFeed() {
+    // Guard against race conditions: Do not attempt to render the feed until the profile directory is loaded.
+    if (!window.networkProfiles || Object.keys(window.networkProfiles).length === 0) {
+        console.warn('[FEED] Profile directory not ready. Deferring feed load.');
+        return;
+    }
+
     // Destroy old waveform instances before re-rendering to prevent memory leaks and event listener conflicts.
     if (window.waveformInstances) {
         for (const hash in window.waveformInstances) {
@@ -2762,6 +2768,15 @@ function toggleDMPane() {
     const container = document.querySelector('.container');
     if (container) {
         container.classList.add('chat-mode');
+    if (window.innerWidth <= 768) {
+        // On mobile, the chat module is in the left sidebar. Just open it.
+        toggleLeftSidebar();
+    } else {
+        // On desktop, enter the dedicated fullscreen chat mode.
+        const container = document.querySelector('.container');
+        if (container) {
+            container.classList.add('chat-mode');
+        }
     }
 }
 
