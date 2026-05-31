@@ -127,6 +127,18 @@ function toggleAdvancedLogin() {
     advancedView.classList.toggle('hidden', !isHidden);
 }
 
+/**
+ * Attaches a 'tap' event listener that works for both mobile and desktop.
+ * It uses 'touchend' on mobile devices for better responsiveness and 'click' on desktops.
+ * @param {HTMLElement} element The DOM element to attach the listener to.
+ * @param {Function} handler The function to execute on tap/click.
+ */
+function addTapListener(element, handler) {
+    if (!element) return;
+    const eventName = ('ontouchend' in document.documentElement) ? 'touchend' : 'click';
+    element.addEventListener(eventName, handler);
+}
+
 function initializeApplicationListeners() {
     console.log('[INIT] Wiring up event listeners...');
     loadGoogleMapsScript();
@@ -144,22 +156,16 @@ function initializeApplicationListeners() {
     
     // Identity & Auth Flow
     const signupBtn = document.getElementById('btn-signup');
-    if(signupBtn) {
-        signupBtn.addEventListener('click', () => window.CoreEngine.handleSignup());
-        console.log('[INIT] ✓ Signup button wired');
-    } else console.warn('[INIT] ✗ btn-signup not found');
+    addTapListener(signupBtn, () => window.CoreEngine.handleSignup());
+    if (signupBtn) console.log('[INIT] ✓ Signup button wired'); else console.warn('[INIT] ✗ btn-signup not found');
     
     const loginBtn = document.getElementById('btn-login-submit');
-    if(loginBtn) {
-        loginBtn.addEventListener('click', () => window.CoreEngine.handlePasswordLogin());
-        console.log('[INIT] ✓ Login button wired');
-    } else console.warn('[INIT] ✗ btn-login-submit not found');
+    addTapListener(loginBtn, () => window.CoreEngine.handlePasswordLogin());
+    if (loginBtn) console.log('[INIT] ✓ Login button wired'); else console.warn('[INIT] ✗ btn-login-submit not found');
 
     const keyLoginBtn = document.getElementById('btn-key-login-submit');
-    if (keyLoginBtn) {
-        keyLoginBtn.addEventListener('click', () => window.CoreEngine.handleKeyLogin());
-        console.log('[INIT] ✓ Key Login button wired');
-    }
+    addTapListener(keyLoginBtn, () => window.CoreEngine.handleKeyLogin());
+    if (keyLoginBtn) console.log('[INIT] ✓ Key Login button wired');
 
     const loginFileInput = document.getElementById('login-key-file-input');
     if (loginFileInput) {
@@ -179,11 +185,9 @@ function initializeApplicationListeners() {
 
     // Auth Tabs
     const signupTabBtn = document.getElementById('tab-btn-signup');
-    if (signupTabBtn) signupTabBtn.addEventListener('click', () => switchAuthTab('signup'));
-
+    addTapListener(signupTabBtn, () => switchAuthTab('signup'));
     const loginTabBtn = document.getElementById('tab-btn-login');
-    if (loginTabBtn) loginTabBtn.addEventListener('click', () => switchAuthTab('login'));
-
+    addTapListener(loginTabBtn, () => switchAuthTab('login'));
     // Set initial auth view
     switchAuthTab('signup');
     
@@ -522,7 +526,16 @@ async function loadMainGlobalFeed() {
     window.waveformInstances = {}; // Reset the container
     try {
         const res = await fetch('/api/feed');
-        const data = await res.json();
+        const responsePayload = await res.json();
+        if (!responsePayload || !responsePayload.feed || !responsePayload.profiles) {
+            throw new Error("Invalid feed response from server.");
+        }
+        const data = responsePayload.feed;
+        const profiles = responsePayload.profiles;
+
+        // Atomically update the profile directory to match the feed's context
+        window.networkProfiles = profiles;
+
         feedTracks = data.filter(item => item.type === 'SONG_UPLOAD');
 
         // POPULATE SIDEBAR TRANSACTIONS GLOBALLY

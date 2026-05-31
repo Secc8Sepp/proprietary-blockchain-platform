@@ -480,9 +480,9 @@ class ProfileService {
             .sort((a,b) => b.timestamp - a.timestamp);
 
         profile.bounties = this.getMarketData().bounties.filter(b => b.creator === publicKey);
-        profile.posts = this.getFeedEngine().filter(item => item.sender === publicKey || item.reposter === publicKey);
         
-        profile.shareRequestsReceived = Object.values(allShareRequests).filter(r => r.seller === publicKey && r.status === 'pending');
+        const { feed: allFeedItems } = this.getFeedEngine(); // Get all feed items once
+        profile.posts = allFeedItems.filter(item => item.sender === publicKey || item.reposter === publicKey);
 
         profile.ownedShares = [];
         for (const [hash, shares] of Object.entries(shareDistribution)) {
@@ -496,9 +496,6 @@ class ProfileService {
             }
         }
         delete profile._trackDetails;
-
-        const allFeedItems = this.getFeedEngine(); // Get all feed items once
-        profile.posts = allFeedItems.filter(item => item.sender === publicKey || item.reposter === publicKey);
 
         const trackMap = allFeedItems
             .filter(item => item.type === 'SONG_UPLOAD')
@@ -581,12 +578,12 @@ class ProfileService {
 
         // Return from cache if available and chain hasn't changed
         if (feedCache && chain.length === lastFeedCacheChainLength) {
-            return feedCache;
+            return feedCache; // This will now be an object { feed, profiles }
         }
         const deletedUsers = getDeletedUsers(chain);
 
         const feedItems = []; // Recompute if not cached
-        lastFeedCacheChainLength = chain.length; // Update cache timestamp
+        lastFeedCacheChainLength = chain.length;
         
         const playCounts = {};
         const shareDistribution = {};
@@ -784,8 +781,11 @@ class ProfileService {
         }).filter(Boolean); // remove nulls
 
         const sortedFeed = finalFeed.sort((a, b) => b.timestamp - a.timestamp);
-        feedCache = sortedFeed; // Store result in cache
-        return sortedFeed;
+        
+        // Bundle the profile directory with the feed to prevent client-side race conditions
+        const profiles = this.getProfileDirectory();
+        feedCache = { feed: sortedFeed, profiles: profiles }; // Store result in cache
+        return feedCache;
     }
 
     getMarketData() {
