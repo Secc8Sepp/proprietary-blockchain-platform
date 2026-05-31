@@ -28,9 +28,11 @@ function _getAggregatedProfileData(chain) {
             }
             if (tx.type === 'PROFILE_UPDATE') {
                 // This robust check correctly handles username changes, including setting it to an empty string.
-                if (tx.data.username !== undefined) profiles[tx.sender].username = tx.data.username;
-                if (tx.data.avatarHash) profiles[tx.sender].avatarHash = tx.data.avatarHash;
-                if (tx.data.tags) profiles[tx.sender].tags = tx.data.tags;
+                if (tx.data) {
+                    if (tx.data.username !== undefined) profiles[tx.sender].username = tx.data.username;
+                    if (tx.data.avatarHash) profiles[tx.sender].avatarHash = tx.data.avatarHash;
+                    if (tx.data.tags) profiles[tx.sender].tags = tx.data.tags;
+                }
             }
         });
     });
@@ -231,9 +233,9 @@ class ProfileService {
 
                 // Populate Personal Transaction History
                 if (tx.sender === publicKey || tx.receiver === publicKey) {
-                    let txAmt = tx.data.amount || null;
-                    if (tx.type === 'BUY_SONG_SHARE') txAmt = (parseInt(tx.data.shareCount) || 0) * (parseFloat(tx.data.pricePerShare) || 0);
-                    if (tx.type === 'BUY_ITEM') txAmt = parseFloat(tx.data.price) || 0;
+                    let txAmt = (tx.data && tx.data.amount) ? tx.data.amount : null;
+                    if (tx.type === 'BUY_SONG_SHARE' && tx.data) txAmt = (parseInt(tx.data.shareCount) || 0) * (parseFloat(tx.data.pricePerShare) || 0);
+                    if (tx.type === 'BUY_ITEM' && tx.data) txAmt = parseFloat(tx.data.price) || 0;
 
                     profile.transactions.unshift({ 
                         type: tx.type, 
@@ -246,7 +248,7 @@ class ProfileService {
                 }
 
                 // Track Commissions for Escrow Dashboard
-                if (tx.type === 'CREATE_COMMISSION' && !isSenderDeleted) {
+                if (tx.type === 'CREATE_COMMISSION' && !isSenderDeleted && tx.data) {
                     allCommissions[block.hash] = {
                         id: block.hash,
                         buyer: tx.sender,
@@ -257,17 +259,17 @@ class ProfileService {
                         fulfilled: false
                     };
                 }
-                if (tx.type === 'FULFILL_COMMISSION' && !isSenderDeleted) {
+                if (tx.type === 'FULFILL_COMMISSION' && !isSenderDeleted && tx.data) {
                     if (allCommissions[tx.data.commissionId] && tx.sender === allCommissions[tx.data.commissionId].creator) {
                         allCommissions[tx.data.commissionId].fulfilled = true;
                     }
                 }
 
-                if (tx.type === 'BUY_ITEM' && tx.sender === publicKey && !isSenderDeleted) {
+                if (tx.type === 'BUY_ITEM' && tx.sender === publicKey && !isSenderDeleted && tx.data) {
                     const item = itemsList.find(i => i.id === tx.data.itemId);
                     if (item) profile.ownedItems.push(item);
                 }
-                if (tx.type === 'SONG_UPLOAD' && !isSenderDeleted) {
+                if (tx.type === 'SONG_UPLOAD' && !isSenderDeleted && tx.data) {
                     const assetHash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
                     if (!assetHash) continue;
                     shareDistribution[assetHash] = shareDistribution[assetHash] || {};
@@ -290,7 +292,7 @@ class ProfileService {
                         profile._trackDetails[assetHash] = { title: tx.data.caption || tx.data.filename || 'Asset', creator: tx.sender, coverHash: tx.data.coverHash || null };
                     }
                 }
-                if (tx.type === 'EDIT_SONG_METADATA' && !isSenderDeleted) {
+                if (tx.type === 'EDIT_SONG_METADATA' && !isSenderDeleted && tx.data) {
                     if (profile._trackDetails[tx.data.audioHash] && profile._trackDetails[tx.data.audioHash].creator === tx.sender) {
                         if (tx.data.title) profile._trackDetails[tx.data.audioHash].title = tx.data.title;
                         if (tx.data.artist) profile._trackDetails[tx.data.audioHash].artist = tx.data.artist;
@@ -298,7 +300,7 @@ class ProfileService {
                         if (tx.data.metadata !== undefined) profile._trackDetails[tx.data.audioHash].metadata = tx.data.metadata;
                     }
                 }
-                if (tx.type === 'BUY_SONG_SHARE' && !isSenderDeleted) {
+                if (tx.type === 'BUY_SONG_SHARE' && !isSenderDeleted && tx.data) {
                     const hash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
                     const buyer = tx.sender;
                     const seller = tx.receiver;
@@ -310,7 +312,7 @@ class ProfileService {
                     }
                 }
                 
-                if (tx.type === 'REQUEST_SONG_SHARE' && !isSenderDeleted) {
+                if (tx.type === 'REQUEST_SONG_SHARE' && !isSenderDeleted && tx.data) {
                     const assetHash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
                     allShareRequests[block.hash] = {
                         id: block.hash,
@@ -322,15 +324,15 @@ class ProfileService {
                         status: 'pending'
                     };
                 }
-                if (tx.type === 'ACCEPT_SHARE_REQUEST' && !isSenderDeleted && allShareRequests[tx.data.requestId] && allShareRequests[tx.data.requestId].seller === tx.sender) {
+                if (tx.type === 'ACCEPT_SHARE_REQUEST' && !isSenderDeleted && tx.data && allShareRequests[tx.data.requestId] && allShareRequests[tx.data.requestId].seller === tx.sender) {
                     allShareRequests[tx.data.requestId].status = 'accepted';
                 }
-                if (tx.type === 'DECLINE_SHARE_REQUEST' && !isSenderDeleted && allShareRequests[tx.data.requestId] && allShareRequests[tx.data.requestId].seller === tx.sender) {
+                if (tx.type === 'DECLINE_SHARE_REQUEST' && !isSenderDeleted && tx.data && allShareRequests[tx.data.requestId] && allShareRequests[tx.data.requestId].seller === tx.sender) {
                     allShareRequests[tx.data.requestId].status = 'declined';
                 }
 
                 // Playlist state mutations
-                if (tx.type === 'CREATE_PLAYLIST' && tx.sender === publicKey) {
+                if (tx.type === 'CREATE_PLAYLIST' && tx.sender === publicKey && tx.data) {
                     allPlaylists[block.hash] = {
                         id: block.hash,
                         user_id: tx.sender,
@@ -397,7 +399,7 @@ class ProfileService {
                 }
 
                 // 1. Process mutations belonging to this specific user profile
-                if (tx.sender === publicKey && !isSenderDeleted) {
+                if (tx.sender === publicKey && !isSenderDeleted && tx.data) {
                     if (tx.type === 'SONG_UPLOAD') {
                         const artistToUse = tx.data.artist;
                         const titleToUse = tx.data.trackTitle;
@@ -425,7 +427,7 @@ class ProfileService {
                 }
 
                 // 2. Collect Shoutbox messages sent TO this specific profile wall
-                if (tx.type === 'SHOUTBOX_POST' && tx.receiver === publicKey && !isSenderDeleted) {
+                if (tx.type === 'SHOUTBOX_POST' && tx.receiver === publicKey && !isSenderDeleted && tx.data) {
                     profile.shoutbox.push({
                         sender: tx.sender,
                         message: tx.data.message,
@@ -601,11 +603,11 @@ class ProfileService {
                 if (deletedUsers.has(tx.sender)) continue;
                 if (['SONG_UPLOAD', 'TEXT_POST', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'STORY_POST', 'REPOST_POST'].includes(tx.type)) {
                     postOwners[block.hash] = tx.sender;
-                    if (tx.data.metadata) {
+                    if (tx.data && tx.data.metadata) {
                         postMetadata[block.hash] = tx.data.metadata;
                     }
                 }
-                if (tx.type === 'SONG_UPLOAD' || tx.type === 'IMAGE_POST' || tx.type === 'VIDEO_POST' || tx.type === 'PROJECT_FILE_POST') {
+                if (tx.data && (tx.type === 'SONG_UPLOAD' || tx.type === 'IMAGE_POST' || tx.type === 'VIDEO_POST' || tx.type === 'PROJECT_FILE_POST')) {
                     const assetHash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
                     if (!assetHash) continue;
                     if (tx.type === 'SONG_UPLOAD') {
@@ -629,7 +631,7 @@ class ProfileService {
                     playCounts[assetHash] = playCounts[assetHash] || 0;
                     if (tx.data.forStake) songListings[assetHash] = { available: parseInt(tx.data.sellPercentage)||0, price: parseFloat(tx.data.pricePerShare)||0, totalShares: parseInt(tx.data.totalShares)||100 };
                 }
-                if (tx.type === 'EDIT_SONG_METADATA') {
+                if (tx.type === 'EDIT_SONG_METADATA' && tx.data) {
                     if (trackMetadata[tx.data.audioHash] && trackMetadata[tx.data.audioHash].creator === tx.sender) {
                         if (tx.data.title) trackMetadata[tx.data.audioHash].title = tx.data.title;
                         if (tx.data.artist) trackMetadata[tx.data.audioHash].artist = tx.data.artist;
@@ -640,10 +642,10 @@ class ProfileService {
                         }
                     }
                 }
-                if (tx.type === 'STREAM_COMPLETED') {
+                if (tx.type === 'STREAM_COMPLETED' && tx.data) {
                     playCounts[tx.data.audioHash] = (playCounts[tx.data.audioHash] || 0) + 1;
                 }
-                if (tx.type === 'BUY_SONG_SHARE') {
+                if (tx.type === 'BUY_SONG_SHARE' && tx.data) {
                     const hash = tx.data.audioHash;
                     const buyer = tx.sender;
                     const seller = tx.receiver;
@@ -655,10 +657,10 @@ class ProfileService {
                         if (songListings[hash]) songListings[hash].available -= count;
                     }
                 }
-                if (tx.type === 'LIKE_POST') {
+                if (tx.type === 'LIKE_POST' && tx.data) {
                     likeCounts[tx.data.txHash] = (likeCounts[tx.data.txHash] || 0) + 1;
                 }
-                if (tx.type === 'REPLY_POST') {
+                if (tx.type === 'REPLY_POST' && tx.data) {
                     if (!postReplies[tx.data.txHash]) postReplies[tx.data.txHash] = [];
                     const replyId = tx.data.replyId || (tx.timestamp + '_' + tx.sender.substring(0, 10));
                     postReplies[tx.data.txHash].push({ 
@@ -671,14 +673,14 @@ class ProfileService {
                         timestamp: tx.timestamp
                     });
                 }
-                if (tx.type === 'DELETE_POST') {
+                if (tx.type === 'DELETE_POST' && tx.data) {
                     // Security check: Only the original creator can delete their post
                     // or the reposter can delete their repost
                     if (postOwners[tx.data.txHash] === tx.sender) {
                         deletedPosts.add(tx.data.txHash);
                     }
                 }
-                if (tx.type === 'EDIT_POST_METADATA') {
+                if (tx.type === 'EDIT_POST_METADATA' && tx.data) {
                     if (postOwners[tx.data.txHash] === tx.sender) {
                         postMetadata[tx.data.txHash] = tx.data.metadata;
                     }
@@ -706,7 +708,7 @@ class ProfileService {
                         type: tx.type,
                         sender: tx.sender,
                         receiver: tx.receiver,
-                        data: tx.data,
+                        data: tx.data ? { ...tx.data } : {},
                         timestamp: tx.timestamp,
                         roles: roles
                     };
@@ -760,7 +762,7 @@ class ProfileService {
         }, {});
 
         const finalFeed = feedItems.map(item => {
-            if (item.type === 'REPOST_POST') {
+            if (item.type === 'REPOST_POST' && item.data) {
                 const originalPost = postMap[item.data.originalTxHash];
                 if (originalPost) {
                     // Create a new object that is the original post, but overridden with repost info

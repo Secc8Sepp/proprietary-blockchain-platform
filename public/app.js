@@ -543,6 +543,8 @@ async function loadMainGlobalFeed() {
             data = responsePayload.feed;
             // Atomically update the profile directory to match the feed's context
             window.networkProfiles = responsePayload.profiles;
+        } else if (responsePayload && responsePayload.error) {
+            throw new Error(`Server Error: ${responsePayload.error}`);
         } else {
             throw new Error("Invalid feed response from server.");
         }
@@ -1421,6 +1423,8 @@ async function loadEvents() {
     try {
         const res = await fetch('/api/feed');
         const data = await res.json();
+        const payload = await res.json();
+        const data = Array.isArray(payload) ? payload : (payload.feed || []);
         
         // Filter by isFlyer AND selected date
         const eventPosts = data.filter(item => {

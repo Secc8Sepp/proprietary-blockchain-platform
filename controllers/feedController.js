@@ -104,8 +104,8 @@ class FeedController {
             } else if (type === 'TRANSFER_COIN') {
                 sendNotification(receiver, { title: 'Incoming $VOD Transfer 💸', body: `You received ${data.amount} $VOD from ${fromProfile.username}.` });
             } else if (type === 'STREAM_COMPLETED') {
-                const feed = profileService.getFeedEngine();
-                const originalPost = feed.find(item => item.type === 'SONG_UPLOAD' && item.data.audioHash === data.audioHash);
+                const feedData = profileService.getFeedEngine();
+                const originalPost = feedData.feed.find(item => item.type === 'SONG_UPLOAD' && item.data.audioHash === data.audioHash);
                 // Check if this is the first stream of the day from this user for this track
                 if (originalPost && originalPost.sender !== sender) { // Don't notify for self-plays
                     const notifDb = req.app.get('dailyStreamNotifs');
