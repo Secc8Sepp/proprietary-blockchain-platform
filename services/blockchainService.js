@@ -340,7 +340,7 @@ class BlockchainService extends EventEmitter {
         const type = (rawType || '').toString().trim().toUpperCase();
         const chain = this.getChain();
 
-        if (!this.verifySignature(sender, { sender, receiver, type, data, timestamp }, signature)) {
+        if (!this.verifySignature(sender, { sender, receiver, type: rawType, data, timestamp }, signature)) {
             throw new Error("Invalid transaction signature.");
         }
 

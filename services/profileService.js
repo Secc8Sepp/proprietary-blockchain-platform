@@ -202,6 +202,7 @@ class ProfileService {
             is_public: true, // Default public for uploaded tracks
             track_order: [],
             created_at: profile.joined,
+            isAutoPlaylist: true,
         };
         profile._trackDetails = {};
 
@@ -915,6 +916,72 @@ class ProfileService {
             }
             return true;
         }).sort((a,b) => b.timestamp - a.timestamp);
+    }
+
+    getCirculatingSupply() {
+        const chain = blockchainService.getChain();
+        const deletedUsers = getDeletedUsers(chain);
+
+        let totalMinted = 0;
+        let totalBurned = 0;
+
+        // 1. Calculate initial airdrops from all non-deleted profiles
+        const liveProfiles = this.getProfileDirectory();
+        const profileCount = Object.keys(liveProfiles).length;
+        totalMinted += profileCount * 100000;
+
+        // Transaction Fees (Burns)
+        const fees = {
+            'SONG_UPLOAD': 50000,
+            'IMAGE_POST': 5000,
+            'PROJECT_FILE_POST': 15000,
+            'LIST_ITEM': 500,
+        };
+
+        for (const block of chain) {
+            for (const tx of block.transactions) {
+                if (deletedUsers.has(tx.sender)) continue;
+
+                // --- Mints (excluding airdrops) ---
+                if (tx.type === 'STREAM_COMPLETED') {
+                    totalMinted += 5000; // Listener reward
+                    totalMinted += 20000; // Creator/Shareholder pool
+                }
+                if (tx.type === 'LIKE_POST' || tx.type === 'LIKE_IMAGE') {
+                    totalMinted += 500; // Liker reward
+                    totalMinted += 2000; // Creator reward
+                }
+                if (tx.type === 'VOTE_HOT_OR_NOT') {
+                    totalMinted += 100; // Voter reward
+                    if (tx.data.vote === 1) {
+                        totalMinted += 500; // Submitter reward for upvote
+                    }
+                }
+                if (tx.type === 'ADMIN_MINT') {
+                    totalMinted += parseFloat(tx.data.amount) || 0;
+                }
+
+                // --- Burns ---
+                if (fees[tx.type]) {
+                    totalBurned += fees[tx.type];
+                }
+                if (tx.type === 'VIDEO_POST' && tx.data.fileSize) {
+                    const baseFee = 5000000;
+                    const sizeFee = (tx.data.fileSize / 1024) * 100; // 100 $VOD per KB
+                    totalBurned += (baseFee + sizeFee);
+                }
+                if (tx.type === 'BUY_ITEM' && tx.data.price) {
+                    const tax = (parseFloat(tx.data.price) || 0) * 0.05; // 5% marketplace tax
+                    totalBurned += tax;
+                }
+            }
+        }
+
+        return {
+            totalMinted,
+            totalBurned,
+            circulatingSupply: totalMinted - totalBurned
+        };
     }
 }
 

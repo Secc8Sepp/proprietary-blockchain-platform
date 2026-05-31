@@ -2007,48 +2007,70 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             
             if (displayablePosts.length > 0) {
                 displayablePosts.forEach(item => {
-                    const nodeFeedContextId = `node-feed-${profile.publicKey}`;
-                    const nodeFeedTracks = displayablePosts.filter(p => p.type === 'SONG_UPLOAD');
-                    window.profilePlaylistContext[nodeFeedContextId] = nodeFeedTracks;
-
                     const postEl = document.createElement('div');
-                    postEl.className = 'post';
-                    postEl.style.padding = "15px 0";
-                    const timeStr = new Date(item.timestamp).toLocaleString();
-                    const roles = item.roles || [];
-                    const isOwner = item.sender === window.CoreEngine.userKeys.publicKey;
-                    const deleteBtn = isOwner ? `<button class="interaction-btn" onclick="window.ActionEngine.deletePost('${item.transactionHash}')">🗑️</button>` : '';
+                    postEl.className = 'card post';
 
-                    let contentHtml = renderPostContent(item);
-                    if (item.type === 'SONG_UPLOAD') {
-                        const songIndex = nodeFeedTracks.findIndex(t => t.transactionHash === item.transactionHash);
-                        contentHtml = renderProfileTrackRow(item, songIndex, nodeFeedContextId);
-                    }
+                    const originalSender = item.sender; // The creator of the content
+                    const actionTaker = item.isRepost ? item.reposter : item.sender; // The person who performed the action
+                    const actionHash = item.transactionHash; // The hash of the post or repost action
 
+                    const isMyContent = originalSender === window.CoreEngine.userKeys.publicKey;
+                    const iAmActionTaker = actionTaker === window.CoreEngine.userKeys.publicKey;
+                    const canDelete = iAmActionTaker;
+
+                    const isSongPost = item.type === 'SONG_UPLOAD';
+                    const likedTracksPlaylist = (window.myPlaylists || []).find(p => p.id.startsWith('liked-tracks-'));
+                    const isLiked = isSongPost && likedTracksPlaylist && likedTracksPlaylist.tracks.some(t => t.data.audioHash === item.data.audioHash);
+                    const heartIcon = isLiked ? '♥' : '♡';
+
+                    const likeButtonHtml = isSongPost
+                        ? `<button class="interaction-btn ${isLiked ? 'liked' : ''}" onclick="this.classList.toggle('liked'); this.innerHTML = this.classList.contains('liked') ? '♥' : '♡'; window.ActionEngine.toggleLikeSong('${item.data.audioHash}', this.classList.contains('liked'))">${heartIcon} <span id="like-count-${actionHash}">${item.likeCount || 0}</span></button>`
+                        : `<button class="interaction-btn" onclick="window.ActionEngine.toggleLike('${actionHash}', '${actionTaker}')">🔥 <span id="like-count-${actionHash}">${item.likeCount || 0}</span></button>`;
+                    
+                    const originalHashForRepost = item.isRepost ? item.data.originalTxHash : item.transactionHash;
+                    const repostBtn = `<button class="interaction-btn" onclick="window.ActionEngine.promptRepostPost('${originalHashForRepost}')">🔁 Repost</button>`;
+                    const deleteBtn = canDelete ? `<button class="interaction-btn" onclick="window.ActionEngine.deletePost('${actionHash}')">🗑️</button>` : '';
+                    const canEdit = isMyContent && !item.isRepost;
+                    const editBtn = canEdit ? `<button class="interaction-btn" onclick="window.ActionEngine.promptEditPostMetadata('${actionHash}', '${escapeJsArg(item.data.metadata || '')}')">✏️ Edit Tags</button>` : '';
+                    const canTip = !isMyContent;
+                    const tipBtn = canTip ? `<button class="interaction-btn" onclick="window.WalletEngine.promptSendCoins('${originalSender}')">💸 Tip</button>` : '';
+
+                    const repostHeader = item.isRepost ? `<div class="repost-header" style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px; display: flex; align-items: center; gap: 5px; padding-left: 45px;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink: 0;"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"></path></svg>
+                        <span style="cursor:pointer;" onclick="inspectTargetNode('${actionTaker}')">${resolveProfile(actionTaker).username} reposted</span>
+                    </div>` : '';
+
+                    const repostCaptionHtml = item.isRepost && item.repostCaption ? `<div class="post-body" style="padding-left: 65px; margin-bottom: 15px;">${parseMentions(item.repostCaption)}</div>` : '';
+                    
                     postEl.innerHTML = `
-                        <div style="display: flex; gap: 15px;">
-                            <div class="post-avatar" onclick="inspectTargetNode('${item.sender}')" style="cursor:pointer;"><img src="${getAvatarUrl(item.sender)}"></div>
+                        ${repostHeader}
+                        ${repostCaptionHtml}
+                        <div class="original-post-wrapper" style="display: flex; gap: 15px; ${item.isRepost ? 'border: 1px solid var(--border); padding: 15px; border-radius: 8px; background: rgba(0,0,0,0.2);' : ''}">
+                            <div class="post-avatar" onclick="inspectTargetNode('${originalSender}')" style="cursor:pointer;"><img src="${getAvatarUrl(originalSender)}"></div>
                             <div style="flex: 1; min-width: 0;">
                                 <div class="post-header">
-                                    <span class="post-name" onclick="inspectTargetNode('${item.sender}')">${resolveProfile(item.sender).username}</span>
-                                    ${renderBadges(roles)}
-                                    <span class="post-meta" style="margin-left:auto;">${item.sender.substring(0,10)}... • ${timeStr}</span>
+                                    <span class="post-name" onclick="inspectTargetNode('${originalSender}')">${resolveProfile(originalSender).username}</span>
+                                    ${renderBadges(item.roles || [])}
+                                    <span class="post-meta" style="margin-left:auto;">${originalSender.substring(0,10)}... • ${new Date(item.isRepost ? item.data.timestamp : item.timestamp).toLocaleString()}</span>
+                                    ${!isMyContent ? `<button class="secondary" style="padding: 2px 5px; font-size: 10px; margin-left: 10px;" onclick="toggleBlockNode('${originalSender}')">Block</button>` : ''}
                                 </div>
-                                ${contentHtml}
+                                ${renderPostContent(item)}
                                 <div class="post-interactions">
-                                    <button class="interaction-btn" onclick="window.ActionEngine.toggleLike('${item.transactionHash}', '${item.sender}')">🔥 <span id="like-count-${item.transactionHash}">${item.likeCount || 0}</span></button>
-                                    <button class="interaction-btn" onclick="toggleReplyBox('${item.transactionHash}')">💬 Reply</button>
-                                    ${!isOwner ? `<button class="interaction-btn" onclick="window.WalletEngine.promptSendCoins('${item.sender}')">💸 Tip</button>` : ''}
+                                    ${likeButtonHtml}
+                                    ${repostBtn}
+                                    <button class="interaction-btn" onclick="toggleReplyBox('${actionHash}')">💬 Reply</button>
+                                    ${editBtn}
+                                    ${tipBtn}
                                     ${deleteBtn}
                                 </div>
-                                <div class="reply-box" id="reply-box-${item.transactionHash}">
-                                    <textarea placeholder="Write a reply..."></textarea>
-                                    <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${item.transactionHash}', '${item.sender}', null, ${item.data.audioHash ? `'${item.data.audioHash}'` : 'null'})">Post Reply</button>
-                                </div>
-                                <div id="replies-list-${item.transactionHash}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
-                                    ${renderThreadedReplies(item.replies, 0, item.transactionHash, item.type === 'SONG_UPLOAD' ? item.data.audioHash : null)}
-                                </div>
                             </div>
+                        </div>
+                        <div class="reply-box" id="reply-box-${actionHash}">
+                            <textarea placeholder="Write a reply..."></textarea>
+                            <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${actionHash}', '${actionTaker}', null, ${item.data.audioHash ? `'${item.data.audioHash}'` : 'null'})">Post Reply</button>
+                        </div>
+                        <div id="replies-list-${actionHash}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px; padding-left: 65px;">
+                            ${renderThreadedReplies(item.replies, 0, actionHash, item.type === 'SONG_UPLOAD' ? item.data.audioHash : null)}
                         </div>
                     `;
                     profileFeedContainer.appendChild(postEl);
@@ -2061,24 +2083,35 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
         // Render Profile Playlist / Discography Section
         const playlistSectionContainer = document.getElementById('ui-profile-playlist');
         if (playlistSectionContainer) {
-             const isOwner = profile.publicKey === window.CoreEngine.userKeys.publicKey;
-             let playlistsToRender = profile.playlists || [];
+            const isOwner = profile.publicKey === window.CoreEngine.userKeys.publicKey;
+            let allPlaylists = profile.playlists || [];
  
-             if (!isOwner) {
-                 playlistsToRender = playlistsToRender.filter(p => p.is_public);
-             }
+            if (!isOwner) { // Filter for public playlists if not viewing own profile
+                allPlaylists = allPlaylists.filter(p => p.is_public);
+            }
  
-             if (playlistsToRender.length > 0) {
-                // Pre-populate the context object with track data for each playlist to ensure safe access in the onclick handler.
-                playlistsToRender.forEach(p => {
+            // Check if there are any manually created playlists
+            const userCreatedPlaylists = allPlaylists.filter(p => p.type === 'listener' && !p.isAutoPlaylist);
+
+            if (userCreatedPlaylists.length > 0) {
+                // If user has custom playlists, show all available playlist cards
+                allPlaylists.forEach(p => {
                     if (p && p.id && p.tracks) {
                         window.profilePlaylistContext[p.id] = p.tracks;
                     }
                 });
-                 playlistSectionContainer.innerHTML = playlistsToRender.map(p => renderPlaylistCard(p, isOwner)).join('');
-             } else {
-                 playlistSectionContainer.innerHTML = '<div style="color:var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">No public playlists found.</div>';
-             }
+                playlistSectionContainer.innerHTML = allPlaylists.map(p => renderPlaylistCard(p, isOwner)).join('');
+            } else {
+                // If no custom playlists, default to showing the last 5 uploads as a simple list
+                const artistPlaylist = allPlaylists.find(p => p.type === 'artist');
+                if (artistPlaylist && artistPlaylist.tracks && artistPlaylist.tracks.length > 0) {
+                    // Sort tracks by most recent and take the top 5
+                    const latestUploads = artistPlaylist.tracks.slice().sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
+                    renderProfileTrackList(latestUploads, playlistSectionContainer, 'default-uploads');
+                } else {
+                    playlistSectionContainer.innerHTML = '<div style="color:var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">No tracks uploaded yet.</div>';
+                }
+            }
         }
 
         // Render Gallery
