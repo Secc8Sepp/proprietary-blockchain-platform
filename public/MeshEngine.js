@@ -15,9 +15,9 @@ window.MeshEngine = {
 
     _tryInitialRender() {
         // This function will only proceed if both profiles and servers are loaded, and it hasn't run before.
-        // It requires networkProfiles to be a non-null object and serversData to be a non-empty array.
+        // It requires networkProfiles to be a non-null object and serversData to be an array.
         // The previous strict check for an empty profile directory caused a deadlock on initial user signup.
-        if (this._initialRenderComplete || !window.networkProfiles || !this.serversData || this.serversData.length === 0) {
+        if (this._initialRenderComplete || !window.networkProfiles || !this.serversData) {
             return;
         }
 

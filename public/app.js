@@ -535,14 +535,17 @@ async function loadMainGlobalFeed() {
         container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted);">📡 Accessing Ledger...</div>';
         const res = await fetch('/api/feed');
         const responsePayload = await res.json();
-        if (!responsePayload || !responsePayload.feed || !responsePayload.profiles) {
+        
+        let data;
+        if (Array.isArray(responsePayload)) {
+            data = responsePayload;
+        } else if (responsePayload && responsePayload.feed && responsePayload.profiles) {
+            data = responsePayload.feed;
+            // Atomically update the profile directory to match the feed's context
+            window.networkProfiles = responsePayload.profiles;
+        } else {
             throw new Error("Invalid feed response from server.");
         }
-        const data = responsePayload.feed;
-        const profiles = responsePayload.profiles;
-
-        // Atomically update the profile directory to match the feed's context
-        window.networkProfiles = profiles;
 
         feedTracks = data.filter(item => item.type === 'SONG_UPLOAD');
 

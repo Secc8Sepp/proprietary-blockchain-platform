@@ -156,7 +156,7 @@ app.get('/api/social/hotornot', (req, res) => {
 
 app.get('/api/feed/discover', (req, res) => {
     const { publicKey } = req.query;
-    const { feed: feedItems } = profileService.getFeedEngine();
+    const feedItems = profileService.getFeedEngine();
 
     // Filter for recent public song uploads
     let discoverItems = feedItems.filter(item =>
