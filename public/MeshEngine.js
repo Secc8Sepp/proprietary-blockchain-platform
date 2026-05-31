@@ -15,7 +15,9 @@ window.MeshEngine = {
 
     _tryInitialRender() {
         // This function will only proceed if both profiles and servers are loaded, and it hasn't run before.
-        if (this._initialRenderComplete || !window.networkProfiles || Object.keys(window.networkProfiles).length === 0 || !this.serversData || this.serversData.length === 0) {
+        // It requires networkProfiles to be a non-null object and serversData to be a non-empty array.
+        // The previous strict check for an empty profile directory caused a deadlock on initial user signup.
+        if (this._initialRenderComplete || !window.networkProfiles || !this.serversData || this.serversData.length === 0) {
             return;
         }
 
@@ -75,8 +77,23 @@ window.MeshEngine = {
         });
 
         socket.on('profile_directory', (dir) => {
+            const isFirstLoad = window.networkProfiles === null;
             window.networkProfiles = dir;
-            this._tryInitialRender();
+
+            if (this._initialRenderComplete && !isFirstLoad) {
+                // If the app is already running, a new profile directory means we should refresh the current view
+                // to update usernames, avatars, etc., that may have changed.
+                console.log('[MeshEngine] Profile directory updated. Refreshing current view.');
+                if (window.currentView === 'feed') window.loadMainGlobalFeed();
+                else if (window.currentView === 'profile' && window.viewingUserPublicKey) window.fetchUserProfile(window.viewingUserPublicKey, false);
+                
+                // Re-render sidebars that contain user info
+                if (typeof window.renderNewUsers === 'function') window.renderNewUsers();
+                this.renderOnlineUsers(this.onlineNodes); // Re-render online list with new usernames
+
+            } else {
+                this._tryInitialRender();
+            }
         });
 
         socket.on('blockchain_update', (payload) => {
@@ -175,44 +192,18 @@ window.MeshEngine = {
         });
 
         socket.on('swarm_update', (nodes) => {
-            const countHeader = document.getElementById('ui-online-count');
-            const container = document.getElementById('ui-online-users');
             nodes.forEach(node => { if (node.socketId) this.socketIdToAddress[node.socketId] = node.address; });
             this.onlineNodes = nodes;
             
+            // Attempt to establish P2P data channels with new peers
             nodes.forEach(node => {
                 if (node.socketId && this.myMeshId && node.socketId !== this.myMeshId) {
                     if (this.myMeshId > node.socketId && !this.meshConnections[node.socketId]) window.connectToMeshNode(node.socketId);
                 }
             });
             
-            if (countHeader) countHeader.innerText = `Online in Swarm — ${nodes.length}`;
-            if (container) {
-                container.innerHTML = nodes.map(node => {
-                    const isMe = node.address === window.CoreEngine.userKeys.publicKey;
-                    const displayName = isMe ? 'You' : window.resolveProfile(node.address).username;
-                    const color = isMe ? 'var(--primary)' : '#fff';
-                    const dotColor = node.status === 'idle' ? 'var(--warning)' : 'var(--success)';
-                    
-                    let activityHtml = '';
-                    if (node.track) {
-                        const trackArtist = node.track.artist || node.track.artistName || 'Unknown Artist';
-                        activityHtml = `<div style="font-size: 10px; color: var(--primary); margin-top: 4px; cursor: pointer;" onclick="event.stopPropagation(); window.AudioEngine.playTrack('${window.escapeJsArg(node.track.title)}', '${node.track.hash}', '${node.track.creator}', '${window.escapeJsArg(trackArtist)}')">🎧 ${window.escapeHtml(node.track.title)}<br><span style="color:var(--text-muted)">by ${window.escapeHtml(trackArtist)}</span></div>`;
-                    } else if (node.activity) {
-                        activityHtml = `<div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">🎧 ${window.escapeHtml(node.activity)}</div>`;
-                    }
-                    return `<div class="user-row" onclick="window.inspectTargetNode('${node.address}')">
-                        <div class="user-info">
-                            <img src="${window.getAvatarUrl(node.address)}" class="${isMe ? 'nft-avatar' : ''}">
-                            <div style="display: flex; flex-direction: column;"><span style="font-size: 14px; font-weight: bold; color: ${color};">${displayName}</span>${activityHtml}</div>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            ${!isMe ? `<span style="font-size: 14px; cursor: pointer;" onclick="event.stopPropagation(); window.sendDM('${node.address}')" title="Direct Message">✉️</span>` : ''}
-                            <div class="status-dot" style="background: ${dotColor}; box-shadow: 0 0 5px ${dotColor};"></div>
-                        </div>
-                    </div>`;
-                }).join('');
-            }
+            this.renderOnlineUsers(nodes);
+            
             if(typeof window.renderNewUsers === 'function') window.renderNewUsers();
         });
 
@@ -230,6 +221,39 @@ window.MeshEngine = {
     // Public method for other modules to await readiness
     async onReady() {
         return this._readyPromise;
+    },
+
+    renderOnlineUsers(nodes) {
+        const container = document.getElementById('ui-online-users');
+        const countHeader = document.getElementById('ui-online-count');
+
+        if (countHeader) countHeader.innerText = `Online in Swarm — ${nodes.length}`;
+        if (container) {
+            container.innerHTML = nodes.map(node => {
+                const isMe = node.address === window.CoreEngine.userKeys.publicKey;
+                const displayName = isMe ? 'You' : window.resolveProfile(node.address).username;
+                const color = isMe ? 'var(--primary)' : '#fff';
+                const dotColor = node.status === 'idle' ? 'var(--warning)' : 'var(--success)';
+                
+                let activityHtml = '';
+                if (node.track) {
+                    const trackArtist = node.track.artist || node.track.artistName || 'Unknown Artist';
+                    activityHtml = `<div style="font-size: 10px; color: var(--primary); margin-top: 4px; cursor: pointer;" onclick="event.stopPropagation(); window.AudioEngine.playTrack('${window.escapeJsArg(node.track.title)}', '${node.track.hash}', '${node.track.creator}', '${window.escapeJsArg(trackArtist)}')">🎧 ${window.escapeHtml(node.track.title)}<br><span style="color:var(--text-muted)">by ${window.escapeHtml(trackArtist)}</span></div>`;
+                } else if (node.activity) {
+                    activityHtml = `<div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">🎧 ${window.escapeHtml(node.activity)}</div>`;
+                }
+                return `<div class="user-row" onclick="window.inspectTargetNode('${node.address}')">
+                    <div class="user-info">
+                        <img src="${window.getAvatarUrl(node.address)}" class="${isMe ? 'nft-avatar' : ''}">
+                        <div style="display: flex; flex-direction: column;"><span style="font-size: 14px; font-weight: bold; color: ${color};">${displayName}</span>${activityHtml}</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        ${!isMe ? `<span style="font-size: 14px; cursor: pointer;" onclick="event.stopPropagation(); window.sendDM('${node.address}')" title="Direct Message">✉️</span>` : ''}
+                        <div class="status-dot" style="background: ${dotColor}; box-shadow: 0 0 5px ${dotColor};"></div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
     },
 
     broadcastToMesh(type, payload) {

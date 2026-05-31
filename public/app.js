@@ -24,7 +24,8 @@ window.waveformInstances = {};
 window.swRegistration = null;
 
 document.addEventListener('DOMContentLoaded', () => { 
-    window.networkProfiles = {}; window.zineArticles = []; window.hotOrNotData = [];
+    // Initialize as null to prevent premature rendering before the first directory is fetched.
+    window.networkProfiles = null; window.zineArticles = []; window.hotOrNotData = [];
     initializeApplicationListeners(); 
     window.MeshEngine.init(socket);
     window.ActionEngine.init(socket);
@@ -3056,5 +3057,5 @@ window.renderMarketplace = function() {
                 <button style="width:100%;" onclick="window.ActionEngine.buyDigitalItem('${i.id}', ${i.price}, '${i.seller}')">Purchase Asset</button>
             </div></div>`;
         }).join('') || '<div style="color:var(--text-muted); grid-column: 1 / -1; text-align:center;">No assets match your search.</div>';
-    }
+  }
 };
