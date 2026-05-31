@@ -2968,6 +2968,10 @@ window.loadDiscoverFeed = async function() {
         const res = await fetch(`/api/feed/discover?publicKey=${window.CoreEngine.userKeys.publicKey || ''}`);
         const items = await res.json();
         container.innerHTML = ''; // Clear loading
+        if (items.length === 0) {
+            container.innerHTML = '<div class="card" style="text-align: center; padding: 40px; color: var(--text-muted);"><h4>Nothing here?</h4><p>Go upload some tracks to the swarm to get discovered!</p></div>';
+            return;
+        }
         items.forEach(item => {
             const postEl = document.createElement('div');
             postEl.className = 'card post';
