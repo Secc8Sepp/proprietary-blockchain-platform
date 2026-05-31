@@ -122,6 +122,16 @@ function initializeApplicationListeners() {
         loginFileInput.addEventListener('change', handleKeyFileUpload);
         console.log('[INIT] ✓ Login key file upload wired');
     }
+
+    const loginTextarea = document.getElementById('input-login-key');
+    if (loginTextarea) {
+        loginTextarea.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault(); // Prevent adding a newline
+                window.CoreEngine.handleLogin();
+            }
+        });
+    }
     
     // Global Navigation & Search
     const searchInput = document.getElementById('search-input');
@@ -155,8 +165,8 @@ function initializeApplicationListeners() {
                 closeMobileSidebars();
             }
         });
-        console.log('[INIT] ✓ Search input wired');
-    }
+        console.log('[INIT] ✓ Mobile sidebar nav-item click listeners wired');
+    });
 
     const discoverBtn = document.getElementById('nav-discover-tab');
     if (discoverBtn) {
