@@ -15,7 +15,8 @@ const Wallet = require('./core/wallet');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const cors = require('cors');
+const io = new Server(server, { cors: { origin: '*' } });
 
 const USER_DB_FILE = path.join(__dirname, 'user_credentials.json');
 let userCredentials = {};
@@ -74,6 +75,9 @@ if (!fs.existsSync(TMP_DIR)) {
 
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+
+// Enable CORS for mobile application wrappers
+app.use(cors());
 
 // BEST PRACTICE: Serve static files before any other routes to ensure
 // requests for images, CSS, etc., are handled first.

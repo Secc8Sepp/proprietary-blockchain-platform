@@ -49,6 +49,14 @@ window.MeshEngine = {
         this._readyPromise = new Promise(resolve => {
             this._readyResolver = resolve;
         });
+
+        // Fallback: Release the render lock after 3 seconds if socket data is delayed/blocked
+        setTimeout(() => {
+            if (!this._initialRenderComplete && this._readyResolver) {
+                console.warn('[MeshEngine] Initial data sync timed out. Forcing unlock.');
+                this._readyResolver();
+            }
+        }, 3000);
         
         socket.on('connect', () => {
             this.myMeshId = socket.id;

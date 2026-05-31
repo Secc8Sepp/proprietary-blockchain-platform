@@ -2,7 +2,20 @@
 // VOD SOCIAL ENGINE - VIBE OR DIE NETWORK (FULL UNIFIED)
 // ==========================================
 
-const socket = io();
+// Intercept local routes for Mobile Webviews
+const IS_MOBILE_NATIVE = window.location.protocol === 'file:' || window.location.protocol === 'capacitor:';
+const API_BASE = IS_MOBILE_NATIVE ? 'http://10.0.2.2:3000' : window.location.origin; // 10.0.2.2 maps to localhost on Android emulators
+
+const originalFetch = window.fetch;
+window.fetch = async function() {
+    let [resource, config] = arguments;
+    if (typeof resource === 'string' && resource.startsWith('/')) {
+        resource = API_BASE + resource;
+    }
+    return originalFetch(resource, config);
+};
+
+const socket = io(API_BASE);
 
 // Core Application State
 let currentView = 'feed';
@@ -64,6 +77,14 @@ const handleDirectMessage = (msg) => {
 };
 // Maintain assignment to window object for any other potential dynamic calls.
 window.handleDirectMessage = handleDirectMessage;
+
+function isNodeBlocked(publicKey) {
+    try {
+        const blocks = JSON.parse(localStorage.getItem('vod_blocked_nodes') || '[]');
+        return blocks.includes(publicKey);
+    } catch(e) { return false; }
+}
+window.isNodeBlocked = isNodeBlocked;
 
 function toggleLeftSidebar() {
     document.getElementById('side-nav-left').classList.toggle('open');
