@@ -492,9 +492,6 @@ class ProfileService {
         }
         delete profile._trackDetails;
 
-        // --- Final Playlist Enrichment ---
-        allPlaylists[artistPlaylistId].track_order = profile.playlistOrder || profile.uploadedTracks.map(t => t.hash);
-
         const allFeedItems = this.getFeedEngine();
         const trackMap = allFeedItems
             .filter(item => item.type === 'SONG_UPLOAD')
@@ -537,6 +534,9 @@ class ProfileService {
             isAutoPlaylist: true
         };
         allPlaylists[repostsPlaylist.id] = repostsPlaylist;
+
+        // --- Final Playlist Enrichment ---
+        allPlaylists[artistPlaylistId].track_order = profile.playlistOrder || profile.uploadedTracks.map(t => t.hash);
 
         const finalPlaylists = [];
         for (const playlistId in allPlaylists) {

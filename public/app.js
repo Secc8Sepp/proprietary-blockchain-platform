@@ -2026,26 +2026,28 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                     }
 
                     postEl.innerHTML = `
-                        <div class="post-avatar" onclick="inspectTargetNode('${item.sender}')" style="cursor:pointer;"><img src="${getAvatarUrl(item.sender)}"></div>
-                        <div style="flex: 1;">
-                            <div class="post-header">
-                                <span class="post-name" onclick="inspectTargetNode('${item.sender}')">${resolveProfile(item.sender).username}</span>
-                                ${renderBadges(roles)}
-                                <span class="post-meta" style="margin-left:auto;">${item.sender.substring(0,10)}... • ${timeStr}</span>
-                            </div>
-                            ${contentHtml}
-                            <div class="post-interactions">
-                                <button class="interaction-btn" onclick="window.ActionEngine.toggleLike('${item.transactionHash}', '${item.sender}')">🔥 <span id="like-count-${item.transactionHash}">${item.likeCount || 0}</span></button>
-                                <button class="interaction-btn" onclick="toggleReplyBox('${item.transactionHash}')">💬 Reply</button>
-                                ${!isOwner ? `<button class="interaction-btn" onclick="window.WalletEngine.promptSendCoins('${item.sender}')">💸 Tip</button>` : ''}
-                                ${deleteBtn}
-                            </div>
-                            <div class="reply-box" id="reply-box-${item.transactionHash}">
-                                <textarea placeholder="Write a reply..."></textarea>
-                                <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${item.transactionHash}', '${item.sender}', null, ${item.data.audioHash ? `'${item.data.audioHash}'` : 'null'})">Post Reply</button>
-                            </div>
-                            <div id="replies-list-${item.transactionHash}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
-                                ${renderThreadedReplies(item.replies, 0, item.transactionHash, item.type === 'SONG_UPLOAD' ? item.data.audioHash : null)}
+                        <div style="display: flex; gap: 15px;">
+                            <div class="post-avatar" onclick="inspectTargetNode('${item.sender}')" style="cursor:pointer;"><img src="${getAvatarUrl(item.sender)}"></div>
+                            <div style="flex: 1; min-width: 0;">
+                                <div class="post-header">
+                                    <span class="post-name" onclick="inspectTargetNode('${item.sender}')">${resolveProfile(item.sender).username}</span>
+                                    ${renderBadges(roles)}
+                                    <span class="post-meta" style="margin-left:auto;">${item.sender.substring(0,10)}... • ${timeStr}</span>
+                                </div>
+                                ${contentHtml}
+                                <div class="post-interactions">
+                                    <button class="interaction-btn" onclick="window.ActionEngine.toggleLike('${item.transactionHash}', '${item.sender}')">🔥 <span id="like-count-${item.transactionHash}">${item.likeCount || 0}</span></button>
+                                    <button class="interaction-btn" onclick="toggleReplyBox('${item.transactionHash}')">💬 Reply</button>
+                                    ${!isOwner ? `<button class="interaction-btn" onclick="window.WalletEngine.promptSendCoins('${item.sender}')">💸 Tip</button>` : ''}
+                                    ${deleteBtn}
+                                </div>
+                                <div class="reply-box" id="reply-box-${item.transactionHash}">
+                                    <textarea placeholder="Write a reply..."></textarea>
+                                    <button style="padding: 5px 15px; font-size: 11px;" onclick="window.ActionEngine.submitReply('${item.transactionHash}', '${item.sender}', null, ${item.data.audioHash ? `'${item.data.audioHash}'` : 'null'})">Post Reply</button>
+                                </div>
+                                <div id="replies-list-${item.transactionHash}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+                                    ${renderThreadedReplies(item.replies, 0, item.transactionHash, item.type === 'SONG_UPLOAD' ? item.data.audioHash : null)}
+                                </div>
                             </div>
                         </div>
                     `;

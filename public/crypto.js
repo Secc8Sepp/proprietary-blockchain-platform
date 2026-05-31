@@ -19,10 +19,14 @@ async function generateClientSignature(privateKeyHex, messageObject) {
     const EC = window.elliptic.ec;
     const ec = new EC('secp256k1');
     const key = ec.keyFromPrivate(privateKeyHex);
-    // The messageObject is already stringified by CoreEngine. Re-stringifying it creates a signature mismatch.
+
+    // The message to be signed MUST be hashed first (SHA-256). The elliptic library expects a hash digest.
     const msgBytes = new TextEncoder().encode(messageObject);
-    const signature = key.sign(msgBytes);
+    const msgHash = await window.crypto.subtle.digest('SHA-256', msgBytes);
     
+    // The signature is created from the hash.
+    const signature = key.sign(new Uint8Array(msgHash)); // sign() expects a byte array
+
     // Convert from DER format to raw format (r and s concatenated)
     // DER format: 30 [length] 02 [r-length] [r] 02 [s-length] [s]
     // Raw format: [r-padded-to-32] [s-padded-to-32]
