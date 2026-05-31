@@ -103,6 +103,27 @@ function closeChatMode() {
     if (feedTab) switchTab('feed', feedTab);
 }
 
+function switchAuthTab(tabName) {
+    document.getElementById('auth-view-signup').classList.add('hidden');
+    document.getElementById('auth-view-login').classList.add('hidden');
+    document.getElementById('auth-view-advanced').classList.add('hidden');
+
+    document.getElementById('tab-btn-signup').classList.remove('active');
+    document.getElementById('tab-btn-login').classList.remove('active');
+
+    document.getElementById(`auth-view-${tabName}`).classList.remove('hidden');
+    document.getElementById(`tab-btn-${tabName}`).classList.add('active');
+}
+
+function toggleAdvancedLogin() {
+    const standardView = document.getElementById('auth-view-login');
+    const advancedView = document.getElementById('auth-view-advanced');
+    const isHidden = advancedView.classList.contains('hidden');
+
+    standardView.classList.toggle('hidden', isHidden);
+    advancedView.classList.toggle('hidden', !isHidden);
+}
+
 function initializeApplicationListeners() {
     console.log('[INIT] Wiring up event listeners...');
     loadGoogleMapsScript();
@@ -127,9 +148,15 @@ function initializeApplicationListeners() {
     
     const loginBtn = document.getElementById('btn-login-submit');
     if(loginBtn) {
-        loginBtn.addEventListener('click', () => window.CoreEngine.handleLogin());
+        loginBtn.addEventListener('click', () => window.CoreEngine.handlePasswordLogin());
         console.log('[INIT] ✓ Login button wired');
     } else console.warn('[INIT] ✗ btn-login-submit not found');
+
+    const keyLoginBtn = document.getElementById('btn-key-login-submit');
+    if (keyLoginBtn) {
+        keyLoginBtn.addEventListener('click', () => window.CoreEngine.handleKeyLogin());
+        console.log('[INIT] ✓ Key Login button wired');
+    }
 
     const loginFileInput = document.getElementById('login-key-file-input');
     if (loginFileInput) {
@@ -146,6 +173,16 @@ function initializeApplicationListeners() {
             }
         });
     }
+
+    // Auth Tabs
+    const signupTabBtn = document.getElementById('tab-btn-signup');
+    if (signupTabBtn) signupTabBtn.addEventListener('click', () => switchAuthTab('signup'));
+
+    const loginTabBtn = document.getElementById('tab-btn-login');
+    if (loginTabBtn) loginTabBtn.addEventListener('click', () => switchAuthTab('login'));
+
+    // Set initial auth view
+    switchAuthTab('signup');
     
     // Global Navigation & Search
     const searchInput = document.getElementById('search-input');

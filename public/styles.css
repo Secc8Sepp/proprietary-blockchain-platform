@@ -50,6 +50,20 @@ input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 8px 
 .wallet-btn { width: 100%; margin-bottom: 15px; padding: 15px; font-size: 15px; background: #2c3e50; color: #fff; border: 1px solid #45a29e; }
 .wallet-btn:hover { background: #34495e; border-color: var(--primary); }
 
+.auth-tab-btn {
+    flex: 1;
+    padding: 10px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 16px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    text-transform: none;
+    letter-spacing: 0;
+    border-radius: 0;
+}
+.auth-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
 /* ==========================================
    Layout & Navigation
    ========================================== */

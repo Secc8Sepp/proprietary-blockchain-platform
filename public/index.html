@@ -30,20 +30,58 @@
     <div id="auth-screen">
         <div class="auth-card">
             <h1 style="color: var(--primary); font-size: 38px; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 5px;">VOD Social</h1>
-            <p style="color: var(--text-muted); margin-bottom: 35px; font-size: 14px;">Mint a VOD identity or paste your saved wallet key to unlock the network.</p>
+            <p style="color: var(--text-muted); margin-bottom: 35px; font-size: 14px;">Join the decentralized network for artists and fans.</p>
             
-            <div style="text-align: left; margin-bottom: 20px;">
-                <input id="input-signup-username" placeholder="Choose your username..." style="margin-bottom: 12px;" />
-                <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px;">Upload your profile picture</label>
-                <input id="input-signup-avatar" type="file" accept="image/*" style="margin-bottom: 12px;" />
+            <!-- Tab buttons -->
+            <div id="auth-tabs" style="display: flex; border-bottom: 1px solid var(--border); margin-bottom: 20px;">
+                <button id="tab-btn-signup" class="auth-tab-btn active">Sign Up</button>
+                <button id="tab-btn-login" class="auth-tab-btn">Log In</button>
             </div>
-            <button class="wallet-btn" id="btn-signup">Mint & Download Identity</button>
-            <div style="margin-top: 35px; text-align: left; border-top: 1px solid var(--border); padding-top: 20px;">
-                <label for="input-login-key" style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px;">Paste saved wallet JSON</label>
-                <textarea id="input-login-key" rows="4" placeholder="Paste your vod_private_key.json content here" style="width:100%; border:1px solid rgba(69,162,158,0.5); background: rgba(11,12,16,0.9); color:#fff; border-radius:12px; padding:10px;"></textarea>
-                <label for="login-key-file-input" style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px; margin-top: 15px;">Or upload key file</label>
-                <input id="login-key-file-input" type="file" accept=".json" style="margin-bottom: 12px;" />
-                <button class="wallet-btn" id="btn-login-submit" style="margin-top: 12px; width: 100%;">Unlock Profile</button>
+
+            <!-- Signup Form -->
+            <div id="auth-view-signup">
+                <div style="text-align: left; margin-bottom: 20px;">
+                    <label>Username</label>
+                    <input id="input-signup-username" placeholder="Choose your username..." style="margin-bottom: 12px;" />
+                    <label>Password</label>
+                    <input id="input-signup-password" type="password" placeholder="Choose a strong password..." style="margin-bottom: 12px;" />
+                    <label>Confirm Password</label>
+                    <input id="input-signup-password-confirm" type="password" placeholder="Confirm your password..." style="margin-bottom: 12px;" />
+                    <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px;">Upload your profile picture</label>
+                    <input id="input-signup-avatar" type="file" accept="image/*" style="margin-bottom: 12px;" />
+                </div>
+                <button class="wallet-btn" id="btn-signup">Create Account</button>
+            </div>
+
+            <!-- Login Form -->
+            <div id="auth-view-login" class="hidden">
+                <div style="text-align: left; margin-bottom: 20px;">
+                    <label>Username</label>
+                    <input id="input-login-username" placeholder="Your username..." style="margin-bottom: 12px;" />
+                    <label>Password</label>
+                    <input id="input-login-password" type="password" placeholder="Your password..." style="margin-bottom: 12px;" />
+                </div>
+                <button class="wallet-btn" id="btn-login-submit">Log In</button>
+                <p style="font-size: 12px; color: var(--text-muted); margin-top: 20px; cursor: pointer;" onclick="toggleAdvancedLogin()">
+                    Advanced / High Security Login &raquo;
+                </p>
+            </div>
+
+            <!-- Advanced Login (Old Method) -->
+            <div id="auth-view-advanced" class="hidden">
+                 <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 15px;">
+                    Log in using your saved `vod_private_key.json` file. This method never sends your password to the server.
+                </p>
+                <div style="text-align: left; border-top: 1px solid var(--border); padding-top: 20px;">
+                    <label for="input-login-key" style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px;">Paste saved wallet JSON</label>
+                    <textarea id="input-login-key" rows="4" placeholder="Paste your vod_private_key.json content here" style="width:100%; border:1px solid rgba(69,162,158,0.5); background: rgba(11,12,16,0.9); color:#fff; border-radius:12px; padding:10px;"></textarea>
+                    <label for="login-key-file-input" style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px; margin-top: 15px;">Or upload key file</label>
+                    <input id="login-key-file-input" type="file" accept=".json" style="margin-bottom: 12px;" />
+                    <button class="wallet-btn" id="btn-key-login-submit" style="margin-top: 12px; width: 100%;">Unlock Profile with Key</button>
+                </div>
+                 <p style="font-size: 12px; color: var(--text-muted); margin-top: 20px; cursor: pointer;" onclick="toggleAdvancedLogin()">
+                    &laquo; Back to Standard Login
+                </p>
             </div>
             <p id="auth-status" style="font-size: 12px; color: var(--warning); margin-top: 15px; min-height: 15px;"></p>
         </div>

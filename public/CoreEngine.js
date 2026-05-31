@@ -20,10 +20,18 @@ window.CoreEngine = {
 
     async handleSignup() {
         try {
-            const username = document.getElementById('input-signup-username').value.trim();
+            const usernameInput = document.getElementById('input-signup-username');
+            const passwordInput = document.getElementById('input-signup-password');
+            const confirmPasswordInput = document.getElementById('input-signup-password-confirm');
             const avatarFile = document.getElementById('input-signup-avatar').files[0];
 
-            if (!username || !avatarFile) return alert("A username and profile picture are required to mint an identity.");
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value;
+            const confirmPassword = confirmPasswordInput.value;
+
+            if (!username || !password || !avatarFile) return alert("Username, password, and a profile picture are required.");
+            if (password !== confirmPassword) return alert("Passwords do not match.");
+            if (password.length < 8) return alert("Password must be at least 8 characters long.");
 
             const btn = document.getElementById('btn-signup');
             btn.innerText = "Uploading Avatar...";
@@ -32,10 +40,18 @@ window.CoreEngine = {
             const avatarHash = await window.uploadMediaAssetFile(avatarFile);
             if (!avatarHash) throw new Error("Avatar upload failed. Please try again.");
 
-            btn.innerText = "Generating Keys...";
-            const res = await fetch('/api/auth/keygen', { method: 'POST' });
-            if (!res.ok) throw new Error("Server rejected keygen request.");
+            btn.innerText = "Creating Account...";
+            const res = await fetch('/api/auth/register', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
             
+            if (!res.ok) {
+                const errBody = await res.json();
+                throw new Error(errBody.error || `Server responded with status ${res.status}`);
+            }
+
             this.userKeys = await res.json(); 
             
             // The profile is now created *after* the user confirms they saved their key.
@@ -63,7 +79,7 @@ window.CoreEngine = {
 
             if (typeof window.showKeyModal === 'function') {
                 // Reset button before showing modal, in case user closes it by clicking the overlay.
-                btn.innerText = "Mint & Download Identity";
+                btn.innerText = "Create Account";
                 btn.disabled = false;
                 window.showKeyModal(this.userKeys, onKeySavedCallback);
             } else {
@@ -75,7 +91,7 @@ window.CoreEngine = {
         } catch (err) { 
             console.error(err); alert("Signup Error: " + err.message); 
             const btn = document.getElementById('btn-signup');
-            if (btn) { btn.innerText = "Mint & Download Identity"; btn.disabled = false; }
+            if (btn) { btn.innerText = "Create Account"; btn.disabled = false; }
         }
     },
 
@@ -90,7 +106,25 @@ window.CoreEngine = {
         alert("CRITICAL: Your VOD Credentials have been downloaded. Keep this file safe.");
     },
 
-    handleLogin() {
+    async handlePasswordLogin() {
+        const usernameInput = document.getElementById('input-login-username');
+        const passwordInput = document.getElementById('input-login-password');
+        const username = usernameInput.value.trim();
+        const password = passwordInput.value;
+
+        if (!username || !password) return alert("Please enter your username and password.");
+
+        try {
+            const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+            if (!res.ok) {
+                const errBody = await res.json();
+                throw new Error(errBody.error || "Login failed.");
+            }
+            this.userKeys = await res.json();
+            this.unlockApplication(this.userKeys.publicKey);
+        } catch (err) { alert("Login failed: " + err.message); }
+    },
+    handleKeyLogin() {
         const keyStr = document.getElementById('input-login-key').value.trim();
         if (!keyStr) return alert("Please paste your key JSON string.");
         try {
