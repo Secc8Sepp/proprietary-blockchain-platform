@@ -886,3 +886,90 @@ async function extractAndSyncHashes(tx) {
         console.error("Swarm Sync Error:", err);
     }
 }
+
+// Bootstrap initial connections to other Dedicated Servers/PCs
+function bootstrapSwarm() {
+    if (PEERS.length === 0) {
+        console.log("🌐 No peers configured. Running in standalone mode.");
+        return Promise.resolve();
+    }
+
+    console.log("🌐 Bootstrapping to global Swarm...");
+    const bootstrapPromises = PEERS.map(peerUrl => {
+        if (globalThis.fetch) {
+            return fetch(`${peerUrl}/api/network/register`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'ngrok-skip-browser-warning': 'true'
+                },
+                body: JSON.stringify({ peerUrl: `http://localhost:${PORT}` })
+            }).then(res => res.json()).then(data => {
+                if (data.chain && data.chain.length > blockchainService.getChain().length) {
+                    console.log(`📥 Downloaded larger ledger from ${peerUrl}`);
+                    blockchainService.saveChain(data.chain);
+                    profileService.getProfileDirectory(); // Invalidate cache
+                    io.emit('blockchain_update', { type: 'SYSTEM_SYNC' }); // Tell browsers to refresh!
+                    data.chain.forEach(block => {
+                        if (block.transactions && Array.isArray(block.transactions)) {
+                            block.transactions.forEach(extractAndSyncHashes);
+                        }
+                    });
+                }
+            }).catch(e => { // NOSONAR
+                // Log error but don't prevent startup.
+                console.error(`[P2P] Bootstrap failed for peer ${peerUrl}:`, e.message);
+            });
+        }
+        return Promise.resolve();
+    });
+    return Promise.all(bootstrapPromises);
+}
+
+async function startServer() {
+    console.log('🚀 VOD ENGINE INITIALIZING...');
+
+    // 1. Wait for the blockchain to sync with peers before doing anything else.
+    await bootstrapSwarm();
+    console.log('✅ Swarm bootstrap complete.');
+
+    // 2. Listen for new blocks and actively forward them to the cloud/PC
+    blockchainService.on('new_block', (block) => {
+        PEERS.forEach(peerUrl => {
+            if (globalThis.fetch) {
+                fetch(`${peerUrl}/api/network/block`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+                    body: JSON.stringify({ block })
+                }).catch(e => {
+                    console.error(`[P2P] Failed to broadcast block to peer ${peerUrl}:`, e.message);
+                });
+            }
+        });
+        if (block.transactions && block.transactions.length > 0) {
+            block.transactions.forEach(extractAndSyncHashes);
+
+            // Update in-memory state based on new transactions
+            block.transactions.forEach(tx => {
+                if (tx.type === 'PURCHASE_ZINE_RIGHTS' && tx.data) {
+                    const article = dbMemory.zineArticles.find(a => a.id === tx.data.articleId);
+                    if (article && !article.ownersList.includes(tx.sender)) {
+                        article.ownersList.push(tx.sender);
+                        saveDBMemory();
+                        io.emit('zine_update', dbMemory.zineArticles);
+                        console.log(`📰 Article Rights Updated via Ledger: ${article.title} by ${tx.sender}`);
+                    }
+                } else if (tx.type === 'ADMIN_DELETE_USER' && tx.receiver) {
+                    purgeDeletedUserData(tx.receiver);
+                }
+            });
+        }
+    });
+
+    // 3. Only now, after all backend init is done, open the server to connections.
+    server.listen(PORT, () => {
+        console.log(`🚀 VOD ENGINE ONLINE: http://localhost:${PORT}`);
+    });
+}
+
+startServer();
