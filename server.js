@@ -407,18 +407,25 @@ function broadcastSwarmUpdate() {
 io.on('connection', (socket) => {
     console.log(`📡 New Node Connected: ${socket.id}`);
 
+    socket.on('get_initial_data', () => {
+        const serverList = Object.values(dbMemory.servers).map(srv => ({
+            id: srv.id,
+            name: srv.name,
+            channels: Object.values(srv.channels).map(ch => ({ id: ch.id, name: ch.name, locked: ch.locked }))
+        }));
+        socket.emit('server_list', serverList);
+        socket.emit('profile_directory', profileService.getProfileDirectory());
+    });
+
     socket.on('register_node', (data) => {
         if (!data || !data.address) return;
         dbMemory.connectedNodes[socket.id] = { address: data.address, status: 'online', activity: null };
-        socket.emit('profile_directory', profileService.getProfileDirectory());
-        socket.emit('zine_update', dbMemory.zineArticles);
         
         // Sync offline / historical DMs securely to the registered node
         if (dbMemory.directMessages) {
             const myDMs = dbMemory.directMessages.filter(m => m.sender === data.address || m.to === data.address);
             myDMs.forEach(msg => socket.emit('direct_message', msg));
         }
-        
         broadcastSwarmUpdate();
     });
     
@@ -478,16 +485,6 @@ io.on('connection', (socket) => {
             if (data.track !== undefined) node.track = data.track;
             broadcastSwarmUpdate();
         }
-    });
-
-    // --- DISCORD CHAT MODULE ---
-    socket.on('get_servers', () => {
-        const serverList = Object.values(dbMemory.servers).map(srv => ({
-            id: srv.id,
-            name: srv.name,
-            channels: Object.values(srv.channels).map(ch => ({ id: ch.id, name: ch.name, locked: ch.locked }))
-        }));
-        socket.emit('server_list', serverList);
     });
 
     socket.on('create_server', (data) => {

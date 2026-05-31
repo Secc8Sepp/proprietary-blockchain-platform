@@ -54,7 +54,7 @@ window.MeshEngine = {
             this.myMeshId = socket.id;
             console.log(`[MeshEngine] Socket connected: ${socket.id}. Requesting initial data.`);
             // Request data needed for the initial render lock.
-            socket.emit('get_servers');
+            socket.emit('get_initial_data');
             // If we are already logged in (e.g. on a page refresh/reconnect), re-register to get profile data.
             if (window.CoreEngine && window.CoreEngine.userKeys && window.CoreEngine.userKeys.publicKey) {
                 socket.emit('register_node', { address: window.CoreEngine.userKeys.publicKey });
