@@ -205,7 +205,7 @@
                                     <div id="audio-stake-options" style="display:none;">
                                         <input type="number" id="audio-stake-percent" placeholder="% of shares to sell (e.g. 50)" style="margin-bottom:8px;" max="100" min="1"/>
                                         <input type="number" id="audio-stake-price" placeholder="Price per share ($VOD)" style="margin-bottom:8px;" min="1"/>
-                                    </div>
+no                                     </div>
                                 </div>
                             </div>
                         </div>
@@ -543,7 +543,7 @@
     <!-- ==========================================
          GLOBAL LISTEN-TO-EARN BANNER
          ========================================== -->
-    <div class="stream-banner" id="app-footer-banner">
+    <div class="stream-banner hidden" id="app-footer-banner">
         <div class="track-info">
             <img class="track-art" id="global-track-art" src="https://api.dicebear.com/7.x/identicon/svg?seed=vod&backgroundColor=1f2833" alt="Art">
             <div>
@@ -589,22 +589,6 @@
     <script src="/BattleEngines.js"></script>
     <script src="/StemSplitterEngine.js"></script>
     <script src="/app.js"></script>
-
-    <!-- MOBILE BOTTOM NAVIGATION -->
-    <div class="mobile-bottom-nav">
-        <button onclick="switchTab('feed')">
-            <span style="font-size: 20px;">🏠</span><br>Feed
-        </button>
-        <button onclick="switchTab('zine')">
-            <span style="font-size: 20px;">📰</span><br>Zine
-        </button>
-        <button onclick="switchTab('market')">
-            <span style="font-size: 20px;">🛒</span><br>Market
-        </button>
-        <button onclick="switchTab('profile')">
-            <span style="font-size: 20px;">👤</span><br>Profile
-        </button>
-    </div>
 
     <script>
       if ('serviceWorker' in navigator) {

@@ -105,7 +105,11 @@ window.CoreEngine = {
     unlockApplication(publicKey) {
         document.getElementById('auth-screen').classList.add('hidden');
         document.getElementById('app-screen').classList.remove('hidden');
-        
+
+        // Unhide the global player now that user is logged in
+        const playerBanner = document.getElementById('app-footer-banner');
+        if (playerBanner) playerBanner.classList.remove('hidden');
+
         const avatar = document.getElementById('composer-avatar');
         if(avatar) avatar.src = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(publicKey)}&backgroundColor=0b0c10`;
         
