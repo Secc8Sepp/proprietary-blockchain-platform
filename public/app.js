@@ -1544,7 +1544,7 @@ function renderPlaylistCard(playlist, isOwner) {
     const deleteBtn = isOwner && playlist.type === 'listener' ? `<button class="secondary" style="padding: 4px 8px; font-size: 10px;" onclick="window.ActionEngine.deletePlaylist('${playlist.id}')">Delete</button>` : '';
 
     return `
-        <div class="playlist-card" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); padding: 15px; border-radius: 8px; display: flex; align-items: center; gap: 15px;">
+        <div class="playlist-card" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); padding: 15px; border-radius: 8px; display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
             <img src="${coverArt}" style="width: 60px; height: 60px; border-radius: 6px; object-fit: cover;">
             <div style="flex: 1;">
                 <div style="font-size: 16px; font-weight: bold; color: #fff;">${escapeHtml(playlist.title)}</div>
@@ -1552,7 +1552,7 @@ function renderPlaylistCard(playlist, isOwner) {
             </div>
             <div style="display: flex; gap: 10px; align-items: center;">
                 ${deleteBtn}
-                <button style="padding: 8px 15px;" onclick="window.AudioEngine.playQueue(window.currentViewedProfile.playlists.find(p => p.id === '${playlist.id}').tracks, 0)">
+                <button style="padding: 8px 15px;" onclick="window.AudioEngine.playQueue(window.profilePlaylistContext['${playlist.id}'], 0)">
                     ▶ Play
                 </button>
             </div>
@@ -2067,6 +2067,12 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
              }
  
              if (playlistsToRender.length > 0) {
+                // Pre-populate the context object with track data for each playlist to ensure safe access in the onclick handler.
+                playlistsToRender.forEach(p => {
+                    if (p && p.id && p.tracks) {
+                        window.profilePlaylistContext[p.id] = p.tracks;
+                    }
+                });
                  playlistSectionContainer.innerHTML = playlistsToRender.map(p => renderPlaylistCard(p, isOwner)).join('');
              } else {
                  playlistSectionContainer.innerHTML = '<div style="color:var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">No public playlists found.</div>';
