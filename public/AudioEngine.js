@@ -114,6 +114,10 @@ window.AudioEngine = {
             if (indicator) {
                 indicator.innerHTML = `💎 Mining reward received!`; indicator.style.color = 'var(--success)';
             }
+            // After receiving a reward, silently refresh the user's profile to update their balance display.
+            if (window.CoreEngine && window.CoreEngine.userKeys.publicKey && typeof window.fetchUserProfile === 'function') {
+                window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, true);
+            }
         });
     },
 

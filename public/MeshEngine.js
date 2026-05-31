@@ -109,17 +109,28 @@ window.MeshEngine = {
                 'SONG_UPLOAD', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'STORY_POST', 'TEXT_POST', 'DELETE_POST', 'REPOST_POST', 'EDIT_POST_METADATA', 'EDIT_SONG_METADATA', 'SHOUTBOX_POST', 'ADMIN_DELETE_USER'
             ];
 
-            if(payload && (payload.type === 'PROFILE_UPDATE' || payload.type === 'ADMIN_DELETE_USER')) socket.emit('request_profile_directory');
-            
-            // Always update my own profile data silently (for balance changes etc.)
-            if(window.CoreEngine.userKeys.publicKey) window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, true); 
-            
+            if (payload && (payload.type === 'PROFILE_UPDATE' || payload.type === 'ADMIN_DELETE_USER')) {
+                socket.emit('request_profile_directory');
+            }
+
+            // More selectively update the user's own profile data (for balance changes, etc.)
+            // This prevents a firehose of API calls on every single block update.
+            const myKey = window.CoreEngine.userKeys.publicKey;
+            const tx = payload ? payload.transaction : null;
+            if (myKey && tx && (tx.sender === myKey || tx.receiver === myKey)) {
+                window.fetchUserProfile(myKey, true); // Silent update
+            }
+
             // Only reload the entire global feed if a relevant transaction occurred
             if(payload && feedMutatingTypes.includes(payload.type) && window.currentView === 'feed') {
                 window.loadMainGlobalFeed();
             }
-            if(window.currentView === 'profile' && window.viewingUserPublicKey) window.fetchUserProfile(window.viewingUserPublicKey, false);
-            // CROSS-ENGINE COMMUNICATION
+            // If on a profile page, only refresh if the new block contains a transaction directly involving the user being viewed.
+            const viewingKey = window.viewingUserPublicKey;
+            if (window.currentView === 'profile' && viewingKey && tx && (tx.sender === viewingKey || tx.receiver === viewingKey)) {
+                window.fetchUserProfile(viewingKey, false);
+            }
+             // CROSS-ENGINE COMMUNICATION
             if(window.GlobalTagEngine) window.GlobalTagEngine.syncTags(payload);
         });
 

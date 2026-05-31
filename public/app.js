@@ -36,36 +36,29 @@ document.addEventListener('DOMContentLoaded', () => {
     initLocalLedgerNode();
 });
 
-function handleDirectMessage(msg) {
+const handleDirectMessage = (msg) => {
     const otherAddr = msg.sender === window.CoreEngine.userKeys.publicKey ? msg.to : msg.sender;
     if (!window.MeshEngine.dmHistory[otherAddr]) window.MeshEngine.dmHistory[otherAddr] = [];
     msg.roles = msg.roles || [];
-
     const exists = window.MeshEngine.dmHistory[otherAddr].find(m => m.time === msg.time && m.sender === msg.sender);
     if (!exists) {
         window.MeshEngine.dmHistory[otherAddr].push(msg);
     }
-
     if (window.MeshEngine.currentChatServer === '@dms' && window.MeshEngine.currentChatChannel === otherAddr) {
         if (!exists) {
             appendChatMessage(msg);
             const chatLog = document.getElementById('ui-chat-log');
             chatLog.scrollTop = chatLog.scrollHeight;
         }
-        if (msg.sender !== window.CoreEngine.userKeys.publicKey) {
-            socket.emit('message_read', { to: msg.sender, time: msg.time });
-        }
+        if (msg.sender !== window.CoreEngine.userKeys.publicKey) socket.emit('message_read', { to: msg.sender, time: msg.time });
     } else {
         if (!exists) {
             const badge = document.getElementById('ui-inbox-badge');
-            if (badge && msg.sender !== window.CoreEngine.userKeys.publicKey) { 
-                badge.innerText = parseInt(badge.innerText) + 1; 
-                badge.classList.remove('hidden'); 
-            }
+            if (badge && msg.sender !== window.CoreEngine.userKeys.publicKey) { badge.innerText = parseInt(badge.innerText) + 1; badge.classList.remove('hidden'); }
         }
     }
     if (window.MeshEngine.currentChatServer === '@dms') renderDMList();
-}
+};
 // Maintain assignment to window object for any other potential dynamic calls.
 window.handleDirectMessage = handleDirectMessage;
 
@@ -717,50 +710,55 @@ function renderPostContent(item) {
             displayArtist += ` ft. ${escapeHtml(item.data.offPlatformCollaborator)}`;
         }
 
-        // Defer rendering until WaveSurfer is loaded
-        setTimeout(() => {
-            if (!window.WaveSurfer || !window.WaveSurfer.regions) return; 
-            
-            // FIX 1: Use transactionHash for unique DOM targeting
-            const waveformContainer = document.getElementById(`waveform-${transactionHash}`);
-            if (!waveformContainer || waveformContainer.childElementCount > 0) return; 
-
-            const wavesurfer = WaveSurfer.create({
-                container: waveformContainer,
-                waveColor: 'rgba(102, 252, 241, 0.5)',
-                progressColor: 'var(--primary)',
-                cursorColor: '#fff',
-                barWidth: 2,
-                barRadius: 3,
-                barGap: 2,
-                height: 80,
-                backend: 'MediaElement', // FIX 2: Force HTML5 streaming so it doesn't hang on large files
-                mediaControls: false, // Act as visualizer only
-                plugins: [
-                    WaveSurfer.regions.create({
-                        regionsMinLength: 0.1,
-                        dragSelection: false,
-                        color: 'rgba(255, 170, 0, 0.3)',
-                    })
-                ]
-            });
-            
-            // Store by transactionHash to avoid cross-contamination on reposts
-            window.waveformInstances[transactionHash] = wavesurfer;
-
-            const playButton = document.getElementById(`play-btn-${transactionHash}`);
-            if (playButton) {
-                playButton.disabled = true;
-                playButton.onclick = () => {
-                    // Pause any currently playing waveform
-                    if (window.activeWaveform && window.activeWaveform !== wavesurfer) {
-                        window.activeWaveform.pause();
-                    }
-                    wavesurfer.playPause();
-                };
+        // Robustly defer waveform rendering until the WaveSurfer library is fully loaded.
+        // This replaces the unreliable setTimeout with a polling mechanism.
+        const initWaveform = () => {
+             if (!window.WaveSurfer || !window.WaveSurfer.regions) {
+                // If library not ready, poll again.
+                setTimeout(initWaveform, 200);
+                return;
             }
 
-            wavesurfer.on('ready', () => {
+             // Use transactionHash for unique DOM targeting
+             const waveformContainer = document.getElementById(`waveform-${transactionHash}`);
+             if (!waveformContainer || waveformContainer.childElementCount > 0) return;
+
+             const wavesurfer = WaveSurfer.create({
+                 container: waveformContainer,
+                 waveColor: 'rgba(102, 252, 241, 0.5)',
+                 progressColor: 'var(--primary)',
+                 cursorColor: '#fff',
+                 barWidth: 2,
+                 barRadius: 3,
+                 barGap: 2,
+                 height: 80,
+                 backend: 'MediaElement', // Force HTML5 streaming so it doesn't hang on large files
+                 mediaControls: false, // Act as visualizer only
+                 plugins: [
+                     WaveSurfer.regions.create({
+                         regionsMinLength: 0.1,
+                         dragSelection: false,
+                         color: 'rgba(255, 170, 0, 0.3)',
+                     })
+                 ]
+             });
+
+             // Store by transactionHash to avoid cross-contamination on reposts
+             window.waveformInstances[transactionHash] = wavesurfer;
+
+             const playButton = document.getElementById(`play-btn-${transactionHash}`);
+             if (playButton) {
+                 playButton.disabled = true;
+                 playButton.onclick = () => {
+                     // Pause any currently playing waveform
+                     if (window.activeWaveform && window.activeWaveform !== wavesurfer) {
+                         window.activeWaveform.pause();
+                     }
+                     wavesurfer.playPause();
+                 };
+             }
+
+             wavesurfer.on('ready', () => {
                 if (playButton) playButton.disabled = false;
                 wavesurfer.setMute(true); // Mute the visualizer
 
@@ -775,9 +773,9 @@ function renderPostContent(item) {
                 }
 
                 console.log(`[Waveform] Ready: ${transactionHash}`);
-            });
+             });
 
-            wavesurfer.on('play', () => {
+             wavesurfer.on('play', () => {
                 if (playButton) playButton.innerText = '⏸️ Pause';
                 const globalPlayer = document.getElementById('global-audio-player');
 
@@ -798,9 +796,9 @@ function renderPostContent(item) {
                 }
                 
                 window.activeWaveform = wavesurfer;
-            });
+             });
 
-            wavesurfer.on('pause', () => {
+             wavesurfer.on('pause', () => {
                 if (playButton) playButton.innerText = '▶ Play';
                 if (window.activeWaveform === wavesurfer) {
                     window.activeWaveform = null;
@@ -810,10 +808,9 @@ function renderPostContent(item) {
                 if (globalPlayer && window.AudioEngine.activeTrackHash === audioHash && !globalPlayer.paused) {
                     globalPlayer.pause();
                 }
-            });
+             });
 
-            // Sync Scrubbing: If someone clicks on the waveform, skip the master player.
-            wavesurfer.on('seek', (progress) => {
+             wavesurfer.on('seek', (progress) => {
                 const globalPlayer = document.getElementById('global-audio-player');
                 if (globalPlayer && window.AudioEngine.activeTrackHash === audioHash) {
                     const duration = globalPlayer.duration;
@@ -821,13 +818,12 @@ function renderPostContent(item) {
                         globalPlayer.currentTime = progress * duration;
                     }
                 }
-            });
+             });
 
-            // Handle Timed Comments...
-            const timedComments = (item.replies || []).filter(r => r.audioTimestamp !== undefined && r.audioTimestamp !== null);
-            const commentsOverlayContainer = document.getElementById(`comments-overlay-${transactionHash}`);
-            
-            timedComments.forEach(comment => {
+             const timedComments = (item.replies || []).filter(r => r.audioTimestamp !== undefined && r.audioTimestamp !== null);
+             const commentsOverlayContainer = document.getElementById(`comments-overlay-${transactionHash}`);
+
+             timedComments.forEach(comment => {
                 wavesurfer.addRegion({
                     start: comment.audioTimestamp,
                     end: comment.audioTimestamp + 0.1,
@@ -873,27 +869,28 @@ function renderPostContent(item) {
                 commentsOverlayContainer.innerHTML = '';
                 commentsOverlayContainer.appendChild(commentEl);
                 setTimeout(() => commentEl.style.opacity = 1, 10);
-            });
+             });
 
-            wavesurfer.on('region-out', (region) => {
+             wavesurfer.on('region-out', (region) => {
                 const el = commentsOverlayContainer.querySelector('.timed-comment-popup');
                 if (el) {
                     el.style.opacity = 0;
                     setTimeout(() => el.remove(), 300);
                 }
-            });
+             });
 
-            wavesurfer.on('error', (err) => {
+             wavesurfer.on('error', (err) => {
                 console.error(`WaveSurfer error for ${transactionHash}:`, err);
                 if (playButton) {
                     playButton.innerText = '❌ Error';
                     playButton.disabled = true;
                 }
-            });
+             });
 
-            wavesurfer.load(`/tracks/${encodeURIComponent(audioHash)}`);
+             wavesurfer.load(`/tracks/${encodeURIComponent(audioHash)}`);
+        };
 
-        }, 500);
+        initWaveform(); // Start the initialization process.
 
         const artworkUrl = item.data.coverHash ? `/tracks/${item.data.coverHash}` : getAvatarUrl(item.sender);
         let coverHtml = `<img src="${artworkUrl}" style="width: 60px; height: 60px; border-radius: 6px; object-fit: cover;">`;
@@ -2582,37 +2579,6 @@ function sendDM(targetAddress) {
     switchDMChannel(targetAddress);
     document.getElementById('chat-input').focus();
 }
-
-window.handleDirectMessage = (msg) => {
-    const otherAddr = msg.sender === window.CoreEngine.userKeys.publicKey ? msg.to : msg.sender;
-    if (!window.MeshEngine.dmHistory[otherAddr]) window.MeshEngine.dmHistory[otherAddr] = [];
-    msg.roles = msg.roles || [];
-
-    const exists = window.MeshEngine.dmHistory[otherAddr].find(m => m.time === msg.time && m.sender === msg.sender);
-    if (!exists) {
-        window.MeshEngine.dmHistory[otherAddr].push(msg);
-    }
-
-    if (window.MeshEngine.currentChatServer === '@dms' && window.MeshEngine.currentChatChannel === otherAddr) {
-        if (!exists) {
-            appendChatMessage(msg);
-            const chatLog = document.getElementById('ui-chat-log');
-            chatLog.scrollTop = chatLog.scrollHeight;
-        }
-        if (msg.sender !== window.CoreEngine.userKeys.publicKey) {
-            socket.emit('message_read', { to: msg.sender, time: msg.time });
-        }
-    } else {
-        if (!exists) {
-            const badge = document.getElementById('ui-inbox-badge');
-            if (badge && msg.sender !== window.CoreEngine.userKeys.publicKey) { 
-                badge.innerText = parseInt(badge.innerText) + 1; 
-                badge.classList.remove('hidden'); 
-            }
-        }
-    }
-    if (window.MeshEngine.currentChatServer === '@dms') renderDMList();
-};
 
 function sendReaction(msgId) {
     const emoji = prompt("Enter an emoji to react with:");
