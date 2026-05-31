@@ -372,7 +372,6 @@ class ProfileService {
                     if (tx.type === 'PROFILE_UPDATE') {
                         profile.bio = tx.data.bio || profile.bio;
                         if (tx.data.bannerHash) profile.bannerHash = tx.data.bannerHash;
-                        if (tx.data.playlistOrder) profile.playlistOrder = tx.data.playlistOrder;
                         if (tx.data.sectionImages) profile.sectionImages = tx.data.sectionImages;
                         if (tx.data.layoutOrder) profile.layoutOrder = tx.data.layoutOrder;
                         // Allow toggling privacy of main artist playlist
@@ -547,7 +546,7 @@ class ProfileService {
             .filter(item => item.type === 'SONG_UPLOAD' && item.sender === publicKey && !item.isRepost)
             .map(item => item.data.audioHash);
 
-        allPlaylists[artistPlaylistId].track_order = (profile.playlistOrder && profile.playlistOrder.length > 0) ? profile.playlistOrder : artistTrackHashes;
+        allPlaylists[artistPlaylistId].track_order = artistTrackHashes;
 
         const finalPlaylists = [];
         for (const playlistId in allPlaylists) {

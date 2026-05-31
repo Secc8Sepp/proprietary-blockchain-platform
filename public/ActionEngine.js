@@ -388,10 +388,6 @@ window.ActionEngine = {
             let finalSectionBgHash = "";
             if (sectionBgInput && sectionBgInput.files[0]) finalSectionBgHash = await uploadMediaAssetFile(sectionBgInput.files[0]);
             
-            const playlistItems = document.querySelectorAll('.playlist-item');
-            let playlistOrder = null;
-            if (playlistItems.length > 0) playlistOrder = Array.from(playlistItems).map(item => item.dataset.hash);
-            
             const layoutOrder = {
                 left: Array.from(document.getElementById('profile-col-left').children).map(c => c.id),
                 right: Array.from(document.getElementById('profile-col-right').children).map(c => c.id)
@@ -404,7 +400,6 @@ window.ActionEngine = {
             if(finalAvatarHash) profileData.avatarHash = finalAvatarHash;
             if(finalBannerHash) profileData.bannerHash = finalBannerHash;
             if(finalSectionBgHash) profileData.sectionImages = finalSectionBgHash;
-            if(playlistOrder) profileData.playlistOrder = playlistOrder;
             profileData.layoutOrder = layoutOrder;
             
             if(Object.keys(profileData).length > 0) {
