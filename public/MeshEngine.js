@@ -10,6 +10,8 @@ window.MeshEngine = {
     socketIdToAddress: {},
     onlineNodes: [],
     _initialRenderComplete: false,
+    _readyPromise: null,
+    _readyResolver: null,
 
     _tryInitialRender() {
         // This function will only proceed if both profiles and servers are loaded, and it hasn't run before.
@@ -19,6 +21,9 @@ window.MeshEngine = {
 
         console.log('[MeshEngine] Profiles and Servers ready. Performing initial render.');
         this._initialRenderComplete = true;
+
+        // Resolve the promise to unblock any waiting functions
+        if (this._readyResolver) this._readyResolver();
 
         // Now we can safely render everything.
         if (window.loadMainGlobalFeed) window.loadMainGlobalFeed();
@@ -38,6 +43,10 @@ window.MeshEngine = {
     init(socket) {
         this.socket = socket;
         window.socket = socket; 
+
+        this._readyPromise = new Promise(resolve => {
+            this._readyResolver = resolve;
+        });
         
         socket.on('connect', () => { this.myMeshId = socket.id; });
         
@@ -216,6 +225,11 @@ window.MeshEngine = {
             alert("Curation Rights Acquired! Article added to your collection.");
             if(window.CoreEngine.userKeys.publicKey) window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, true);
         });
+    },
+
+    // Public method for other modules to await readiness
+    async onReady() {
+        return this._readyPromise;
     },
 
     broadcastToMesh(type, payload) {

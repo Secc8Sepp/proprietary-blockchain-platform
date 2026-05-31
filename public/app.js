@@ -502,6 +502,12 @@ async function loadMainGlobalFeed() {
     // Guard against race conditions: Do not attempt to render the feed until the profile directory is loaded.
     if (!window.networkProfiles || Object.keys(window.networkProfiles).length === 0) {
         console.warn('[FEED] Profile directory not ready. Deferring feed load.');
+    // New Guard: Wait for the MeshEngine to signal that initial data (profiles, servers) is loaded.
+    // This prevents rendering with incomplete data, regardless of when this function is called.
+    if (window.MeshEngine && typeof window.MeshEngine.onReady === 'function') {
+        await window.MeshEngine.onReady();
+    } else {
+        // Fallback for safety, though MeshEngine should always be present.
         return;
     }
 
@@ -1751,6 +1757,13 @@ function removeTop8User(address) {
 }
 
 async function fetchUserProfile(publicKey, isNavUpdateOnly) {
+    // Guard: Wait for the MeshEngine to signal that the initial profile directory is loaded.
+    // This ensures that functions like resolveProfile() have the data they need to render usernames,
+    // preventing UI flicker or "Node_..." placeholders.
+    if (window.MeshEngine && typeof window.MeshEngine.onReady === 'function') {
+        await window.MeshEngine.onReady();
+    }
+
     try {
         const response = await fetch(`/api/social/profile?publicKey=${encodeURIComponent(publicKey)}`);
         const profile = await response.json();
