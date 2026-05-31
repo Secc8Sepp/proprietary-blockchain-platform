@@ -10,6 +10,7 @@ const socialRoutes = require('./routes/social');
 const feedRoutes = require('./routes/feed');
 const blockchainService = require('./services/blockchainService');
 const profileService = require('./services/profileService');
+const Wallet = require('./core/wallet');
 
 
 const app = express();
@@ -175,6 +176,18 @@ app.get('/tracks/:filename', (req, res, next) => {
 
 // 3. STATIC ASSETS
 app.use('/tmp', express.static(path.join(__dirname, 'tmp')));
+
+// ==========================================
+// AUTHENTICATION ENDPOINTS
+// ==========================================
+app.post('/api/auth/keygen', (req, res) => {
+    try {
+        const keys = Wallet.generateKeyPair();
+        res.status(201).json(keys);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to generate keys: ' + error.message });
+    }
+});
 
 // 4. FALLBACK
 app.get('*', (req, res) => {
