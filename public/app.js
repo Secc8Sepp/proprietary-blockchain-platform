@@ -539,14 +539,16 @@ async function loadMainGlobalFeed() {
         let data;
         if (Array.isArray(responsePayload)) {
             data = responsePayload;
-        } else if (responsePayload && responsePayload.feed && responsePayload.profiles) {
+        } else if (responsePayload && Array.isArray(responsePayload.feed)) {
             data = responsePayload.feed;
-            // Atomically update the profile directory to match the feed's context
-            window.networkProfiles = responsePayload.profiles;
+            if (responsePayload.profiles) {
+                // Atomically update the profile directory to match the feed's context
+                window.networkProfiles = responsePayload.profiles;
+            }
         } else if (responsePayload && responsePayload.error) {
             throw new Error(`Server Error: ${responsePayload.error}`);
         } else {
-            throw new Error("Invalid feed response from server.");
+            throw new Error(`Invalid feed response from server. Payload: ${JSON.stringify(responsePayload)}`);
         }
 
         feedTracks = data.filter(item => item.type === 'SONG_UPLOAD');
@@ -1422,7 +1424,6 @@ async function loadEvents() {
     
     try {
         const res = await fetch('/api/feed');
-        const data = await res.json();
         const payload = await res.json();
         const data = Array.isArray(payload) ? payload : (payload.feed || []);
         
