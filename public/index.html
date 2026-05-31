@@ -6,6 +6,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#66fcf1">
+
+    <!-- iOS PWA/Mobile App Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="VOD Social">
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
     
     <link rel="stylesheet" href="/styles.css">
 
@@ -13,6 +19,10 @@
     <style id="ui-dynamic-user-theme"></style>
 </head>
 <body>
+
+    <div id="offline-banner" class="hidden">You are currently offline. Some features may be unavailable.</div>
+
+    <div id="mobile-overlay" class="hidden" onclick="closeMobileSidebars()"></div>
 
     <!-- ==========================================
          AUTHENTICATION (Web3 Safe Flow)
@@ -71,6 +81,17 @@
                     <span style="font-size: 18px;">💎</span> <span id="ui-balance-display">0</span> $VOD
                 </div>
             </div>
+        </div>
+
+        <!-- Mobile Top Navbar -->
+        <div class="mobile-top-nav">
+            <button id="mobile-menu-btn">☰</button>
+            <div class="mobile-nav-center">
+                <button id="mobile-hot-btn" onclick="switchTab('hotornot')">🔥</button>
+                <button id="mobile-search-btn">🔍</button>
+                <button id="mobile-zine-btn" onclick="switchTab('zine')">✏️</button>
+            </div>
+            <button id="mobile-wallet-btn">💼</button>
         </div>
 
         <div class="container" id="app-container">

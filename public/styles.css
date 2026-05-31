@@ -227,6 +227,29 @@ input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 8px 
 .nav-icon:hover { background: rgba(102, 252, 241, 0.1); border-color: var(--primary); }
 .badge-counter { position: absolute; top: -4px; right: -4px; background: var(--danger); color: white; font-size: 10px; font-weight: bold; padding: 2px 5px; border-radius: 10px; }
 
+/* Offline Status Banner */
+#offline-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: var(--warning);
+    color: #000;
+    text-align: center;
+    padding: 8px;
+    font-size: 14px;
+    z-index: 1500; /* Above navbar, below modals */
+}
+
+/* Mobile-specific UI elements, hidden on desktop */
+.mobile-top-nav { display: none; }
+#mobile-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.6);
+    z-index: 10000;
+    backdrop-filter: blur(2px);
+}
+
 /* Interactive Bulletin Board */
 .bulletin-board { position: relative; width: 100%; height: 600px; background: #2a1f1a url('https://www.transparenttextures.com/patterns/cork-board.png'); border: 12px solid #1a100c; border-radius: 8px; overflow: hidden; box-shadow: inset 0 0 30px rgba(0,0,0,0.9), 0 10px 20px rgba(0,0,0,0.5); cursor: crosshair; }
 .bulletin-flyer { position: absolute; max-width: 140px; box-shadow: 2px 4px 10px rgba(0,0,0,0.7); cursor: default; user-select: none; transition: transform 0.2s; }
@@ -238,7 +261,7 @@ input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 8px 
 .bulletin-flyer:hover { z-index: 50; }
 
 /* Flyer Mode Fullscreen Focus */
-.container.flyer-mode { grid-template-columns: 1fr; max-width: 1600px; }
+.container.flyer-mode { max-width: 1600px; }
 .container.flyer-mode .side-nav, .container.flyer-mode .right-sidebar { display: none !important; }
 .container.flyer-mode .bulletin-board { height: 75vh; border-width: 16px; }
 .container.flyer-mode .bulletin-flyer { max-width: 250px; }
@@ -262,24 +285,52 @@ input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 8px 
 }
 
 @media (max-width: 768px) {
-    /* 0. Adjust container height since navbar is gone */
+    /* 0. Adjust container for new mobile top nav */
     .container {
-        height: 100vh;
+        height: calc(100vh - 55px); /* 55px is mobile top nav height */
+        margin-top: 55px;
     }
 
-    /* 1. Nuke the sidebars from the layout */
-    .navbar,
-    .side-nav,
+    /* 1. Hide desktop navbar, show mobile navbar */
+    .navbar { display: none !important; }
+    .mobile-top-nav {
+        display: flex;
+        position: fixed; top: 0; left: 0; width: 100%;
+        height: 55px;
+        background: rgba(11, 12, 16, 0.8);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--border);
+        justify-content: space-between;
+        align-items: center;
+        padding: 0 10px;
+        z-index: 9997;
+    }
+    .mobile-top-nav button { font-size: 22px; background: transparent; color: var(--text-muted); padding: 5px 10px; }
+    .mobile-top-nav .mobile-nav-center { display: flex; gap: 15px; }
+
+    /* 2. Nuke resizers and prepare sidebars to be togglable overlays */
+    .right-sidebar,
     .resizer {
         display: none !important;
     }
 
-    /* 2. Force the main feed to take up the entire phone screen */
+    .side-nav {
+        position: fixed; top: 0; height: 100vh; z-index: 10001;
+        transition: transform 0.3s ease-in-out; box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        width: 280px; flex-basis: 280px !important;
+    }
+    .side-nav.left { left: 0; transform: translateX(-100%); }
+    .side-nav.left.open { transform: translateX(0); }
+    .side-nav.right { right: 0; transform: translateX(100%); }
+    .side-nav.right.open { transform: translateX(0); }
+
+    /* 3. Force the main feed to take up the entire phone screen */
     .main-content {
         width: 100% !important;
         padding-left: 10px !important;
         padding-right: 10px !important;
         padding-bottom: 165px !important; /* Space for audio player + bottom nav */
+        padding-top: 15px !important;
     }
 
     /* Make audio player mobile-friendly */
@@ -300,7 +351,7 @@ input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 8px 
         display: none;
     }
 
-    /* 3. Bring the bottom nav to life */
+    /* 4. Bring the bottom nav to life */
     .mobile-bottom-nav {
         display: flex;
         position: fixed;

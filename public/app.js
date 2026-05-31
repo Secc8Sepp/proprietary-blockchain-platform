@@ -68,6 +68,27 @@ function handleDirectMessage(msg) {
 // Maintain assignment to window object for any other potential dynamic calls.
 window.handleDirectMessage = handleDirectMessage;
 
+function toggleLeftSidebar() {
+    document.getElementById('side-nav-left').classList.toggle('open');
+    document.getElementById('mobile-overlay').classList.toggle('hidden');
+}
+
+function toggleRightSidebar() {
+    document.getElementById('side-nav-right').classList.toggle('open');
+    document.getElementById('mobile-overlay').classList.toggle('hidden');
+}
+
+function closeMobileSidebars() {
+    document.getElementById('side-nav-left').classList.remove('open');
+    document.getElementById('side-nav-right').classList.remove('open');
+    document.getElementById('mobile-overlay').classList.add('hidden');
+}
+
+function openMobileSearch() {
+    const query = prompt("Search the network (users, hashes, tags):");
+    if (query) executeGlobalSearch(query);
+}
+
 function initializeApplicationListeners() {
     console.log('[INIT] Wiring up event listeners...');
     loadGoogleMapsScript();
@@ -108,6 +129,30 @@ function initializeApplicationListeners() {
         searchInput.addEventListener('keypress', (e) => {
             if(e.key === 'Enter' && e.target.value.trim() !== '') {
                 executeGlobalSearch(e.target.value.trim());
+            }
+        });
+        console.log('[INIT] ✓ Search input wired');
+    }
+
+    // Mobile Top Nav Listeners
+    const mobileSearchBtn = document.getElementById('mobile-search-btn');
+    if (mobileSearchBtn) {
+        mobileSearchBtn.addEventListener('click', openMobileSearch);
+    }
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    if (mobileMenuBtn) {
+        mobileMenuBtn.addEventListener('click', toggleLeftSidebar);
+    }
+    const mobileWalletBtn = document.getElementById('mobile-wallet-btn');
+    if (mobileWalletBtn) {
+        mobileWalletBtn.addEventListener('click', toggleRightSidebar);
+    }
+
+    // Add listeners to close mobile sidebars when a nav item is clicked
+    document.querySelectorAll('.side-nav-item').forEach(item => {
+        item.addEventListener('click', () => {
+            if (window.innerWidth <= 768) {
+                closeMobileSidebars();
             }
         });
         console.log('[INIT] ✓ Search input wired');
@@ -160,10 +205,31 @@ function initializeApplicationListeners() {
     // Presence Idle Detection
     document.addEventListener('mousemove', () => window.CoreEngine.resetIdleTimer());
     document.addEventListener('keypress', () => window.CoreEngine.resetIdleTimer());
-    
+
     const chatInput = document.getElementById('chat-input');
     if (chatInput) {
         chatInput.addEventListener('input', handleChatTyping);
+        chatInput.addEventListener('keypress', handleChatEnter);
+
+        // Dynamically create and append a send button for mobile usability
+        if (chatInput.parentElement && !document.getElementById('btn-send-chat')) {
+            const parent = chatInput.parentElement;
+            // Ensure the parent is a flex container for proper layout
+            parent.style.display = 'flex';
+            parent.style.alignItems = 'center';
+            
+            chatInput.style.flexGrow = '1'; // Make input field take up available space
+
+            const sendBtn = document.createElement('button');
+            sendBtn.id = 'btn-send-chat';
+            sendBtn.innerText = 'Send';
+            sendBtn.title = 'Send Message';
+            sendBtn.style.marginLeft = '10px';
+            sendBtn.style.padding = '8px 15px';
+            sendBtn.addEventListener('click', sendChatMessage);
+            
+            parent.appendChild(sendBtn);
+        }
     }
 
     // Request initial data
@@ -206,6 +272,21 @@ function initializeApplicationListeners() {
 
     // Wire up the handler for server-relayed direct messages
     socket.on('direct_message', handleDirectMessage);
+
+    // --- PWA & Mobile App Readiness: Offline/Online Detection ---
+    window.addEventListener('offline', () => {
+        console.warn('[PWA] Network connection lost. Application is offline.');
+        const banner = document.getElementById('offline-banner');
+        if (banner) banner.classList.remove('hidden');
+    });
+
+    window.addEventListener('online', () => {
+        console.log('[PWA] Network connection restored. Application is online.');
+        const banner = document.getElementById('offline-banner');
+        if (banner) banner.classList.add('hidden');
+        // Optional: Trigger a data refresh now that we're back online
+        if (currentView === 'feed') loadMainGlobalFeed();
+    });
     console.log('[INIT] Event listeners initialized');
 }
 

@@ -806,10 +806,12 @@ window.ActionEngine = {
             await window.CoreEngine.sendSignedTransaction('CREATE_PLAYLIST', '0x00', data);
 
             alert(`Playlist "${title}" created!`);
-            
+
             // Refresh the current user's profile to get the new playlist data for UI updates
-            if (window.fetchUserProfile) window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
-            
+            if (window.fetchUserProfile) {
+                window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
+            }
+
             // Close the modal if it's open
             const modal = document.getElementById('add-to-playlist-modal');
             if (modal) modal.classList.add('hidden');
@@ -824,6 +826,12 @@ window.ActionEngine = {
         try {
             await window.CoreEngine.sendSignedTransaction('ADD_TO_PLAYLIST', '0x00', { playlistId, trackHash });
             alert("Track added to playlist!");
+
+            // Refresh the current user's profile to get the updated playlist data
+            if (window.fetchUserProfile) {
+                window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
+            }
+
             const modal = document.getElementById('add-to-playlist-modal');
             if (modal) modal.classList.add('hidden');
         } catch (err) {
