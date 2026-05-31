@@ -67,13 +67,13 @@
             <div class="nav-wallet">
                 <div class="nav-icon-wrapper">
                     <div class="nav-icon" onclick="toggleModal('requests-modal')" title="Friend Requests">
-                        👥 <span class="badge-counter hidden" id="ui-requests-badge">0</span>
+                        👥 <span class="badge-counter hidden ui-requests-badge">0</span>
                     </div>
                     <div class="nav-icon" onclick="toggleDMPane()" title="Direct Messages">
-                        💬 <span class="badge-counter hidden" id="ui-inbox-badge">0</span>
+                        💬 <span class="badge-counter hidden ui-inbox-badge">0</span>
                     </div>
                     <div class="nav-icon" id="nav-notifications-btn" title="Notifications">
-                        🔔 <span class="badge-counter hidden" id="ui-notif-badge">0</span>
+                        🔔 <span class="badge-counter hidden ui-notif-badge">0</span>
                     </div>
                 </div>
                 <div class="wallet-address" id="ui-user-address">0x...</div>
@@ -90,6 +90,18 @@
                 <button id="mobile-hot-btn" onclick="switchTab('hotornot')">🔥</button>
                 <button id="mobile-search-btn">🔍</button>
                 <button id="mobile-zine-btn" onclick="switchTab('zine')">✏️</button>
+                <button class="mobile-nav-icon-btn" onclick="toggleModal('requests-modal')" title="Friend Requests">
+                    👥
+                    <span class="badge-counter hidden ui-requests-badge">0</span>
+                </button>
+                <button class="mobile-nav-icon-btn" onclick="toggleDMPane()" title="Direct Messages">
+                    💬
+                    <span class="badge-counter hidden ui-inbox-badge">0</span>
+                </button>
+                <button class="mobile-nav-icon-btn" id="mobile-notifications-btn" title="Notifications">
+                    🔔
+                    <span class="badge-counter hidden ui-notif-badge">0</span>
+                </button>
             </div>
             <button id="mobile-wallet-btn">💼</button>
         </div>

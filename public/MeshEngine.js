@@ -42,7 +42,13 @@ window.MeshEngine = {
 
         socket.on('profile_directory', (dir) => {
             window.networkProfiles = dir;
-            if(window.currentView === 'feed') window.loadMainGlobalFeed();
+
+            // Now that we have the profiles, we can safely render everything.
+            if (window.loadMainGlobalFeed) window.loadMainGlobalFeed();
+            if (window.fetchUserProfile && window.CoreEngine.userKeys.publicKey) {
+                window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, true); 
+            }
+
             window.renderServerList();
             if(this.currentChatServer === '@dms') window.renderDMList();
             if(typeof window.renderNewUsers === 'function') window.renderNewUsers();
@@ -89,11 +95,10 @@ window.MeshEngine = {
 
             window.pendingCrewRequests.push({ from: data.from });
             
-            const badge = document.getElementById('ui-requests-badge');
-            if (badge) {
+            document.querySelectorAll('.ui-requests-badge').forEach(badge => {
                 badge.innerText = window.pendingCrewRequests.length;
                 badge.classList.remove('hidden');
-            }
+            });
 
             if (typeof window.renderCrewRequests === 'function') {
                 window.renderCrewRequests();

@@ -41,6 +41,11 @@ window.NotificationEngine = {
         if (notifBtn) {
             notifBtn.addEventListener('click', () => this.togglePanel());
         }
+        // Also listen to the mobile button
+        const mobileNotifBtn = document.getElementById('mobile-notifications-btn');
+        if (mobileNotifBtn) {
+            mobileNotifBtn.addEventListener('click', () => this.togglePanel());
+        }
     },
 
     add(payload) {
@@ -61,8 +66,7 @@ window.NotificationEngine = {
     },
 
     updateBadge() {
-        const badge = document.getElementById('ui-notif-badge');
-        if (badge) {
+        document.querySelectorAll('.ui-notif-badge').forEach(badge => {
             if (this.unreadCount > 0) {
                 badge.innerText = this.unreadCount;
                 badge.classList.remove('hidden');
@@ -70,7 +74,7 @@ window.NotificationEngine = {
                 badge.innerText = '0';
                 badge.classList.add('hidden');
             }
-        }
+        });
     },
 
     togglePanel() {

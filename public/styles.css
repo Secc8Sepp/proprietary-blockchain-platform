@@ -274,6 +274,27 @@ input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 8px 
 .article-snippet { color: var(--text-muted); font-size: 13px; line-height: 1.5; margin: 15px 0; flex-grow: 1; white-space: pre-wrap; }
 .article-meta { font-size: 11px; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; }
 
+/* Grid Layouts for Profile, Zine, and Market */
+#profile-dashboard-grid {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 25px;
+    align-items: start;
+    margin-top: 25px;
+}
+
+#ui-zine-articles, #ui-zine-owned {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+#ui-market-items {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
 /* Events/Map Positioning */
 .events-view-container { position: relative; width: 100%; height: 600px; border-radius: 12px; overflow: hidden; }
 #events-3d-map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
@@ -305,8 +326,12 @@ input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 8px 
         padding: 0 10px;
         z-index: 9997;
     }
-    .mobile-top-nav button { font-size: 22px; background: transparent; color: var(--text-muted); padding: 5px 10px; }
-    .mobile-top-nav .mobile-nav-center { display: flex; gap: 15px; }
+    .mobile-top-nav button { font-size: 22px; background: transparent; color: var(--text-muted); padding: 5px 10px; border: none; }
+    .mobile-nav-icon-btn {
+        position: relative;
+        padding: 5px !important;
+    }
+    .mobile-top-nav .mobile-nav-center { display: flex; gap: 15px; align-items: center; }
 
     /* 2. Nuke resizers and prepare sidebars to be togglable overlays */
     .right-sidebar,
@@ -331,6 +356,25 @@ input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 8px 
         padding-right: 10px !important;
         padding-bottom: 90px !important; /* Space for the global audio player */
         padding-top: 15px !important;
+    }
+
+    /* Reduce padding on cards for more horizontal space on mobile */
+    .card {
+        padding: 15px;
+    }
+
+    /* Switch multi-column grids to single column on mobile */
+    #profile-dashboard-grid,
+    #ui-zine-articles,
+    #ui-zine-owned,
+    #ui-market-items {
+        grid-template-columns: 1fr;
+    }
+
+    /* Allow composer, post headers, and interaction rows to wrap on small screens */
+    .composer-actions, .post-header, .post-interactions {
+        flex-wrap: wrap;
+        gap: 10px;
     }
 
     /* Make audio player mobile-friendly */

@@ -245,29 +245,6 @@ function initializeApplicationListeners() {
     // Request initial data
     socket.emit('get_servers');
     socket.emit('get_zine_data');
-    
-    socket.on('profile_directory', (directory) => {
-        window.networkProfiles = directory;
-        renderNewUsers();
-        
-        if (currentView === 'feed') loadMainGlobalFeed();
-        if (window.MeshEngine && window.MeshEngine.currentChatServer) {
-            if (window.MeshEngine.currentChatServer === '@dms') renderDMList();
-            else switchChannel(window.MeshEngine.currentChatServer, window.MeshEngine.currentChatChannel);
-        }
-    });
-    socket.on('stake_request_notification', (data) => {
-        try {
-            if (!window.CoreEngine || !window.CoreEngine.userKeys) return;
-            if (data.to === window.CoreEngine.userKeys.publicKey) {
-                const title = 'New Stake Request';
-                const body = `Incoming stake request from ${data.from} for ${data.shareCount}% of asset ${data.assetHash} at ${data.pricePerShare} $VOD each.`;
-                alert(`${title}\n\n${body}`);
-                // Optionally trigger a UI refresh
-                fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
-            }
-        } catch (e) {}
-    });
     socket.on('stake_request_response', (data) => {
         try {
             if (!window.CoreEngine || !window.CoreEngine.userKeys) return;
@@ -882,14 +859,14 @@ function renderPostContent(item) {
                 </div>
 
                 <div style="display: flex; gap: 10px; margin-bottom: 10px; align-items: stretch;">
-                    <button id="play-btn-${transactionHash}" style="background:#66fcf1; color:#000; padding:8px 15px; flex-grow: 1;">
+                    <button id="play-btn-${transactionHash}" style="background:#66fcf1; color:#000; padding:8px 15px;">
                         ▶ Play
                     </button>
                     <button class="secondary" style="padding: 8px; aspect-ratio: 1 / 1; flex-shrink: 0; font-size: 16px; line-height: 1;" title="Add to Playlist" onclick="window.ActionEngine.promptAddToPlaylist('${item.data.audioHash}')">
                         +
                     </button>
                 </div>
-                <div style="display: flex; gap: 10px;">
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                     ${listingHtml}
                     <button class="secondary" style="padding:8px 15px; font-size: 12px;" onclick="window.ActionEngine.requestSongShare('${item.data.audioHash}', '${item.sender}')">
                         📈 Request Stake
@@ -2598,11 +2575,10 @@ function resetNotifBadge() {
 }
 
 function resetInboxBadge() {
-    const badge = document.getElementById('ui-inbox-badge');
-    if (badge) {
+    document.querySelectorAll('.ui-inbox-badge').forEach(badge => {
         badge.innerText = "0";
         badge.classList.add('hidden');
-    }
+    });
 }
 
 function toggleModal(id) {
@@ -2620,11 +2596,10 @@ window.renderCrewRequests = function() {
     if (!list) return;
     if (window.pendingCrewRequests.length === 0) {
         list.innerHTML = '<div style="color: var(--text-muted); font-size: 13px; text-align: center;">No pending requests.</div>';
-        const badge = document.getElementById('ui-requests-badge');
-        if (badge) {
+        document.querySelectorAll('.ui-requests-badge').forEach(badge => {
             badge.innerText = '0';
             badge.classList.add('hidden');
-        }
+        });
         return;
     }
     list.innerHTML = window.pendingCrewRequests.map(req => {

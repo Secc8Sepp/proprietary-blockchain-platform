@@ -119,8 +119,6 @@ window.CoreEngine = {
         
         if (window.socket) window.socket.emit('register_node', { address: publicKey });
 
-        if (typeof window.loadMainGlobalFeed === 'function') window.loadMainGlobalFeed();
-        if (typeof window.fetchUserProfile === 'function') window.fetchUserProfile(publicKey, true); 
         if (typeof window.subscribeToPush === 'function') window.subscribeToPush(publicKey);
         if (typeof window.syncFullChain === 'function') window.syncFullChain();
     },
