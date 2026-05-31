@@ -1560,30 +1560,6 @@ function renderPlaylistCard(playlist, isOwner) {
     `;
 }
 
-function renderPlaylistCard(playlist, isOwner) {
-    if (!playlist || !playlist.tracks) return '';
-    const trackCount = playlist.tracks.length;
-    const coverArt = playlist.tracks.length > 0 && playlist.tracks[0].data.coverHash 
-        ? `/tracks/${playlist.tracks[0].data.coverHash}` 
-        : getAvatarUrl(playlist.user_id);
-
-    const deleteBtn = isOwner && playlist.type === 'listener' ? `<button class="secondary" style="padding: 4px 8px; font-size: 10px;" onclick="window.ActionEngine.deletePlaylist('${playlist.id}')">Delete</button>` : '';
-
-    return `
-        <div class="playlist-card" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); padding: 15px; border-radius: 8px; display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
-            <img src="${coverArt}" style="width: 60px; height: 60px; border-radius: 6px; object-fit: cover;">
-            <div style="flex: 1;">
-                <div style="font-size: 16px; font-weight: bold; color: #fff;">${escapeHtml(playlist.title)}</div>
-                <div style="font-size: 12px; color: var(--text-muted);">${trackCount} tracks</div>
-            </div>
-            <div style="display: flex; gap: 10px; align-items: center;">
-                ${deleteBtn}
-                <button style="padding: 8px 15px;" onclick="window.AudioEngine.playQueue(window.currentViewedProfile.playlists.find(p => p.id === '${playlist.id}').tracks, 0)">▶ Play</button>
-            </div>
-        </div>
-    `;
-}
-
 
 function toggleInlineEdit() {
     const displayMode = document.getElementById('profile-display-mode');

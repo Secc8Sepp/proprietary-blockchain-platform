@@ -20,61 +20,38 @@ window.WalletEngine = {
         this.promptSendCoins(recipient);
     },
 
-    async executeAdminDelete() {
-        if (!window.CoreEngine.userKeys.publicKey) return alert("Must be logged in.");
-        const targetInput = document.getElementById('input-delete-recipient');
-        const target = targetInput.value.trim();
-
-        if (!target) return alert("Please enter the target public key to delete.");
-        if (target === window.CoreEngine.userKeys.publicKey) return alert("You cannot delete yourself.");
-        if (!confirm(`ARE YOU ABSOLUTELY SURE?\n\nThis will delete the user with public key:\n${target}\n\nThis action is permanent and cannot be undone.`)) return;
-
-        try {
-            console.log(`[UI] Admin Delete requested for target: ${target}`);
-            // The receiver of an ADMIN_DELETE_USER transaction is the user to be deleted.
-            const response = await window.CoreEngine.sendSignedTransaction('ADMIN_DELETE_USER', target, {});
-            console.log(`[UI] Delete response:`, response);
-            alert(`✅ Successfully deleted Node_${target.substring(0,6)}! They have been removed from the network. Refreshing...`);
-            
-            targetInput.value = '';
-
-            // Force refresh of profiles and feed
-            if (typeof window.fetchUserProfile === 'function') {
-                window.fetchUserProfile(target, false);
-            }
-            if (typeof window.loadMainGlobalFeed === 'function') {
-                window.loadMainGlobalFeed();
-            }
-        } catch(err) { 
-            console.error(`[UI] Admin Delete failed:`, err);
-            alert("❌ Admin Delete failed: " + err.message); 
-        }
-    },
-
-    async promptAdminDeleteProfile(targetPublicKey) {
+    async promptAdminDeleteUser(targetPublicKey) {
         if (!window.CoreEngine.userKeys.publicKey) return alert("Must be logged in.");
         if (!window.currentUserIsAdmin) return alert("Only the admin can delete profiles.");
-        if (!targetPublicKey || typeof targetPublicKey !== 'string') return alert("No profile selected to delete.");
+        if (!targetPublicKey || typeof targetPublicKey !== 'string' || !targetPublicKey.trim()) return alert("No target user specified for deletion.");
 
         const target = targetPublicKey.trim();
-        if (!target) return alert("No profile selected to delete.");
         if (target === window.CoreEngine.userKeys.publicKey) return alert("You cannot delete your own admin profile.");
-        if (!confirm(`ARE YOU ABSOLUTELY SURE?\n\nThis will delete the profile for:\n${target}\n\nThis action is permanent and cannot be undone.`)) return;
+        
+        const targetProfile = window.resolveProfile(target);
+        if (!confirm(`ARE YOU ABSOLUTELY SURE?\n\nThis will delete the user ${targetProfile.username} (${target.substring(0,10)}...). This action is permanent and cannot be undone.`)) return;
 
         try {
-            console.log(`[UI] Admin Delete Profile requested for target: ${target}`);
             await window.CoreEngine.sendSignedTransaction('ADMIN_DELETE_USER', target, {});
-            alert(`✅ Successfully deleted Node_${target.substring(0,6)}! Refreshing...`);
+            alert(`✅ Successfully deleted user! They have been removed from the network. Refreshing...`);
 
-            if (typeof window.fetchUserProfile === 'function') {
-                window.fetchUserProfile(target, false);
+            // If we are on the deleted user's profile, navigate away.
+            if (window.currentView === 'profile' && window.viewingUserPublicKey === target) {
+                const feedTab = document.querySelector('.side-nav-item');
+                if (feedTab) window.switchTab('feed', feedTab);
             }
+            
+            // Clear input if it exists on the page
+            const targetInput = document.getElementById('input-delete-recipient');
+            if (targetInput) targetInput.value = '';
+
+            // Force refresh of data
             if (typeof window.loadMainGlobalFeed === 'function') {
                 window.loadMainGlobalFeed();
             }
         } catch(err) {
-            console.error(`[UI] Admin Delete Profile failed:`, err);
-            alert("❌ Admin Delete Profile failed: " + err.message);
+            console.error(`[UI] Admin Delete failed:`, err);
+            alert("❌ Admin Delete failed: " + err.message);
         }
     },
 

@@ -18,11 +18,6 @@ class FeedController {
             type = (type || '').toString().trim().toUpperCase();
             console.log('[FeedController] submitInteraction payload:', { sender, receiver, type, data, timestamp, signature });
 
-            // Explicitly verify signature at the controller level to provide clear errors.
-            if (!blockchainService.verifySignature(sender, { sender, receiver, type, data, timestamp }, signature)) {
-                return res.status(400).json({ error: "Invalid transaction signature. Verification failed at controller." });
-            }
-
             // Whitelist all market and media transaction types
             if (!ALL_FEED_ACTIONS.includes(type)) {
                 console.error(`[FeedController] Invalid feed operation type: ${type} (typeof ${typeof type})`);

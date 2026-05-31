@@ -205,7 +205,7 @@
                         </div>
                         <div class="profile-actions">
                             <button class="secondary" id="btn-profile-message" style="display: none;" onclick="sendDM(viewingUserPublicKey)">💬 Message</button>
-                            <button class="secondary" id="btn-admin-delete-profile" style="display: none;" onclick="window.WalletEngine.promptAdminDeleteProfile(viewingUserPublicKey)">🗑️ Delete Profile</button>
+                            <button class="secondary" id="btn-admin-delete-profile" style="display: none;" onclick="window.WalletEngine.promptAdminDeleteUser(window.viewingUserPublicKey)">🗑️ Delete Profile</button>
                             <button class="secondary" id="btn-toggle-edit" onclick="toggleInlineEdit()">⚙️ Edit Profile</button>
                             <button id="btn-profile-follow">Lock In Crew</button>
                         </div>
@@ -377,7 +377,7 @@
                         <h4 style="color: var(--danger); margin-top: 20px;">🛑 Admin Delete User</h4>
                         <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">Permanently remove a user from the network. They will be marked as deleted and will not appear in feeds, profiles, or any public views. This action cannot be undone.</p>
                         <input id="input-delete-recipient" placeholder="Paste the exact User Public Key to delete" style="margin-bottom: 12px;" />
-                        <button style="background: var(--danger); color: #fff; width: 100%;" onclick="window.WalletEngine.executeAdminDelete()">🗑️ Delete User From Ledger</button>
+                        <button style="background: var(--danger); color: #fff; width: 100%;" onclick="window.WalletEngine.promptAdminDeleteUser(document.getElementById('input-delete-recipient').value)">🗑️ Delete User From Ledger</button>
                     </div>
 
                     <h4 style="margin-top: 20px;">🤝 Incoming Stake Requests</h4>
