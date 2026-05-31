@@ -413,11 +413,18 @@ io.on('connection', (socket) => {
     console.log(`📡 New Node Connected: ${socket.id}`);
 
     socket.on('get_initial_data', () => {
-        const serverList = Object.values(dbMemory.servers).map(srv => ({
-            id: srv.id,
-            name: srv.name,
-            channels: Object.values(srv.channels).map(ch => ({ id: ch.id, name: ch.name, locked: ch.locked }))
-        }));
+        const senderNode = dbMemory.connectedNodes[socket.id];
+        const address = senderNode ? senderNode.address : null;
+
+        const serverList = Object.values(dbMemory.servers)
+            .filter(srv => !srv.isPrivate || srv.owner === address || (srv.allowedUsers && srv.allowedUsers.includes(address)))
+            .map(srv => ({
+                id: srv.id,
+                name: srv.name,
+                owner: srv.owner,
+                isPrivate: srv.isPrivate,
+                channels: Object.values(srv.channels).map(ch => ({ id: ch.id, name: ch.name, locked: ch.locked }))
+            }));
         socket.emit('server_list', serverList);
         socket.emit('profile_directory', profileService.getProfileDirectory());
     });
@@ -497,23 +504,89 @@ io.on('connection', (socket) => {
         if (!senderNode || !senderNode.address) return console.error(`[SECURITY] 'create_server' from unauthenticated socket ${socket.id}`);
 
         if (!data || !data.serverName) return;
-        const { serverName } = data;
+        const { serverName, isPrivate } = data;
         const serverId = 'srv_' + Date.now() + Math.floor(Math.random()*1000);
         const generalChannelId = 'ch_' + Date.now();
         dbMemory.servers[serverId] = {
             id: serverId,
             name: serverName,
             owner: senderNode.address,
+            isPrivate: !!isPrivate,
+            allowedUsers: [senderNode.address],
             channels: {}
         };
         dbMemory.servers[serverId].channels[generalChannelId] = { id: generalChannelId, name: 'general', locked: false, messages: [] };
         saveDBMemory();
         
-        io.emit('server_created', {
+        const srvPayload = {
             id: serverId,
             name: serverName,
+            owner: senderNode.address,
+            isPrivate: !!isPrivate,
             channels: [{ id: generalChannelId, name: 'general', locked: false }]
-        });
+        };
+
+        if (isPrivate) {
+            socket.emit('server_created', srvPayload);
+        } else {
+            io.emit('server_created', srvPayload);
+        }
+    });
+
+    socket.on('delete_server', (serverId) => {
+        const senderNode = dbMemory.connectedNodes[socket.id];
+        if (!senderNode) return;
+        const server = dbMemory.servers[serverId];
+        if (server && server.owner === senderNode.address) {
+            delete dbMemory.servers[serverId];
+            saveDBMemory();
+            io.emit('server_deleted', serverId);
+        }
+    });
+
+    socket.on('invite_to_server', (data) => {
+        const { serverId, targetAddress } = data;
+        const senderNode = dbMemory.connectedNodes[socket.id];
+        if (!senderNode) return;
+        const server = dbMemory.servers[serverId];
+        if (server && server.owner === senderNode.address) {
+            if (!server.allowedUsers) server.allowedUsers = [];
+            if (!server.allowedUsers.includes(targetAddress)) {
+                server.allowedUsers.push(targetAddress);
+                saveDBMemory();
+            }
+            const targetSocketId = Object.keys(dbMemory.connectedNodes).find(
+                id => dbMemory.connectedNodes[id].address === targetAddress
+            );
+            if (targetSocketId) {
+                io.to(targetSocketId).emit('server_created', {
+                    id: server.id,
+                    name: server.name,
+                    owner: server.owner,
+                    isPrivate: server.isPrivate,
+                    channels: Object.values(server.channels).map(ch => ({ id: ch.id, name: ch.name, locked: ch.locked }))
+                });
+            }
+        }
+    });
+
+    socket.on('kick_from_server', (data) => {
+        const { serverId, targetAddress } = data;
+        const senderNode = dbMemory.connectedNodes[socket.id];
+        if (!senderNode) return;
+        const server = dbMemory.servers[serverId];
+        if (server && server.owner === senderNode.address) {
+            if (server.allowedUsers) {
+                server.allowedUsers = server.allowedUsers.filter(a => a !== targetAddress);
+                saveDBMemory();
+            }
+            const targetSocketId = Object.keys(dbMemory.connectedNodes).find(
+                id => dbMemory.connectedNodes[id].address === targetAddress
+            );
+            if (targetSocketId) {
+                io.to(targetSocketId).emit('server_deleted', serverId);
+            }
+        }
     });
 
     socket.on('create_channel', (data) => {
@@ -536,6 +609,10 @@ io.on('connection', (socket) => {
         
         const server = dbMemory.servers[serverId];
         if (server && server.channels[channelId]) {
+            if (server.isPrivate && server.owner !== senderNode.address && !(server.allowedUsers && server.allowedUsers.includes(senderNode.address))) {
+                return socket.emit('chat_error', { message: 'Access Denied: You are not invited to this private server.' });
+            }
+
             const channel = server.channels[channelId];
             
             // --- 3.2 Token-Gated Backrooms ---
@@ -573,6 +650,10 @@ io.on('connection', (socket) => {
         const { serverId, channelId, text } = data;
         const server = dbMemory.servers[serverId];
         if (server && server.channels[channelId]) {
+            if (server.isPrivate && server.owner !== senderNode.address && !(server.allowedUsers && server.allowedUsers.includes(senderNode.address))) {
+                return;
+            }
+
             const chain = blockchainService.getChain();
             const adminAddress = blockchainService.getAdminAddress(chain);
             const balance = blockchainService.calculateBalance(senderNode.address, chain);

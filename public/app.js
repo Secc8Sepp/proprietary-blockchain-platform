@@ -1224,7 +1224,7 @@ function renderServerList() {
     const addBtnHTML = `<div class="server-icon" onclick="promptCreateServer()" style="background: rgba(102, 252, 241, 0.1); color: var(--text-muted); font-size: 24px;" title="Create Server">+</div>`;
     
     let html = '';
-    window.MeshEngine.serversData.forEach(srv => {
+    (window.MeshEngine.serversData || []).forEach(srv => {
         const isActive = srv.id === window.MeshEngine.currentChatServer ? 'active' : '';
         const seed = encodeURIComponent(srv.id);
         html += `<div class="server-icon ${isActive}" onclick="switchServer('${srv.id}')" title="${escapeHtml(srv.name)}">
@@ -1268,10 +1268,19 @@ function switchServer(serverId) {
     if(addChBtn) addChBtn.style.display = 'inline-block';
     if(newDmBtn) newDmBtn.style.display = 'none';
 
-    const srv = window.MeshEngine.serversData.find(s => s.id === serverId);
+    const srv = (window.MeshEngine.serversData || []).find(s => s.id === serverId);
     if (!srv) return;
     
-    document.getElementById('ui-active-server-name').innerText = srv.name;
+    let adminHtml = '';
+    if (srv.owner === window.CoreEngine.userKeys.publicKey) {
+        adminHtml = `
+            <span style="color: var(--warning); cursor: pointer; font-size: 11px; margin-left: 10px;" onclick="promptInviteToServer('${srv.id}')" title="Invite User">➕ Invite</span>
+            <span style="color: var(--danger); cursor: pointer; font-size: 11px; margin-left: 10px;" onclick="promptKickFromServer('${srv.id}')" title="Kick User">👢 Kick</span>
+            <span style="color: var(--danger); cursor: pointer; font-size: 11px; margin-left: 10px;" onclick="deleteServer('${srv.id}')" title="Delete Server">🗑️ Delete Server</span>
+        `;
+    }
+
+    document.getElementById('ui-active-server-name').innerHTML = `${escapeHtml(srv.name)}${adminHtml}`;
     renderChannelList(srv);
     
     if (srv.channels && srv.channels.length > 0) {
@@ -1346,7 +1355,7 @@ function switchChannel(serverId, channelId) {
     window.MeshEngine.currentChatServer = serverId;
     window.MeshEngine.currentChatChannel = channelId;
     
-    const srv = window.MeshEngine.serversData.find(s => s.id === serverId);
+    const srv = (window.MeshEngine.serversData || []).find(s => s.id === serverId);
     if (!srv) return;
     
     renderChannelList(srv); 
@@ -1406,7 +1415,50 @@ function promptCreateServer() {
     if(!window.CoreEngine.userKeys.publicKey) return alert("Please unlock your identity to create a server.");
     const serverName = prompt("Enter new Server Name:");
     if (serverName && serverName.trim()) {
-        socket.emit('create_server', { serverName: serverName.trim(), address: window.CoreEngine.userKeys.publicKey });
+        const isPrivate = confirm("Make this server private? (Only invited users can see it)");
+        socket.emit('create_server', { serverName: serverName.trim(), address: window.CoreEngine.userKeys.publicKey, isPrivate });
+    }
+}
+
+function deleteServer(serverId) {
+    if (confirm("Are you sure you want to delete this server? This cannot be undone.")) {
+        socket.emit('delete_server', serverId);
+    }
+}
+
+function promptInviteToServer(serverId) {
+    const username = prompt("Enter the exact username of the person to invite:");
+    if (!username) return;
+    let targetAddr = null;
+    for (const [addr, profile] of Object.entries(networkProfiles)) {
+        if (profile.username.toLowerCase() === username.toLowerCase()) {
+            targetAddr = addr;
+            break;
+        }
+    }
+    if (targetAddr) {
+        socket.emit('invite_to_server', { serverId, targetAddress: targetAddr });
+        alert("User invited!");
+    } else {
+        alert("User not found on the network.");
+    }
+}
+
+function promptKickFromServer(serverId) {
+    const username = prompt("Enter the exact username of the person to kick:");
+    if (!username) return;
+    let targetAddr = null;
+    for (const [addr, profile] of Object.entries(networkProfiles)) {
+        if (profile.username.toLowerCase() === username.toLowerCase()) {
+            targetAddr = addr;
+            break;
+        }
+    }
+    if (targetAddr) {
+        socket.emit('kick_from_server', { serverId, targetAddress: targetAddr });
+        alert("User kicked!");
+    } else {
+        alert("User not found on the network.");
     }
 }
 

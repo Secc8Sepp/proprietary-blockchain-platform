@@ -3,7 +3,7 @@ window.MeshEngine = {
     myMeshId: null, 
     meshConnections: {}, 
     dataChannels: {},
-    serversData: [],
+    serversData: null,
     currentChatServer: null,
     currentChatChannel: null,
     dmHistory: {},
@@ -34,7 +34,7 @@ window.MeshEngine = {
         }
 
         window.renderServerList();
-        if (!this.currentChatServer) {
+        if (!this.currentChatServer && this.serversData && this.serversData.length > 0) {
             window.switchServer(this.serversData[0].id);
         }
 
@@ -90,7 +90,14 @@ window.MeshEngine = {
         socket.on('server_list', (servers) => {
             // Just store the data and attempt the initial render.
             this.serversData = servers;
-            this._tryInitialRender();
+            if (this._initialRenderComplete) {
+                window.renderServerList();
+                if (!this.currentChatServer && this.serversData.length > 0) {
+                    window.switchServer(this.serversData[0].id);
+                }
+            } else {
+                this._tryInitialRender();
+            }
         });
 
         socket.on('profile_directory', (dir) => {
@@ -152,13 +159,30 @@ window.MeshEngine = {
         });
 
         socket.on('server_created', (server) => {
-            this.serversData.push(server);
+            if (!this.serversData) this.serversData = [];
+            // Prevent duplicates if already added
+            if (!this.serversData.find(s => s.id === server.id)) {
+                this.serversData.push(server);
+                window.renderServerList();
+            }
+        });
+
+        socket.on('server_deleted', (serverId) => {
+            if (!this.serversData) return;
+            this.serversData = this.serversData.filter(s => s.id !== serverId);
+            if (this.currentChatServer === serverId) {
+                if (this.serversData.length > 0) {
+                    window.switchServer(this.serversData[0].id);
+                } else {
+                    window.switchServer('@dms');
+                }
+            }
             window.renderServerList();
         });
 
         socket.on('channel_created', (data) => {
             const { serverId, channel } = data;
-            const srv = this.serversData.find(s => s.id === serverId);
+            const srv = (this.serversData || []).find(s => s.id === serverId);
             if (srv) {
                 srv.channels.push(channel);
                 if (this.currentChatServer === serverId) window.renderChannelList(srv);
