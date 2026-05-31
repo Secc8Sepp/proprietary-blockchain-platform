@@ -157,7 +157,6 @@ class ProfileService {
             following: [],
             tags: baseProfile.tags || [],
             recommended: [],
-            uploadedTracks: [],
             uploadedImages: [],
             top8: [],
             shoutbox: [],
@@ -384,39 +383,15 @@ class ProfileService {
                     if (tx.type === 'SET_TOP_8') {
                         profile.top8 = Array.isArray(tx.data.top8Keys) ? tx.data.top8Keys : [];
                     }
-                    if (tx.type === 'SONG_UPLOAD') {
-                            const artistToUse = tx.data.artist;
-                            const titleToUse = tx.data.trackTitle;
-                            profile.uploadedTracks.push({
-                                title: titleToUse,
-                                artist: artistToUse,
-                                offPlatformCollaborator: tx.data.offPlatformCollaborator,
-                                hash: tx.data.audioHash,
-                                coverHash: tx.data.coverHash || null,
-                                timestamp: tx.timestamp,
-                                playCount: playCounts[tx.data.audioHash] || 0,
-                                metadata: tx.data.metadata || ''
-                            });
-                    }
-                        if (tx.type === 'IMAGE_POST' || tx.type === 'VIDEO_POST' || tx.type === 'PROJECT_FILE_POST') {
-                            const assetHash = tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
-                            profile.uploadedImages.push({
-                                caption: tx.data.caption,
-                                hash: assetHash,
-                                timestamp: tx.timestamp,
-                                transactionHash: block.hash,
-                                metadata: tx.data.metadata || ''
-                            });
-                        }
-                    if (tx.type === 'EDIT_SONG_METADATA') {
-                        const idx = profile.uploadedTracks.findIndex(t => t.hash === tx.data.audioHash);
-                        if (idx !== -1) {
-                            if(tx.data.title) profile.uploadedTracks[idx].title = tx.data.title;
-                            if(tx.data.artist) profile.uploadedTracks[idx].artist = tx.data.artist;
-                            if(tx.data.offPlatformCollaborator !== undefined) profile.uploadedTracks[idx].offPlatformCollaborator = tx.data.offPlatformCollaborator;
-                            if(tx.data.coverHash) profile.uploadedTracks[idx].coverHash = tx.data.coverHash;
-                            if(tx.data.metadata !== undefined) profile.uploadedTracks[idx].metadata = tx.data.metadata;
-                        }
+                    if (tx.type === 'IMAGE_POST' || tx.type === 'VIDEO_POST' || tx.type === 'PROJECT_FILE_POST') {
+                        const assetHash = tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
+                        profile.uploadedImages.push({
+                            caption: tx.data.caption,
+                            hash: assetHash,
+                            timestamp: tx.timestamp,
+                            transactionHash: block.hash,
+                            metadata: tx.data.metadata || ''
+                        });
                     }
                 }
 
@@ -493,7 +468,9 @@ class ProfileService {
         }
         delete profile._trackDetails;
 
-        const allFeedItems = this.getFeedEngine();
+        const allFeedItems = this.getFeedEngine(); // Get all feed items once
+        profile.posts = allFeedItems.filter(item => item.sender === publicKey || item.reposter === publicKey);
+
         const trackMap = allFeedItems
             .filter(item => item.type === 'SONG_UPLOAD')
             .reduce((map, item) => {
@@ -537,9 +514,12 @@ class ProfileService {
         allPlaylists[repostsPlaylist.id] = repostsPlaylist;
 
         // --- Final Playlist Enrichment ---
-        // If a custom playlist order exists and has items, use it. Otherwise, default to all uploaded tracks.
-        // The check for `.length > 0` is crucial because an empty array `[]` is truthy in JavaScript and would otherwise be incorrectly used.
-        allPlaylists[artistPlaylistId].track_order = (profile.playlistOrder && profile.playlistOrder.length > 0) ? profile.playlistOrder : profile.uploadedTracks.map(t => t.hash);
+        // Get all original track uploads by the user from the feed engine.
+        const artistTrackHashes = allFeedItems
+            .filter(item => item.type === 'SONG_UPLOAD' && item.sender === publicKey && !item.isRepost)
+            .map(item => item.data.audioHash);
+
+        allPlaylists[artistPlaylistId].track_order = (profile.playlistOrder && profile.playlistOrder.length > 0) ? profile.playlistOrder : artistTrackHashes;
 
         const finalPlaylists = [];
         for (const playlistId in allPlaylists) {
