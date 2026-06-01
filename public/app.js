@@ -2182,7 +2182,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                     shoutboxContainer.innerHTML += `
                         <div style="border-bottom: 1px solid rgba(69, 162, 158, 0.2); padding-bottom: 10px; display:flex; gap:10px;">
                             <img src="${getAvatarUrl(msg.sender)}" style="width:40px; height:40px; border-radius:8px; cursor:pointer;" onclick="inspectTargetNode('${msg.sender}')">
-                            <div style="flex:1;">
+                            <div style="flex:1; min-width: 0; word-break: break-word;">
                                 <div style="font-size: 12px; font-weight:bold; color: var(--primary); cursor: pointer;" onclick="inspectTargetNode('${msg.sender}')">${resolveProfile(msg.sender).username} <span style="color: var(--text-muted); float:right;">${new Date(msg.timestamp).toLocaleString()}</span></div>
                                 <div style="font-size: 13px; margin-top: 4px; color: #fff;">${escapeHtml(msg.message)}</div>
                             </div>
