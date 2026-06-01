@@ -6,6 +6,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 require('dotenv').config();
 const webpush = require('web-push');
+const multer = require('multer');
 
 const socialRoutes = require('./routes/social');
 const feedRoutes = require('./routes/feed');
@@ -86,6 +87,35 @@ app.use(cors());
 // requests for images, CSS, etc., are handled first.
 app.use(express.static(path.join(__dirname, 'public')));
 
+const upload = multer({ dest: path.join(__dirname, 'tmp') });
+
+// File Upload Route (for assets)
+app.post('/api/upload', upload.single('asset'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded.' });
+    }
+
+    try {
+        const fileBuffer = fs.readFileSync(req.file.path);
+        const hash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+        
+        const finalPath = path.join(IPFS_DIR, hash);
+        fs.renameSync(req.file.path, finalPath);
+
+        res.json({ hash: hash });
+    } catch (err) {
+        console.error('File upload processing error:', err);
+        // Clean up temp file if it exists
+        if (fs.existsSync(req.file.path)) {
+            try {
+                fs.unlinkSync(req.file.path);
+            } catch (unlinkErr) {
+                console.error('Failed to unlink temp file:', unlinkErr);
+            }
+        }
+        res.status(500).json({ error: 'Failed to process file.' });
+    }
+});
 // ==========================================
 // WEB PUSH API SETUP
 // ==========================================

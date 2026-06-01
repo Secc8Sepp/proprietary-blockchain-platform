@@ -524,22 +524,56 @@ window.ActionEngine = {
         } catch (err) { alert("Escrow failed: " + err.message); }
     },
 
-    fulfillCommission(commId) {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'audio/*,image/*';
-        input.onchange = async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
+    promptFulfillCommission(commissionId, terms) {
+        const modalTitle = document.getElementById('form-modal-title');
+        const modalBody = document.getElementById('form-modal-body');
+        
+        modalTitle.innerText = 'Fulfill Commission';
+        modalBody.innerHTML = `
+            <p style="font-size: 13px; color: var(--text-muted);">Upload the final asset to complete this commission and release the escrowed funds to your wallet.</p>
+            <p style="font-size: 13px; color: var(--text-muted); background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; border-left: 2px solid var(--primary);">
+                <strong>Terms:</strong> ${escapeHtml(terms)}
+            </p>
+            <label>Asset File (Audio, Image, ZIP)</label>
+            <input id="form-input-comm-file" type="file" accept="audio/*,image/*,.zip,.rar,.7z" style="margin-bottom: 10px;">
+            
+            <label>Delivery Note (Optional)</label>
+            <textarea id="form-input-comm-note" rows="3" placeholder="e.g., 'Here is the final master as requested. Thanks for the opportunity!'"></textarea>
+
+            <button id="form-modal-submit" style="width: 100%; margin-top: 10px;">Upload & Fulfill Contract</button>
+        `;
+
+        const submitBtn = document.getElementById('form-modal-submit');
+        submitBtn.onclick = async () => {
+            const file = document.getElementById('form-input-comm-file').files[0];
+            const note = document.getElementById('form-input-comm-note').value;
+
+            if (!file) return alert("Please select a file to deliver.");
+
+            const originalBtnText = submitBtn.innerText;
+            submitBtn.innerText = 'Uploading Asset...';
+            submitBtn.disabled = true;
+
             try {
                 const hash = await uploadMediaAssetFile(file);
-                await window.CoreEngine.sendSignedTransaction('FULFILL_COMMISSION', '0x00', { commissionId: commId, assetHash: hash });
+                await window.CoreEngine.sendSignedTransaction('FULFILL_COMMISSION', '0x00', { commissionId: commId, assetHash: hash, deliveryNote: note });
+                
                 alert("Commission fulfilled! Escrow funds have been successfully released to your wallet.");
+                toggleModal('form-modal');
+                
+                if (window.currentView === 'commissions') {
+                    window.loadCommissionsDashboard();
+                }
+                fetchUserProfile(window.CoreEngine.userKeys.publicKey, true); // silent update for balance
 
-                fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
-            } catch(err) { alert("Fulfillment failed: " + err.message); }
+            } catch(err) { 
+                alert("Fulfillment failed: " + err.message); 
+                submitBtn.innerText = originalBtnText;
+                submitBtn.disabled = false;
+            }
         };
-        input.click();
+
+        toggleModal('form-modal');
     },
 
     async executeSellItem() {
@@ -547,22 +581,72 @@ window.ActionEngine = {
         const price = document.getElementById('sell-price-input').value.trim();
         const itemType = document.getElementById('sell-type-input').value;
         const fileInput = document.getElementById('sell-file-input');
+        const key = document.getElementById('sell-key-input').value.trim();
+        const bpm = document.getElementById('sell-bpm-input').value.trim();
         
         if (!title) return alert("Please enter a title.");
         if (!price || isNaN(parseFloat(price))) return alert("Please enter a valid price.");
         if (!fileInput.files[0]) return alert("Please upload an asset file.");
 
+        const data = { title: title, itemType: itemType, price: parseFloat(price) };
+        if (itemType === 'beat' || itemType === 'stems') {
+            if (key) data.key = key;
+            if (bpm) data.bpm = parseInt(bpm);
+        }
+
         try {
-            const hash = await uploadMediaAssetFile(fileInput.files[0]);
-            await window.CoreEngine.sendSignedTransaction('LIST_ITEM', '0x00', { title: title, itemType: itemType, price: parseFloat(price), assetHash: hash });
+            data.assetHash = await uploadMediaAssetFile(fileInput.files[0]);
+            await window.CoreEngine.sendSignedTransaction('LIST_ITEM', '0x00', data);
             alert("Asset listed in the Marketplace!"); 
             document.getElementById('sell-title-input').value = '';
             document.getElementById('sell-price-input').value = '';
+            document.getElementById('sell-key-input').value = '';
+            document.getElementById('sell-bpm-input').value = '';
             fileInput.value = '';
             window.loadMarketplace(); 
             fetchUserProfile(window.CoreEngine.userKeys.publicKey, false); 
             window.switchMarketTab('buy');
         } catch(err) { alert("Listing failed: " + err.message); }
+    },
+
+    promptEditMarketItem(itemId, currentTitle, currentPrice, currentKey, currentBpm) {
+        const modalTitle = document.getElementById('form-modal-title');
+        const modalBody = document.getElementById('form-modal-body');
+        
+        modalTitle.innerText = 'Edit Marketplace Listing';
+        modalBody.innerHTML = `
+            <p style="font-size: 13px; color: var(--text-muted);">Update the details for your listed asset.</p>
+            <label>Title</label>
+            <input id="form-input-edit-item-title" type="text" value="${escapeHtml(currentTitle || '')}">
+            <label>Price ($VOD)</label>
+            <input id="form-input-edit-item-price" type="number" value="${currentPrice || ''}">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div><label>Key</label><input id="form-input-edit-item-key" type="text" value="${escapeHtml(currentKey || '')}"></div>
+                <div><label>BPM</label><input id="form-input-edit-item-bpm" type="number" value="${currentBpm || ''}"></div>
+            </div>
+            <button id="form-modal-submit" style="width: 100%; margin-top: 10px;">Update Listing</button>
+        `;
+
+        const submitBtn = document.getElementById('form-modal-submit');
+        submitBtn.onclick = async () => {
+            const newTitle = document.getElementById('form-input-edit-item-title').value;
+            const newPrice = document.getElementById('form-input-edit-item-price').value;
+            const newKey = document.getElementById('form-input-edit-item-key').value;
+            const newBpm = document.getElementById('form-input-edit-item-bpm').value;
+
+            try {
+                let data = { itemId };
+                if (newTitle) data.title = newTitle;
+                if (newPrice) data.price = parseFloat(newPrice);
+                data.key = newKey; // Send even if empty to allow clearing the value
+                data.bpm = newBpm ? parseInt(newBpm) : null; // Send even if empty to allow clearing the value
+                await window.CoreEngine.sendSignedTransaction('EDIT_ITEM', '0x00', data);
+                alert("Listing updated!"); 
+                toggleModal('form-modal');
+                window.loadMarketplace();
+            } catch(err) { alert("Failed to edit listing: " + err.message); }
+        };
+        toggleModal('form-modal');
     },
 
     async buyDigitalItem(itemId, price, seller) {

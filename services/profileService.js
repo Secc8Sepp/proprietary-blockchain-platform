@@ -852,11 +852,22 @@ class ProfileService {
                         itemType: tx.data.itemType,
                         price: tx.data.price,
                         assetHash: tx.data.assetHash,
-                        sales: 0
+                        sales: 0,
+                        key: tx.data.key,
+                        bpm: tx.data.bpm,
+                        timestamp: tx.timestamp
                     };
                 }
                 if (tx.type === 'BUY_ITEM') {
                     if (items[tx.data.itemId]) items[tx.data.itemId].sales += 1;
+                }
+                if (tx.type === 'EDIT_ITEM') {
+                    if (items[tx.data.itemId] && items[tx.data.itemId].seller === tx.sender) {
+                        if (tx.data.title) items[tx.data.itemId].title = tx.data.title;
+                        if (tx.data.price) items[tx.data.itemId].price = tx.data.price;
+                        if (tx.data.key !== undefined) items[tx.data.itemId].key = tx.data.key;
+                        if (tx.data.bpm !== undefined) items[tx.data.itemId].bpm = tx.data.bpm;
+                    }
                 }
             }
         }

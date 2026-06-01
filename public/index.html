@@ -165,6 +165,7 @@
                     <div class="side-nav-item" onclick="switchTab('clout', this)">👑 Clout Leaderboard</div>
                 <div class="side-nav-item" onclick="switchTab('events', this)">📅 Events</div>
                     <div class="side-nav-item" id="nav-wallet-tab" onclick="switchTab('wallet', this)">💼 Wallet & Escrow</div>
+                    <div class="side-nav-item" onclick="switchTab('commissions', this)">💼 Commissions</div>
                     <div class="side-nav-item" id="nav-market-tab" onclick="switchTab('market', this)">🛒 Digital Marketplace</div>
                     <div class="side-nav-item" id="nav-goals-tab" onclick="switchTab('goals', this)">🎯 Goals & Rewards</div>
                     <div class="side-nav-item" onclick="switchTab('tools', this)">🛠️ Tools</div>
@@ -449,9 +450,6 @@
                     <textarea id="input-comm-terms" placeholder="Describe the commission (e.g., 'Produce a dark trap beat for my intro')" rows="2" style="margin-bottom: 12px;"></textarea>
                     <button onclick="window.ActionEngine.createCommission()" style="margin-bottom: 30px;">Lock Funds in Escrow</button>
 
-                    <h4 style="margin-top: 20px;">📦 Active Escrow Contracts</h4>
-                    <div id="ui-active-commissions" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 30px;"></div>
-
                     <h4 style="margin-top: 20px;">📜 Transaction History</h4>
                     <div id="ui-tx-history" style="max-height: 300px; overflow-y: auto; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 10px;">
                         <!-- JS populated -->
@@ -469,6 +467,9 @@
                         <input id="input-delete-recipient" placeholder="Paste the exact User Public Key to delete" style="margin-bottom: 12px;" />
                         <button style="background: var(--danger); color: #fff; width: 100%;" onclick="window.WalletEngine.promptAdminDeleteUser(document.getElementById('input-delete-recipient').value)">🗑️ Delete User From Ledger</button>
                     </div>
+
+                    <h4 style="margin-top: 20px;">💾 My Digital Assets</h4>
+                    <div id="ui-wallet-owned-assets" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 30px;"></div>
 
                     <h4 style="margin-top: 20px;">🤝 Incoming Stake Requests</h4>
                     <div id="ui-wallet-stake-requests" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 30px;">
@@ -526,13 +527,20 @@
                     <div id="market-sec-sell" class="hidden">
                         <h4 style="margin-top:0;">List a Digital Asset</h4>
                         <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">Upload a beat, drum kit, stems, or project files to sell on the open market.</p>
-                        <select id="sell-type-input" style="padding: 12px; border-radius: 8px; background: rgba(11, 12, 16, 0.8); color: #fff; border: 1px solid var(--border); margin-bottom: 12px; width: 100%;">
+                        <select id="sell-type-input" onchange="window.switchMarketSellType()" style="padding: 12px; border-radius: 8px; background: rgba(11, 12, 16, 0.8); color: #fff; border: 1px solid var(--border); margin-bottom: 12px; width: 100%;">
                             <option value="beat">Beat / Instrumental</option>
                             <option value="stems">Acapella / Stems</option>
                             <option value="project">DAW Project File</option>
                             <option value="art">Artwork / Visuals</option>
+                            <option value="other">Other</option>
                         </select>
                         <input id="sell-title-input" placeholder="Asset Title (e.g. 'Dark Trap Drum Kit')" style="margin-bottom: 12px;">
+                        <div id="sell-beat-meta">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                <div><label style="font-size:12px; color:var(--text-muted);">Key</label><input id="sell-key-input" placeholder="e.g. Cmin" style="margin-bottom: 12px;"></div>
+                                <div><label style="font-size:12px; color:var(--text-muted);">BPM</label><input id="sell-bpm-input" type="number" placeholder="e.g. 140" style="margin-bottom: 12px;"></div>
+                            </div>
+                        </div>
                         <input id="sell-price-input" type="number" placeholder="Price in $VOD" style="margin-bottom: 12px;">
                         <input id="sell-file-input" type="file" style="margin-bottom: 12px;">
                         <button onclick="window.ActionEngine.executeSellItem()">List Item on Market</button>
@@ -605,6 +613,11 @@
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- VIEW 12: COMMISSIONS DASHBOARD -->
+                <div id="view-commissions" class="hidden">
+                    <!-- This will be populated by loadCommissionsDashboard() -->
                 </div>
 
             </div>

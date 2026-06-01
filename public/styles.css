@@ -502,3 +502,104 @@ body.mobile-chat-active .chat-module-close-btn { display: inline-block; color: v
         display: none;
     }
 }
+
+/* New CSS for Commissions Dashboard */
+.commissions-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.commission-card {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+}
+
+.commission-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    border-bottom: 1px solid var(--border);
+}
+
+.commission-card-body {
+    padding: 15px;
+    flex-grow: 1;
+    font-size: 13px;
+    color: #ccc;
+}
+
+.commission-card-body p {
+    margin: 0;
+}
+
+.commission-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background: rgba(0,0,0,0.2);
+    border-top: 1px solid var(--border);
+}
+
+@media (max-width: 768px) {
+    .commissions-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.item-meta-tags {
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+.item-meta-tag {
+    background: rgba(102, 252, 241, 0.1);
+    color: var(--primary);
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(102, 252, 241, 0.3);
+}
+
+/* New CSS for Asset Cards in Wallet */
+.asset-card {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+}
+
+.asset-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    border-bottom: 1px solid var(--border);
+}
+
+.asset-card-body {
+    padding: 15px;
+    flex-grow: 1;
+    font-size: 13px;
+    color: #ccc;
+}
+
+.asset-card-body p {
+    margin: 0;
+}
+
+.asset-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background: rgba(0,0,0,0.2);
+    border-top: 1px solid var(--border);
+}

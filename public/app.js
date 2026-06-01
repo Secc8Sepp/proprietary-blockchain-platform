@@ -1280,6 +1280,7 @@ function switchTab(tabName, element, targetKey = null) {
         viewingUserPublicKey = '';
     }
 
+    if (tabName === 'commissions') window.loadCommissionsDashboard();
     if (tabName === 'events') {
         container.classList.add('flyer-mode');
     } else {
@@ -2355,22 +2356,8 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             }
         });
 
-        // Render Escrow Commissions
-        const commContainer = document.getElementById('ui-active-commissions');
-        if (commContainer) {
-            commContainer.innerHTML = profile.activeCommissions.map(c => {
-                const isCreator = c.creator === window.CoreEngine.userKeys.publicKey;
-                const actionBtn = isCreator ? `<button style="padding: 4px 10px; font-size: 11px; background:var(--success); color:#fff;" onclick="fulfillCommission('${c.id}')">Upload Asset to Fulfill</button>` : `<span style="font-size: 11px; color: var(--warning);">Awaiting Delivery</span>`;
-                return `<div style="background: rgba(102, 252, 241, 0.05); border: 1px solid var(--border); padding: 12px; border-radius: 8px;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
-                        <strong style="color: var(--primary);">${c.amount} $VOD Escrow</strong>
-                        <button style="padding: 4px 10px; font-size: 11px; background:var(--success); color:#fff;" onclick="window.ActionEngine.fulfillCommission('${c.id}')">Upload Asset to Fulfill</button>
-                    </div>
-                    <div style="font-size: 12px; color: #fff; margin-bottom: 5px;"><strong>Terms:</strong> ${escapeHtml(c.terms)}</div>
-                    <div style="font-size: 11px; color: var(--text-muted);">Buyer: ${resolveProfile(c.buyer).username} | Creator: ${resolveProfile(c.creator).username}</div>
-                </div>`;
-            }).join('') || '<div style="color:var(--text-muted); font-size:12px;">No active commissions.</div>';
-        }
+        // Obsolete escrow rendering logic removed. This is now handled by the dedicated Commissions Dashboard.
+        // The `ui-active-commissions` div in the wallet has also been removed.
 
         // Render Incoming Stake Requests
         const stakeReqContainer = document.getElementById('ui-wallet-stake-requests');
@@ -3247,6 +3234,148 @@ window.loadDiscoverFeed = async function() {
     }
 }
 
+window.loadCommissionsDashboard = async function() {
+    const container = document.getElementById('view-commissions');
+    if (!container) return;
+
+    if (!window.CoreEngine || !window.CoreEngine.userKeys.publicKey) {
+        container.innerHTML = '<div class="card"><div class="card-body" style="text-align:center; color: var(--text-muted);">Please log in to view your commissions.</div></div>';
+        return;
+    }
+
+    container.innerHTML = '<div class="card"><div class="card-body">Loading commissions from the ledger...</div></div>';
+
+    try {
+        // We need the latest profile data to get commissions
+        const response = await fetch(`/api/social/profile?publicKey=${encodeURIComponent(window.CoreEngine.userKeys.publicKey)}`);
+        const profile = await response.json();
+        const myKey = window.CoreEngine.userKeys.publicKey;
+
+        const incoming = profile.activeCommissions.filter(c => c.creator === myKey);
+        const outgoing = profile.activeCommissions.filter(c => c.buyer === myKey);
+
+        container.innerHTML = `
+            <div class="commissions-grid">
+                <div class="card">
+                    <div class="card-header">Work for Hire (Incoming)</div>
+                    <div id="commissions-incoming" class="card-body" style="display: flex; flex-direction: column; gap: 15px;"></div>
+                </div>
+                <div class="card">
+                    <div class="card-header">Contracts Sent (Outgoing)</div>
+                    <div id="commissions-outgoing" class="card-body" style="display: flex; flex-direction: column; gap: 15px;"></div>
+                </div>
+            </div>
+        `;
+
+        const incomingContainer = document.getElementById('commissions-incoming');
+        if (incoming.length > 0) {
+            incomingContainer.innerHTML = incoming.map(c => `
+                <div class="commission-card">
+                    <div class="commission-card-header">
+                        <strong style="color: var(--primary);">${c.amount.toLocaleString()} $VOD</strong>
+                        <span style="font-size: 11px; color: var(--success);">Awaiting Delivery</span>
+                    </div>
+                    <div class="commission-card-body">
+                        <p><strong>Terms:</strong> ${escapeHtml(c.terms)}</p>
+                    </div>
+                    <div class="commission-card-footer">
+                        <span style="font-size: 11px; color: var(--text-muted);">From: @${resolveProfile(c.buyer).username}</span>
+                        <button onclick="window.ActionEngine.promptFulfillCommission('${c.id}', '${escapeJsArg(c.terms)}')">Fulfill</button>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            incomingContainer.innerHTML = '<p style="color: var(--text-muted); font-size: 13px; text-align: center;">No incoming work requests.</p>';
+        }
+
+        const outgoingContainer = document.getElementById('commissions-outgoing');
+        if (outgoing.length > 0) {
+            outgoingContainer.innerHTML = outgoing.map(c => `
+                <div class="commission-card">
+                    <div class="commission-card-header">
+                        <strong style="color: var(--primary);">${c.amount.toLocaleString()} $VOD</strong>
+                        <span style="font-size: 11px; color: var(--warning);">Pending Fulfillment</span>
+                    </div>
+                    <div class="commission-card-body">
+                        <p><strong>Terms:</strong> ${escapeHtml(c.terms)}</p>
+                    </div>
+                    <div class="commission-card-footer">
+                        <span style="font-size: 11px; color: var(--text-muted);">To: @${resolveProfile(c.creator).username}</span>
+                        <button class="secondary" disabled>Awaiting Asset</button>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            outgoingContainer.innerHTML = '<p style="color: var(--text-muted); font-size: 13px; text-align: center;">You have not sent any commission contracts.</p>';
+        }
+
+    } catch (err) {
+        container.innerHTML = '<div class="card"><div class="card-body" style="color: var(--danger);">Failed to load commissions.</div></div>';
+        console.error(err);
+    }
+}
+
+function getAssetIcon(itemType) {
+    switch(itemType) {
+        case 'beat':
+        case 'stems':
+            return '🎵';
+        case 'project':
+            return '📦';
+        case 'art':
+            return '🖼️';
+        default:
+            return '💾';
+    }
+}
+
+
+if (!window.WalletEngine) window.WalletEngine = {};
+window.WalletEngine.renderWalletDashboard = async function() {
+    const ownedContainer = document.getElementById('ui-wallet-owned-assets');
+    if (!ownedContainer) return;
+
+    if (!window.CoreEngine || !window.CoreEngine.userKeys.publicKey) {
+        ownedContainer.innerHTML = '<div style="color:var(--text-muted); font-size:12px;">Please log in to see your assets.</div>';
+        return;
+    }
+
+    ownedContainer.innerHTML = '<div style="color:var(--text-muted); font-size:12px;">Loading assets...</div>';
+
+    try {
+        const response = await fetch(`/api/social/profile?publicKey=${encodeURIComponent(window.CoreEngine.userKeys.publicKey)}`);
+        const profile = await response.json();
+
+        if (profile.ownedItems && profile.ownedItems.length > 0) {
+            ownedContainer.innerHTML = profile.ownedItems.map(item => {
+                const icon = getAssetIcon(item.itemType);
+                return `
+                    <div class="asset-card">
+                        <div class="asset-card-header">
+                            <strong style="color: #fff;">${icon} ${escapeHtml(item.title)}</strong>
+                            <span style="font-size: 11px; color: var(--text-muted);">From: @${resolveProfile(item.seller).username}</span>
+                        </div>
+                        <div class="asset-card-body">
+                            <p><strong>Type:</strong> ${escapeHtml(item.itemType)}</p>
+                            ${item.key ? `<p><strong>Key:</strong> ${escapeHtml(item.key)}</p>` : ''}
+                            ${item.bpm ? `<p><strong>BPM:</strong> ${item.bpm}</p>` : ''}
+                        </div>
+                        <div class="asset-card-footer">
+                            <span style="font-size: 11px; color: var(--text-muted);">Purchased on ${new Date(item.timestamp).toLocaleDateString()}</span>
+                            <button onclick="window.open('/tracks/${item.assetHash}', '_blank')">Download</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } else {
+            ownedContainer.innerHTML = '<div style="color:var(--text-muted); font-size:12px;">You have not purchased any digital assets yet.</div>';
+        }
+    } catch (err) {
+        ownedContainer.innerHTML = '<div style="color:var(--danger); font-size:12px;">Failed to load owned assets.</div>';
+        console.error("Error loading owned assets for wallet:", err);
+    }
+}
+
 // ==========================================
 // MARKETPLACE UI ENGINE
 // ==========================================
@@ -3267,6 +3396,13 @@ window.switchMarketTab = function(tab) {
     document.getElementById('market-sec-' + tab).classList.remove('hidden');
     if(tab !== 'sell') window.renderMarketplace();
 };
+
+window.switchMarketSellType = function() {
+    const itemType = document.getElementById('sell-type-input').value;
+    const beatMeta = document.getElementById('sell-beat-meta');
+    if (!beatMeta) return;
+    beatMeta.style.display = (itemType === 'beat' || itemType === 'stems') ? 'block' : 'none';
+}
 
 window.loadMarketplace = async function() {
     try {
@@ -3325,12 +3461,25 @@ window.renderMarketplace = function() {
         else if (sort === 'popular') items.sort((a,b) => (b.sales || 0) - (a.sales || 0));
 
         itemsContainer.innerHTML = items.map(i => {
+            const icon = getAssetIcon(i.itemType);
+            const isMyItem = window.CoreEngine && window.CoreEngine.userKeys && i.seller === window.CoreEngine.userKeys.publicKey;
+            const editBtn = isMyItem ? `<button class="secondary" style="width:100%; margin-top: 5px;" onclick="window.ActionEngine.promptEditMarketItem('${i.id}', '${escapeJsArg(i.title)}', '${i.price}', '${escapeJsArg(i.key || '')}', '${i.bpm || ''}')">Edit</button>` : '';
+
+            let metaHtml = `<div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Type: ${escapeHtml(i.itemType)}</div>`;
+            if (i.key || i.bpm) {
+                metaHtml += `<div class="item-meta-tags">`;
+                if (i.key) metaHtml += `<span class="item-meta-tag">${escapeHtml(i.key)}</span>`;
+                if (i.bpm) metaHtml += `<span class="item-meta-tag">${i.bpm} BPM</span>`;
+                metaHtml += `</div>`;
+            }
+
             return `<div class="card" style="margin-bottom:0;"><div class="card-body" style="text-align:center;">
-                <div style="font-size:30px; margin-bottom:10px;">📦</div>
+                <div style="font-size:30px; margin-bottom:10px;">${icon}</div>
                 <div style="font-weight:bold; color:#fff; margin-bottom:5px;">${escapeHtml(i.title)}</div>
-                <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Type: ${escapeHtml(i.itemType)}</div>
+                ${metaHtml}
                 <div style="color:var(--primary); font-weight:bold; margin-bottom:15px;">${i.price} $VOD</div>
                 <button style="width:100%;" onclick="window.ActionEngine.buyDigitalItem('${i.id}', ${i.price}, '${i.seller}')">Purchase Asset</button>
+                ${editBtn}
             </div></div>`;
         }).join('') || '<div style="color:var(--text-muted); grid-column: 1 / -1; text-align:center;">No assets match your search.</div>';
   }
