@@ -28,6 +28,10 @@
 <body>
 
     <div id="offline-banner" class="hidden">You are currently offline. Some features may be unavailable.</div>
+    <div id="ios-install-banner" class="hidden">
+        <span>To install this app, tap the Share button and then 'Add to Home Screen'.</span>
+        <button onclick="this.parentElement.classList.add('hidden')">×</button>
+    </div>
 
     <div id="mobile-overlay" class="hidden" onclick="closeMobileSidebars()"></div>
 
@@ -169,6 +173,7 @@
                     <div class="side-nav-item" id="nav-market-tab" onclick="switchTab('market', this)">🛒 Digital Marketplace</div>
                     <div class="side-nav-item" id="nav-goals-tab" onclick="switchTab('goals', this)">🎯 Goals & Rewards</div>
                     <div class="side-nav-item" onclick="switchTab('tools', this)">🛠️ Tools</div>
+                    <div class="side-nav-item hidden" id="btn-install-pwa" onclick="promptPwaInstall()">⬇️ Install App</div>
                 </div>
                 
                 <div class="side-card" id="card-chat-module">

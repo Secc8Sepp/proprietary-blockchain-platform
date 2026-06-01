@@ -33,6 +33,7 @@ let pendingCrewRequests = [];
 window.activeWaveform = null;
 window.myPlaylists = [];
 window.waveformInstances = {};
+let deferredInstallPrompt = null;
 window.swRegistration = null;
 
 document.addEventListener('DOMContentLoaded', () => { 
@@ -178,7 +179,49 @@ function initializeApplicationListeners() {
         document.head.appendChild(regionsScript);
         regionsScript.onload = () => console.log('[INIT] ✓ Waveform Engine ready.');
     };
+
+    // PWA Install Prompt Handler
+    window.addEventListener('beforeinstallprompt', (e) => {
+        // Prevent the mini-infobar from appearing on mobile
+        e.preventDefault();
+        // Stash the event so it can be triggered later.
+        deferredInstallPrompt = e;
+        // Update UI to notify the user they can install the PWA
+        const installBtn = document.getElementById('btn-install-pwa');
+        if (installBtn) {
+            console.log('[PWA] App is installable. Showing install button.');
+            installBtn.classList.remove('hidden');
+        }
+    });
+
+    window.addEventListener('appinstalled', () => {
+        console.log('[PWA] App installed successfully!');
+        deferredInstallPrompt = null;
+        const installBtn = document.getElementById('btn-install-pwa');
+        if (installBtn) {
+            installBtn.classList.add('hidden');
+        }
+    };
     
+    // PWA Install Prompt Handler for iOS
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    // Check if the app is running in standalone mode (i.e., installed)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+
+    if (isIOS && !isStandalone) {
+        const iosBanner = document.getElementById('ios-install-banner');
+        if (iosBanner) {
+            console.log('[PWA] iOS device detected. Showing install instructions.');
+            iosBanner.classList.remove('hidden');
+            const dismissBtn = iosBanner.querySelector('button');
+            if (dismissBtn) {
+                dismissBtn.onclick = () => {
+                    iosBanner.classList.add('hidden');
+                };
+            }
+        }
+    }
+
     // Identity & Auth Flow
     const signupBtn = document.getElementById('btn-signup');
     addTapListener(signupBtn, () => window.CoreEngine.handleSignup());
@@ -1126,6 +1169,28 @@ function renderPostContent(item) {
     return `<div class="post-body" style="opacity: 0.5;">System Broadcast: ${item.type}</div>`;
 }
 
+window.promptPwaInstall = async function() {
+    const installBtn = document.getElementById('btn-install-pwa');
+    if (!deferredInstallPrompt) {
+        alert('This app may already be installed or your browser does not support this feature.');
+        return;
+    }
+
+    // Show the browser's install prompt.
+    deferredInstallPrompt.prompt();
+
+    // Wait for the user to respond to the prompt.
+    const { outcome } = await deferredInstallPrompt.userChoice;
+    console.log(`[PWA] User choice: ${outcome}`);
+
+    // We can only use the prompt once, so we null it out.
+    deferredInstallPrompt = null;
+
+    // Hide the install button regardless of the choice.
+    if (installBtn) {
+        installBtn.classList.add('hidden');
+    }
+};
 // ==========================================
 // UI NAVIGATION & UTILITIES
 // ==========================================

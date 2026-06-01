@@ -15,6 +15,7 @@ const ASSETS_TO_CACHE = [
   '/LayoutEngine.js',
   '/ActionEngine.js',
   '/GlobalTagEngine.js',
+  '/NotificationEngine.js',
   '/BattleEngines.js',
   '/StemSplitterEngine.js',
   '/app.js',

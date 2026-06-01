@@ -256,6 +256,29 @@ body.mobile-chat-active .chat-module-close-btn { display: inline-block; color: v
     z-index: 1500; /* Above navbar, below modals */
 }
 
+/* iOS PWA Install Banner */
+#ios-install-banner {
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 95%;
+    max-width: 400px;
+    background: #2c3e50;
+    color: #fff;
+    padding: 15px;
+    border-radius: 12px;
+    z-index: 1500;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    border: 1px solid var(--primary);
+}
+#ios-install-banner span { font-size: 14px; }
+#ios-install-banner button { background: none; border: none; color: #fff; font-size: 20px; padding: 0 5px; cursor: pointer; text-transform: none; }
+
+
 /* Mobile-specific UI elements, hidden on desktop */
 .mobile-top-nav { display: none; }
 #mobile-overlay {
@@ -373,6 +396,10 @@ body.mobile-chat-active .chat-module-close-btn { display: inline-block; color: v
         padding-bottom: 110px !important; /* Space for the global audio player */
         padding-top: 15px !important;
         height: 100% !important;
+    }
+
+    #ios-install-banner {
+        bottom: 110px; /* Position above mobile audio player */
     }
 
     /* Reduce padding on cards for more horizontal space on mobile */
