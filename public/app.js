@@ -1989,6 +1989,36 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                     setVal('input-edit-css', profile.customCss.replace(/:root\s*{[^}]*}/, '').trim());
                 }
             }
+
+            const myTxContainer = document.getElementById('ui-sidebar-my-tx-history');
+            if (myTxContainer) {
+                const txListToRender = profile.transactions || [];
+                myTxContainer.innerHTML = txListToRender.slice(0, 30).map(tx => {
+                    let isSender = tx.sender === window.CoreEngine.userKeys.publicKey;
+                    let sign = isSender ? '-' : '+';
+                    let color = isSender ? 'var(--warning)' : 'var(--success)';
+                    let amount = tx.amount;
+
+                    if (tx.type === 'STREAM_COMPLETED') { 
+                        if (isSender) { amount = 5000; sign = '+'; color = 'var(--success)'; }
+                        else { amount = 'Royalties'; sign = '+'; color = 'var(--success)'; }
+                    } else if (tx.type === 'SONG_UPLOAD' && isSender) { amount = 50000; sign = '-'; color = 'var(--warning)'; }
+                    else if (tx.type === 'IMAGE_POST' && isSender) { amount = 5000; sign = '-'; color = 'var(--warning)'; }
+                    else if (tx.type === 'LIST_ITEM' && isSender) { amount = 500; sign = '-'; color = 'var(--warning)'; }
+                    else if (tx.type === 'LIKE_IMAGE' || tx.type === 'LIKE_POST') {
+                        if (isSender) { amount = 500; sign = '+'; color = 'var(--success)'; }
+                        else { amount = 2000; sign = '+'; color = 'var(--success)'; }
+                    }
+
+                    let amtDisplay = '';
+                    if (amount !== undefined && amount !== null) {
+                        const formattedAmt = typeof amount === 'number' ? amount.toLocaleString() : amount;
+                        amtDisplay = `<span style="color: ${color}; font-weight: bold;">${sign}${formattedAmt} VOD</span>`;
+                    }
+                    
+                    return `<div style="display:flex; justify-content:space-between; padding:8px; border-bottom:1px solid rgba(255,255,255,0.1); font-size:12px;"><span><strong>${tx.type}</strong><br><span style="color:var(--text-muted); font-size:10px;">${new Date(tx.timestamp).toLocaleString()}</span></span>${amtDisplay}</div>`;
+                }).join('') || '<div style="color:var(--text-muted); font-size:12px; text-align: center; padding: 10px;">No transactions yet.</div>';
+            }
         }
 
         if(isNavUpdateOnly) return;
