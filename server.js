@@ -602,14 +602,14 @@ io.on('connection', (socket) => {
 
     socket.on('join_channel', (data) => {
         const senderNode = dbMemory.connectedNodes[socket.id];
-        if (!senderNode || !senderNode.address) return console.error(`[SECURITY] 'join_channel' from unauthenticated socket ${socket.id}`);
+        const address = senderNode ? senderNode.address : null;
 
         if (!data || !data.serverId || !data.channelId) return;
         const { serverId, channelId } = data;
         
         const server = dbMemory.servers[serverId];
         if (server && server.channels[channelId]) {
-            if (server.isPrivate && server.owner !== senderNode.address && !(server.allowedUsers && server.allowedUsers.includes(senderNode.address))) {
+            if (server.isPrivate && server.owner !== address && !(server.allowedUsers && server.allowedUsers.includes(address))) {
                 return socket.emit('chat_error', { message: 'Access Denied: You are not invited to this private server.' });
             }
 
@@ -617,11 +617,14 @@ io.on('connection', (socket) => {
             
             // --- 3.2 Token-Gated Backrooms ---
             if (channel.locked) {
+                if (!address) {
+                    return socket.emit('chat_error', { message: 'Access Denied: You must be logged in to enter a token-gated backroom.' });
+                }
                 const chain = blockchainService.getChain();
                 const adminAddress = blockchainService.getAdminAddress(chain);
                 
-                if (senderNode.address !== adminAddress) {
-                    const balance = blockchainService.calculateBalance(senderNode.address, chain);
+                if (address !== adminAddress) {
+                    const balance = blockchainService.calculateBalance(address, chain);
                     if (balance < 10000) {
                         return socket.emit('chat_error', { 
                             message: `Access Denied: The #${channel.name} Backroom requires 10,000 $VOD. Your balance: ${balance.toFixed(0)}` 
@@ -644,7 +647,7 @@ io.on('connection', (socket) => {
 
     socket.on('send_message', (data) => {
         const senderNode = dbMemory.connectedNodes[socket.id];
-        if (!senderNode || !senderNode.address) return console.error(`[SECURITY] 'send_message' from unauthenticated socket ${socket.id}`);
+        if (!senderNode || !senderNode.address) return socket.emit('chat_error', { message: 'You must be logged in to send messages.' });
 
         if (!data || !data.serverId || !data.channelId || typeof data.text === 'undefined') return;
         const { serverId, channelId, text } = data;
