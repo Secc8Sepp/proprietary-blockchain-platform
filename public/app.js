@@ -39,6 +39,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize as null to prevent premature rendering before the first directory is fetched.
     window.networkProfiles = null; window.zineArticles = []; window.hotOrNotData = [];
 
+    // Check for referral code in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const refCode = urlParams.get('ref');
+    if (refCode) {
+        const refInput = document.getElementById('input-signup-referrer');
+        if (refInput) refInput.value = refCode;
+    }
+
     // CRITICAL FIX: Initialize all engines to set up socket listeners BEFORE sending any requests.
     window.MeshEngine.init(socket);
     window.ActionEngine.init(socket);
@@ -3360,6 +3368,27 @@ window.loadGoalsDashboard = async function() {
         
         if (dailyContainer) dailyContainer.innerHTML = (goalsData.daily && goalsData.daily.length > 0) ? goalsData.daily.map(renderGoal).join('') : '<div style="color:var(--text-muted); font-size: 13px;">No daily goals active.</div>';
         if (weeklyContainer) weeklyContainer.innerHTML = (goalsData.weekly && goalsData.weekly.length > 0) ? goalsData.weekly.map(renderGoal).join('') : '<div style="color:var(--text-muted); font-size: 13px;">No weekly goals active.</div>';
+        
+        const myUsername = window.resolveProfile(window.CoreEngine.userKeys.publicKey).username;
+        const refLink = window.location.origin + '/?ref=' + encodeURIComponent(myUsername);
+        const linkEl = document.getElementById('ui-referral-link');
+        if (linkEl) linkEl.value = refLink;
+
+        const referredContainer = document.getElementById('ui-referred-users');
+        if (referredContainer && window.networkProfiles) {
+            const myKey = window.CoreEngine.userKeys.publicKey;
+            const myRefs = Object.entries(window.networkProfiles).filter(([addr, prof]) => prof.referrer === myKey);
+            if (myRefs.length > 0) {
+                referredContainer.innerHTML = myRefs.map(([addr, prof]) => `
+                    <div style="display:flex; align-items:center; gap: 8px; background: rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 20px; border: 1px solid var(--border); cursor:pointer;" onclick="window.inspectTargetNode('${addr}')">
+                        <img src="${window.getAvatarUrl(addr)}" style="width:20px; height:20px; border-radius:50%; object-fit:cover;">
+                        <span style="font-size: 12px; color: #fff;">${window.escapeHtml(prof.username)}</span>
+                    </div>
+                `).join('');
+            } else {
+                referredContainer.innerHTML = '<div style="font-size: 12px; color: var(--text-muted);">You haven\'t referred anyone yet.</div>';
+            }
+        }
         
     } catch (err) {
         console.error(err);

@@ -209,6 +209,13 @@ app.get('/api/social/hotornot', (req, res) => {
     res.json(require('./services/profileService').getHotOrNotEngine());
 });
 
+app.get('/api/social/goals', (req, res) => {
+    const { publicKey } = req.query;
+    if (!publicKey) return res.status(400).json({ error: 'publicKey is required.' });
+    
+    res.json(goalsService.getUserGoals(publicKey));
+});
+
 app.get('/api/feed/discover', (req, res) => {
     const { publicKey } = req.query;
     const { feed: feedItems } = profileService.getFeedEngine();

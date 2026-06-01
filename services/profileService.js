@@ -979,6 +979,7 @@ class ProfileService {
                 if (tx.type === 'STREAM_COMPLETED') {
                     totalMinted += 5000; // Listener reward
                     totalMinted += 20000; // Creator/Shareholder pool
+                    if (referrals[tx.sender]) totalMinted += 100;
                 }
                 if (tx.type === 'LIKE_POST' || tx.type === 'LIKE_IMAGE') {
                     totalMinted += 500; // Liker reward

@@ -270,6 +270,11 @@ class BlockchainService extends EventEmitter {
                     // Listener mines 5,000 $VOD for their attention
                     if (tx.sender === publicKey) balance += 5000; 
                     
+                    const referrer = referrals[tx.sender];
+                    if (referrer && referrer === publicKey) {
+                        balance += 100; // 100 VOD bonus for the referrer
+                    }
+
                     // Dividend splits: 20,000 $VOD minted and split across shareholders
                     const sharesTable = assetShareDistribution[audioHash];
                     if (sharesTable) {

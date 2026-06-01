@@ -569,9 +569,18 @@
                             <ul style="font-size: 13px; color: #ccc; padding-left: 20px; margin-bottom: 0;">
                                 <li style="margin-bottom: 5px;">Earn a <strong>2% Commission</strong> automatically on every Digital Asset they purchase.</li>
                                 <li style="margin-bottom: 5px;">Earn a <strong>2% Commission</strong> on any fractional Track Stakes they buy.</li>
-                                <li style="margin-bottom: 5px;">Earn a <strong>2% Commission</strong> when they acquire Zine Curation Rights.</li>
+                                <li style="margin-bottom: 5px;">Earn <strong>100 $VOD</strong> every time they stream a track on the network!</li>
                                 <li>Complete the <strong>Weekly Referral Goal</strong> for a massive $VOD bonus directly to your wallet!</li>
                             </ul>
+                            <div style="margin-top: 15px;">
+                                <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 5px;">Your Referral Link:</label>
+                                <div style="display:flex; gap: 10px; margin-bottom: 10px;">
+                                    <input type="text" id="ui-referral-link" readonly style="flex: 1; background: rgba(0,0,0,0.5); color: #fff; padding: 8px; border-radius: 4px; border: 1px solid var(--border);" value="">
+                                    <button class="secondary" onclick="navigator.clipboard.writeText(document.getElementById('ui-referral-link').value); alert('Link copied!');" style="padding: 8px 15px; font-size: 12px; margin: 0;">Copy</button>
+                                </div>
+                                <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 5px;">Your Crew (Users you referred):</label>
+                                <div id="ui-referred-users" style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 5px;"></div>
+                            </div>
                         </div>
                     </div>
                     
