@@ -2143,6 +2143,11 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                 shoutboxContainer.innerHTML = `<div style="color: var(--text-muted); font-size: 13px;">No shouts yet. Be the first!</div>`;
             }
         }
+        
+        const shoutboxForm = document.getElementById('shoutbox-form-container');
+        if (shoutboxForm) {
+            shoutboxForm.style.display = window.CoreEngine && window.CoreEngine.userKeys && window.CoreEngine.userKeys.publicKey ? 'block' : 'none';
+        }
 
         // Render Transaction History
         const historyContainers = [document.getElementById('ui-tx-history')];
@@ -2669,6 +2674,14 @@ function sendDM(targetAddress) {
     if (!window.CoreEngine.userKeys.publicKey) return alert("Must be logged in to send DMs.");
     if (targetAddress === window.CoreEngine.userKeys.publicKey) return alert("You cannot DM yourself.");
     if (!window.MeshEngine.dmHistory[targetAddress]) window.MeshEngine.dmHistory[targetAddress] = [];
+
+    if (window.innerWidth <= 768) {
+        document.body.classList.add('mobile-chat-active');
+    } else {
+        const container = document.querySelector('.container');
+        if (container) container.classList.add('chat-mode');
+    }
+    
     switchServer('@dms');
     switchDMChannel(targetAddress);
     document.getElementById('chat-input').focus();

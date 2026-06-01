@@ -351,6 +351,24 @@ window.ActionEngine = {
         toggleModal('form-modal');
     },
 
+    async submitShout() {
+        const input = document.getElementById('shoutbox-input');
+        if (!input) return;
+        const message = input.value.trim();
+        if (!message) return alert("Please enter a message.");
+        if (!window.CoreEngine.userKeys.publicKey) return alert("Must be logged in to leave a shout.");
+        
+        const targetUser = viewingUserPublicKey || window.CoreEngine.userKeys.publicKey;
+        
+        try {
+            await window.CoreEngine.sendSignedTransaction('SHOUTBOX_POST', targetUser, { message });
+            input.value = '';
+            if (typeof fetchUserProfile === 'function') {
+                fetchUserProfile(targetUser, false);
+            }
+        } catch (err) { alert("Failed to post shout: " + err.message); }
+    },
+
     async saveInlineEdit() {
         const userIn = document.getElementById('input-edit-username').value.trim();
         const bioIn = document.getElementById('input-edit-bio').value.trim();
