@@ -685,6 +685,7 @@ async function loadMainGlobalFeed() {
             const repostCaptionHtml = item.isRepost && item.repostCaption ? `<div class="post-body" style="padding-left: 65px; margin-bottom: 15px;">${parseMentions(item.repostCaption)}</div>` : '';
 
             postEl.innerHTML = `
+                <div style="display: flex; flex-direction: column; width: 100%;">
                 ${repostHeader}
                 ${repostCaptionHtml}
                 <div class="original-post-wrapper" style="display: flex; gap: 15px; ${item.isRepost ? 'border: 1px solid var(--border); padding: 15px; border-radius: 8px; background: rgba(0,0,0,0.2);' : ''}">
@@ -713,6 +714,7 @@ async function loadMainGlobalFeed() {
                 </div>
                 <div id="replies-list-${actionHash}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px; padding-left: 65px;">
                     ${renderThreadedReplies(item.replies, 0, actionHash, item.type === 'SONG_UPLOAD' ? item.data.audioHash : null)}
+                </div>
                 </div>
             `;
             container.appendChild(postEl);
@@ -2281,6 +2283,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                     const repostCaptionHtml = item.isRepost && item.repostCaption ? `<div class="post-body" style="padding-left: 65px; margin-bottom: 15px;">${parseMentions(item.repostCaption)}</div>` : '';
                     
                     postEl.innerHTML = `
+                        <div style="display: flex; flex-direction: column; width: 100%;">
                         ${repostHeader}
                         ${repostCaptionHtml}
                         <div class="original-post-wrapper" style="display: flex; gap: 15px; ${item.isRepost ? 'border: 1px solid var(--border); padding: 15px; border-radius: 8px; background: rgba(0,0,0,0.2);' : ''}">
@@ -2309,6 +2312,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                         </div>
                         <div id="replies-list-${actionHash}" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px; padding-left: 65px;">
                             ${renderThreadedReplies(item.replies, 0, actionHash, item.type === 'SONG_UPLOAD' ? item.data.audioHash : null)}
+                        </div>
                         </div>
                     `;
                     profileFeedContainer.appendChild(postEl);
