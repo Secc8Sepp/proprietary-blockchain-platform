@@ -170,69 +170,13 @@ class ProfileService {
             playlists: []
         };
 
-        const userLikes = new Set();
-        const userReposts = [];
-        
-        const allShareRequests = {};
-        // Pre-compute playcounts for the user's uploaded tracks
-        const playCounts = {};
-        const shareDistribution = {};
-        profile._trackDetails = {};
-        
-        for (const block of chain) {
-            for (const tx of block.transactions) {
-                if (deletedUsers.has(tx.sender)) continue;
-
-                if (tx.type === 'STREAM_COMPLETED') {
-                    playCounts[tx.data.audioHash] = (playCounts[tx.data.audioHash] || 0) + 1;
-                }
-            }
-        }
-
-        const allCommissions = {};
-        const marketData = this.getMarketData();
-        const itemsList = marketData.items || [];
-        profile.ownedItems = [];
-
-        // --- Playlist Aggregation ---
-        const allPlaylists = {}; // { [playlistId]: playlistObject }
-        // Create a default "artist" playlist for their own uploads
-        const artistPlaylistId = `artist-playlist-${publicKey}`;
-        allPlaylists[artistPlaylistId] = {
-            id: artistPlaylistId,
-            user_id: publicKey,
-            title: "Uploaded Tracks",
-            type: 'artist',
-            is_public: true, // Default public for uploaded tracks
-            track_order: [],
-            created_at: profile.joined,
-            isAutoPlaylist: true,
-        };
-        profile._trackDetails = {};
+        const { feed: allFeedItems, profiles: liveProfiles } = this.getFeedEngine();
+        const { items: marketItems, bounties: marketBounties } = this.getMarketData();
 
         // Trace the entire ledger chronologically to compute current state variables
+        // This loop is now only for state that is NOT part of the feed engine (e.g., profile settings, non-post transactions)
         for (const block of chain) {
             for (const tx of block.transactions) {
-                // Ignore transactions sent by a deleted user, but still process transactions *sent to* them (e.g. for balance calculations of others)
-                const isSenderDeleted = deletedUsers.has(tx.sender);
-                
-                // Track likes/unlikes and reposts for the current profile user
-                if (tx.sender === publicKey && !isSenderDeleted) {
-                    if (tx.type === 'LIKE_SONG') {
-                        userLikes.add(tx.data.songId);
-                    }
-                    if (tx.type === 'UNLIKE_SONG') {
-                        userLikes.delete(tx.data.songId);
-                    }
-                    if (tx.type === 'REPOST_POST') {
-                        userReposts.push({
-                            originalTxHash: tx.data.originalTxHash,
-                            timestamp: tx.timestamp,
-                            repostTxHash: block.hash
-                        });
-                    }
-                }
-
                 // Populate Personal Transaction History
                 if (tx.sender === publicKey || tx.receiver === publicKey) {
                     let txAmt = (tx.data && tx.data.amount) ? tx.data.amount : null;
@@ -249,137 +193,15 @@ class ProfileService {
                     });
                 }
 
-                // Track Commissions for Escrow Dashboard
-                if (tx.type === 'CREATE_COMMISSION' && !isSenderDeleted && tx.data) {
-                    allCommissions[block.hash] = {
-                        id: block.hash,
-                        buyer: tx.sender,
-                        creator: tx.receiver,
-                        amount: tx.data.amount,
-                        terms: tx.data.terms,
-                        timestamp: tx.timestamp,
-                        fulfilled: false
-                    };
-                }
-                if (tx.type === 'FULFILL_COMMISSION' && !isSenderDeleted && tx.data) {
-                    if (allCommissions[tx.data.commissionId] && tx.sender === allCommissions[tx.data.commissionId].creator) {
-                        allCommissions[tx.data.commissionId].fulfilled = true;
-                    }
-                }
-
-                if (tx.type === 'BUY_ITEM' && tx.sender === publicKey && !isSenderDeleted && tx.data) {
-                    const item = itemsList.find(i => i.id === tx.data.itemId);
-                    if (item) profile.ownedItems.push(item);
-                }
-                if (tx.type === 'SONG_UPLOAD' && !isSenderDeleted && tx.data) {
-                    const assetHash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
-                    if (!assetHash) continue;
-                    shareDistribution[assetHash] = shareDistribution[assetHash] || {};
-                    let rem = parseInt(tx.data.totalShares) || 100;
-                    if (tx.data.collaborators) {
-                        for (const c of tx.data.collaborators) {
-                            const p = parseInt(c.percentage) || 0;
-                            if (p > 0 && rem >= p) {
-                                shareDistribution[assetHash][c.address] = (shareDistribution[assetHash][c.address] || 0) + p;
-                                rem -= p;
-                            }
-                        }
-                    }
-                    if (rem > 0) shareDistribution[assetHash][tx.sender] = (shareDistribution[assetHash][tx.sender] || 0) + rem;
-
-                    if (tx.type === 'SONG_UPLOAD') {
-                        profile._trackDetails[assetHash] = { title: tx.data.trackTitle, creator: tx.sender, artist: tx.data.artist, offPlatformCollaborator: tx.data.offPlatformCollaborator, coverHash: tx.data.coverHash };
-                    } else {
-                        // For images/projects/videos, store as generic asset details under _trackDetails for display
-                        profile._trackDetails[assetHash] = { title: tx.data.caption || tx.data.filename || 'Asset', creator: tx.sender, coverHash: tx.data.coverHash || null };
-                    }
-                }
-                if (tx.type === 'EDIT_SONG_METADATA' && !isSenderDeleted && tx.data) {
-                    if (profile._trackDetails[tx.data.audioHash] && profile._trackDetails[tx.data.audioHash].creator === tx.sender) {
-                        if (tx.data.title) profile._trackDetails[tx.data.audioHash].title = tx.data.title;
-                        if (tx.data.artist) profile._trackDetails[tx.data.audioHash].artist = tx.data.artist;
-                        if (tx.data.offPlatformCollaborator !== undefined) profile._trackDetails[tx.data.audioHash].offPlatformCollaborator = tx.data.offPlatformCollaborator;
-                        if (tx.data.metadata !== undefined) profile._trackDetails[tx.data.audioHash].metadata = tx.data.metadata;
-                    }
-                }
-                if (tx.type === 'BUY_SONG_SHARE' && !isSenderDeleted && tx.data) {
-                    const hash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
-                    const buyer = tx.sender;
-                    const seller = tx.receiver;
-                    const count = parseInt(tx.data.shareCount) || 0;
-                    if (shareDistribution[hash] && shareDistribution[hash][seller] >= count) {
-                        shareDistribution[hash][seller] -= count;
-                        if (!shareDistribution[hash][buyer]) shareDistribution[hash][buyer] = 0;
-                        shareDistribution[hash][buyer] += count;
-                    }
-                }
-                
-                if (tx.type === 'REQUEST_SONG_SHARE' && !isSenderDeleted && tx.data) {
-                    const assetHash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
-                    allShareRequests[block.hash] = {
-                        id: block.hash,
-                        assetHash: assetHash,
-                        buyer: tx.sender,
-                        seller: tx.receiver,
-                        count: tx.data.shareCount,
-                        price: tx.data.pricePerShare,
-                        status: 'pending'
-                    };
-                }
-                if (tx.type === 'ACCEPT_SHARE_REQUEST' && !isSenderDeleted && tx.data && allShareRequests[tx.data.requestId] && allShareRequests[tx.data.requestId].seller === tx.sender) {
-                    allShareRequests[tx.data.requestId].status = 'accepted';
-                }
-                if (tx.type === 'DECLINE_SHARE_REQUEST' && !isSenderDeleted && tx.data && allShareRequests[tx.data.requestId] && allShareRequests[tx.data.requestId].seller === tx.sender) {
-                    allShareRequests[tx.data.requestId].status = 'declined';
-                }
-
-                // Playlist state mutations
-                if (tx.type === 'CREATE_PLAYLIST' && tx.sender === publicKey && tx.data) {
-                    allPlaylists[block.hash] = {
-                        id: block.hash,
-                        user_id: tx.sender,
-                        title: tx.data.title,
-                        type: tx.data.type || 'listener',
-                        is_public: tx.data.isPublic,
-                        track_order: tx.data.initialTrackHash ? [tx.data.initialTrackHash] : [],
-                        created_at: tx.timestamp,
-                        updated_at: tx.timestamp
-                    };
-                }
-                if (tx.type === 'ADD_TO_PLAYLIST' && tx.sender === publicKey) {
-                    const playlist = allPlaylists[tx.data.playlistId];
-                    if (playlist && !playlist.track_order.includes(tx.data.trackHash)) {
-                        playlist.track_order.push(tx.data.trackHash);
-                        playlist.updated_at = tx.timestamp;
-                    }
-                }
-                if (tx.type === 'UPDATE_PLAYLIST_DETAILS' && tx.sender === publicKey) {
-                    const playlist = allPlaylists[tx.data.playlistId];
-                    if (playlist) {
-                        if (tx.data.title) playlist.title = tx.data.title;
-                        if (typeof tx.data.isPublic === 'boolean') playlist.is_public = tx.data.isPublic;
-                        playlist.updated_at = tx.timestamp;
-                    }
-                }
-                if (tx.type === 'DELETE_PLAYLIST' && tx.sender === publicKey) {
-                    delete allPlaylists[tx.data.playlistId];
-                }
-                if (tx.type === 'REORDER_PLAYLIST_TRACKS' && tx.sender === publicKey) {
-                    const playlist = allPlaylists[tx.data.playlistId];
-                    if (playlist && Array.isArray(tx.data.trackOrder)) playlist.track_order = tx.data.trackOrder;
-                }
-
                 // 1. Process mutations belonging to this specific user profile
-                if (tx.sender === publicKey && !isSenderDeleted) {
+                if (tx.sender === publicKey && !deletedUsers.has(tx.sender)) {
                     if (tx.type === 'PROFILE_UPDATE') {
                         profile.bio = tx.data.bio || profile.bio;
                         if (tx.data.bannerHash) profile.bannerHash = tx.data.bannerHash;
                         if (tx.data.sectionImages) profile.sectionImages = tx.data.sectionImages;
                         if (tx.data.layoutOrder) profile.layoutOrder = tx.data.layoutOrder;
                         // Allow toggling privacy of main artist playlist
-                        if (allPlaylists[artistPlaylistId] && typeof tx.data.artistPlaylistIsPublic === 'boolean') {
-                            allPlaylists[artistPlaylistId].is_public = tx.data.artistPlaylistIsPublic;
-                        }
+                        // This logic is now handled in the playlist aggregation step below
                     }
                     if (tx.type === 'THEME_UPDATE') {
                         profile.customCss = tx.data.customCss || "";
@@ -389,42 +211,70 @@ class ProfileService {
                     }
                 }
 
-                // 1. Process mutations belonging to this specific user profile
-                if (tx.sender === publicKey && !isSenderDeleted && tx.data) {
-                    if (tx.type === 'SONG_UPLOAD') {
-                        const artistToUse = tx.data.artist;
-                        const titleToUse = tx.data.trackTitle;
-                        profile.uploadedTracks.push({
-                            title: titleToUse,
-                            artist: artistToUse,
-                            offPlatformCollaborator: tx.data.offPlatformCollaborator,
-                            hash: tx.data.audioHash,
-                            coverHash: tx.data.coverHash || null,
-                            timestamp: tx.timestamp,
-                            playCount: playCounts[tx.data.audioHash] || 0,
-                            metadata: tx.data.metadata || ''
-                        });
-                    }
-                    if (tx.type === 'EDIT_SONG_METADATA') {
-                        const idx = profile.uploadedTracks.findIndex(t => t.hash === tx.data.audioHash);
-                        if (idx !== -1) {
-                            if(tx.data.title) profile.uploadedTracks[idx].title = tx.data.title;
-                            if(tx.data.artist) profile.uploadedTracks[idx].artist = tx.data.artist;
-                            if(tx.data.offPlatformCollaborator !== undefined) profile.uploadedTracks[idx].offPlatformCollaborator = tx.data.offPlatformCollaborator;
-                            if(tx.data.coverHash) profile.uploadedTracks[idx].coverHash = tx.data.coverHash;
-                            if(tx.data.metadata !== undefined) profile.uploadedTracks[idx].metadata = tx.data.metadata;
-                        }
-                    }
-                }
-
                 // 2. Collect Shoutbox messages sent TO this specific profile wall
-                if (tx.type === 'SHOUTBOX_POST' && tx.receiver === publicKey && !isSenderDeleted && tx.data) {
+                if (tx.type === 'SHOUTBOX_POST' && tx.receiver === publicKey && !deletedUsers.has(tx.sender) && tx.data) {
                     profile.shoutbox.push({
                         sender: tx.sender,
                         message: tx.data.message,
                         timestamp: tx.timestamp
                     });
                 }
+            }
+        }
+
+        // --- DATA DERIVATION FROM FEED ENGINE ---
+        profile.posts = allFeedItems.filter(item => 
+            (item.sender === publicKey || item.reposter === publicKey) && 
+            !(item.type === 'IMAGE_POST' && item.data && item.data.isFlyer)
+        );
+
+        profile.uploadedTracks = profile.posts
+            .filter(p => p.type === 'SONG_UPLOAD' && p.sender === publicKey && !p.isRepost)
+            .map(p => ({
+                title: p.data.trackTitle,
+                artist: p.data.artist,
+                offPlatformCollaborator: p.data.offPlatformCollaborator,
+                hash: p.data.audioHash,
+                coverHash: p.data.coverHash || null,
+                timestamp: p.timestamp,
+                playCount: p.playCount || 0,
+                metadata: p.data.metadata || ''
+            }));
+
+        profile.uploadedImages = profile.posts
+            .filter(p => (p.type === 'IMAGE_POST' || p.type === 'VIDEO_POST' || p.type === 'PROJECT_FILE_POST') && p.sender === publicKey && !p.isRepost)
+            .map(p => ({
+                caption: p.data.caption,
+                hash: p.data.imageHash || p.data.videoHash || p.data.fileHash,
+                timestamp: p.timestamp,
+                transactionHash: p.transactionHash,
+                metadata: p.data.metadata || ''
+            }));
+
+        profile.ownedItems = [];
+        const ownedItemTransactions = profile.transactions.filter(tx => tx.type === 'BUY_ITEM' && tx.sender === publicKey);
+        for (const tx of ownedItemTransactions) {
+            const item = marketItems.find(i => i.id === tx.data.itemId);
+            if (item) profile.ownedItems.push(item);
+        }
+
+        profile.ownedShares = [];
+        const trackMapForShares = allFeedItems.reduce((map, item) => {
+            if (item.type === 'SONG_UPLOAD') {
+                map[item.data.audioHash] = item;
+            }
+            return map;
+        }, {});
+
+        for (const hash in trackMapForShares) {
+            const track = trackMapForShares[hash];
+            if (track.shares && track.shares[publicKey] > 0 && track.sender !== publicKey) {
+                profile.ownedShares.push({
+                    audioHash: hash,
+                    title: track.data.trackTitle,
+                    creator: track.sender,
+                    shares: track.shares[publicKey]
+                });
             }
         }
 
@@ -468,48 +318,10 @@ class ProfileService {
             .slice(0, 8)
             .map(k => ({ key: k, mutuals: recommendedCounts[k] }));
 
-        profile.activeCommissions = Object.values(allCommissions)
-            .filter(c => !c.fulfilled && (c.buyer === publicKey || c.creator === publicKey))
-            .sort((a,b) => b.timestamp - a.timestamp);
+        profile.bounties = marketBounties.filter(b => b.creator === publicKey);
 
-        profile.bounties = this.getMarketData().bounties.filter(b => b.creator === publicKey);
-        
-        const { feed: allFeedItems } = this.getFeedEngine(); // Get all feed items once
-        profile.posts = allFeedItems.filter(item => 
-            (item.sender === publicKey || item.reposter === publicKey) && 
-            !(item.type === 'IMAGE_POST' && item.data && item.data.isFlyer)
-        );
-
-        // Rebuild the gallery directly from the validated feed items to completely strip any flyers
-        profile.uploadedImages = profile.posts
-            .filter(p => (p.type === 'IMAGE_POST' || p.type === 'VIDEO_POST' || p.type === 'PROJECT_FILE_POST') && !(p.type === 'IMAGE_POST' && p.data && p.data.isFlyer) && p.sender === publicKey && !p.isRepost)
-            .map(p => ({
-                caption: p.data.caption,
-                hash: p.data.imageHash || p.data.videoHash || p.data.fileHash,
-                timestamp: p.timestamp,
-                transactionHash: p.transactionHash,
-                metadata: p.data.metadata || ''
-            }));
-
-        profile.ownedShares = [];
-        for (const [hash, shares] of Object.entries(shareDistribution)) {
-            if (shares[publicKey] > 0 && profile._trackDetails[hash] && profile._trackDetails[hash].creator !== publicKey) {
-                profile.ownedShares.push({
-                    audioHash: hash,
-                    title: profile._trackDetails[hash].title,
-                    creator: profile._trackDetails[hash].creator,
-                    shares: shares[publicKey]
-                });
-            }
-        }
-        delete profile._trackDetails;
-
-        const trackMap = allFeedItems
-            .filter(item => item.type === 'SONG_UPLOAD')
-            .reduce((map, item) => {
-                map[item.data.audioHash] = item;
-                return map;
-            }, {});
+        // --- PLAYLISTS ---
+        const { userLikes, userReposts, allPlaylists } = this._aggregatePlaylistData(chain, publicKey);
 
         // Create "Tracks You Like" auto-playlist
         const likedTracksPlaylist = {
@@ -525,12 +337,7 @@ class ProfileService {
         allPlaylists[likedTracksPlaylist.id] = likedTracksPlaylist;
 
         // Create "My Reposts" auto-playlist
-        const postMapForReposts = allFeedItems.reduce((map, item) => {
-            map[item.transactionHash] = item;
-            return map;
-        }, {});
-        const repostedTrackHashes = userReposts
-            .map(repost => postMapForReposts[repost.originalTxHash])
+        const repostedTrackHashes = userReposts.map(repost => allFeedItems.find(p => p.transactionHash === repost.originalTxHash))
             .filter(post => post && post.type === 'SONG_UPLOAD')
             .map(post => post.data.audioHash);
 
@@ -547,12 +354,12 @@ class ProfileService {
         allPlaylists[repostsPlaylist.id] = repostsPlaylist;
 
         // --- Final Playlist Enrichment ---
-        // Get all original track uploads by the user from the feed engine.
-        const artistTrackHashes = allFeedItems
-            .filter(item => item.type === 'SONG_UPLOAD' && item.sender === publicKey && !item.isRepost)
-            .map(item => item.data.audioHash);
-
-        allPlaylists[artistPlaylistId].track_order = artistTrackHashes;
+        const trackMap = allFeedItems.reduce((map, item) => {
+            if (item.type === 'SONG_UPLOAD') {
+                map[item.data.audioHash] = item;
+            }
+            return map;
+        }, {});
 
         const finalPlaylists = [];
         for (const playlistId in allPlaylists) {
@@ -575,6 +382,8 @@ class ProfileService {
 
         const adminAddress = blockchainService.getAdminAddress(chain);
         profile.isAdmin = (publicKey === adminAddress);
+
+        profile.activeCommissions = this._getActiveCommissionsForUser(chain, publicKey);
 
         fullProfileCache.set(publicKey, profile); // Store result in cache
         return profile;
@@ -875,6 +684,82 @@ class ProfileService {
             bounties: Object.values(bounties).sort((a,b) => b.timestamp - a.timestamp),
             items: Object.values(items).sort((a,b) => b.timestamp - a.timestamp)
         };
+    }
+
+    _getActiveCommissionsForUser(chain, publicKey) {
+        const allCommissions = {};
+        for (const block of chain) {
+            for (const tx of block.transactions) {
+                if (tx.type === 'CREATE_COMMISSION' && tx.data) {
+                    allCommissions[block.hash] = {
+                        id: block.hash,
+                        buyer: tx.sender,
+                        creator: tx.receiver,
+                        amount: tx.data.amount,
+                        terms: tx.data.terms,
+                        timestamp: tx.timestamp,
+                        fulfilled: false
+                    };
+                }
+                if (tx.type === 'FULFILL_COMMISSION' && tx.data) {
+                    if (allCommissions[tx.data.commissionId] && tx.sender === allCommissions[tx.data.commissionId].creator) {
+                        allCommissions[tx.data.commissionId].fulfilled = true;
+                    }
+                }
+            }
+        }
+        return Object.values(allCommissions)
+            .filter(c => !c.fulfilled && (c.buyer === publicKey || c.creator === publicKey))
+            .sort((a,b) => b.timestamp - a.timestamp);
+    }
+
+    _aggregatePlaylistData(chain, publicKey) {
+        const userLikes = new Set();
+        const userReposts = [];
+        const allPlaylists = {};
+
+        const artistPlaylistId = `artist-playlist-${publicKey}`;
+        allPlaylists[artistPlaylistId] = {
+            id: artistPlaylistId,
+            user_id: publicKey,
+            title: "Uploaded Tracks",
+            type: 'artist',
+            is_public: true,
+            track_order: [],
+            isAutoPlaylist: true,
+        };
+
+        for (const block of chain) {
+            for (const tx of block.transactions) {
+                if (tx.sender === publicKey) {
+                    if (tx.type === 'LIKE_SONG') userLikes.add(tx.data.songId);
+                    if (tx.type === 'UNLIKE_SONG') userLikes.delete(tx.data.songId);
+                    if (tx.type === 'REPOST_POST') userReposts.push({ originalTxHash: tx.data.originalTxHash });
+                    if (tx.type === 'SONG_UPLOAD') allPlaylists[artistPlaylistId].track_order.push(tx.data.audioHash);
+
+                    if (tx.type === 'CREATE_PLAYLIST' && tx.data) {
+                        allPlaylists[block.hash] = {
+                            id: block.hash, user_id: tx.sender, title: tx.data.title, type: tx.data.type || 'listener',
+                            is_public: tx.data.isPublic, track_order: tx.data.initialTrackHash ? [tx.data.initialTrackHash] : [],
+                            created_at: tx.timestamp, updated_at: tx.timestamp
+                        };
+                    }
+                    if (tx.type === 'ADD_TO_PLAYLIST') {
+                        const p = allPlaylists[tx.data.playlistId];
+                        if (p && !p.track_order.includes(tx.data.trackHash)) { p.track_order.push(tx.data.trackHash); p.updated_at = tx.timestamp; }
+                    }
+                    if (tx.type === 'UPDATE_PLAYLIST_DETAILS') {
+                        const p = allPlaylists[tx.data.playlistId];
+                        if (p) { if (tx.data.title) p.title = tx.data.title; if (typeof tx.data.isPublic === 'boolean') p.is_public = tx.data.isPublic; p.updated_at = tx.timestamp; }
+                    }
+                    if (tx.type === 'DELETE_PLAYLIST') delete allPlaylists[tx.data.playlistId];
+                    if (tx.type === 'REORDER_PLAYLIST_TRACKS' && Array.isArray(tx.data.trackOrder)) {
+                        const p = allPlaylists[tx.data.playlistId]; if (p) p.track_order = tx.data.trackOrder;
+                    }
+                }
+            }
+        }
+        return { userLikes, userReposts, allPlaylists };
     }
 
     getEventCalendar() {

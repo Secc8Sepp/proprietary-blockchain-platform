@@ -8,6 +8,7 @@
     "dev": "npx nodemon server.js"
   },
   "dependencies": {
+    "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "elliptic": "^6.6.1",
     "express": "^4.22.2",

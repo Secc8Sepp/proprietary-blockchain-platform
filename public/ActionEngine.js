@@ -149,6 +149,9 @@ window.ActionEngine = {
             if (document.getElementById('composer-zip-upload')) document.getElementById('composer-zip-upload').value = '';
             updateComposerPreview();
             loadMainGlobalFeed();
+            if (window.currentView === 'profile' && window.viewingUserPublicKey === window.CoreEngine.userKeys.publicKey) {
+                fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
+            }
         } catch (err) { 
             console.error('[PUBLISH] ✗ Exception:', err);
             alert("Transaction Failed: " + err.message); 

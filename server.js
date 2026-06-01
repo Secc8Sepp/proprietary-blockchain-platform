@@ -529,6 +529,14 @@ function purgeDeletedUserData(deletedUserAddress) {
     dbMemory.zineArticles = (dbMemory.zineArticles || []).filter(art => art.author !== deletedUserAddress);
     dbMemory.zineArticles.forEach(art => { art.ownersList = art.ownersList.filter(owner => owner !== deletedUserAddress); });
 
+    // 4. Purge from password-based auth system
+    for (const username in userCredentials) {
+        if (userCredentials[username].publicKey === deletedUserAddress) {
+            delete userCredentials[username];
+            console.log(`[PURGE] Removed username '${username}' from credentials DB.`);
+        }
+    }
+
     saveDBMemory(); // Persist the cleanup
     profileService.getProfileDirectory(); // Invalidate and rebuild profile cache to reflect deletion
     console.log(`[PURGE] Completed data purge for ${deletedUserAddress.substring(0,8)}...`);
