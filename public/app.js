@@ -428,12 +428,20 @@ async function subscribeToPush(publicKey) {
         const res = await fetch('/api/push/vapidPublicKey');
         const { publicKey: vapidPublicKey } = await res.json();
         
-        if (!vapidPublicKey) {
+        if (!vapidPublicKey || vapidPublicKey.trim() === '' || vapidPublicKey.includes('your_')) {
             console.log('[PWA] Push subscription skipped: VAPID keys not configured on server.');
             return;
         }
 
-        const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
+        let convertedVapidKey;
+        try {
+            // Clean any accidental spaces or quotes loaded from the .env file
+            const cleanKey = vapidPublicKey.replace(/['"]/g, '').trim();
+            convertedVapidKey = urlBase64ToUint8Array(cleanKey);
+        } catch (err) {
+            console.warn('[PWA] Push subscription skipped: VAPID key in .env is malformed or invalid base64.', err);
+            return;
+        }
 
         let subscription;
         try {
@@ -592,7 +600,7 @@ async function loadMainGlobalFeed() {
                 if (tx.type === 'SONG_UPLOAD') { action = 'Minted Track'; color = 'var(--primary)'; amountStr = '-50,000'; }
                 else if (tx.type === 'IMAGE_POST') { action = 'Minted Image'; color = 'var(--primary)'; amountStr = '-5,000'; }
                 else if (tx.type === 'PROFILE_UPDATE') { action = 'Updated Profile'; color = 'var(--warning)'; }
-                else if (tx.type === 'STREAM_COMPLETED') { action = 'Mined $VOD'; color = 'var(--success)'; amountStr = '+5,000'; }
+                else if (tx.type === 'STREAM_COMPLETED') { action = 'Mined $VOD'; color = 'var(--success)'; amountStr = '+5k 🎧 / +20k 🎵'; }
                 else if (tx.type === 'FOLLOW_USER') { action = 'Locked Crew'; color = 'var(--primary)'; }
                 else if (tx.type === 'TEXT_POST') { action = 'Broadcasted Status'; color = '#fff'; }
                 else if (tx.type === 'LIKE_POST') { action = 'Liked Post'; color = 'var(--danger)'; amountStr = '+500'; }
@@ -1099,7 +1107,7 @@ function renderPostContent(item) {
     } else if (item.type === 'SET_TOP_8') {
         return `<div class="post-body" style="color: var(--warning); font-style: italic;">Locked in a new Top 8 Crew.</div>`;
     } else if (item.type === 'STREAM_COMPLETED') {
-        return `<div class="post-body" style="color: var(--success); font-style: italic;">🎧 Mined a new block by streaming a track! (+5,000 $VOD)</div>`;
+        return `<div class="post-body" style="color: var(--success); font-style: italic;">🎧 Mined a new block by streaming a track! (+5k to Listener / +20k to Artist)</div>`;
     } else if (item.type === 'BUY_SONG_SHARE') {
         return `<div class="post-body" style="color: var(--success); font-style: italic;">📈 Acquired ${item.data.shareCount} shares of a track on the open market!</div>`;
     } else if (item.type === 'REQUEST_SONG_SHARE') {
@@ -2006,7 +2014,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                     let amount = tx.amount;
 
                     if (tx.type === 'STREAM_COMPLETED') { 
-                        if (isSender) { amount = 5000; sign = '+'; color = 'var(--success)'; }
+                        if (isSender) { amount = '5k 🎧 / 20k 🎵'; sign = '+'; color = 'var(--success)'; }
                         else { amount = 'Royalties'; sign = '+'; color = 'var(--success)'; }
                     } else if (tx.type === 'SONG_UPLOAD' && isSender) { amount = 50000; sign = '-'; color = 'var(--warning)'; }
                     else if (tx.type === 'IMAGE_POST' && isSender) { amount = 5000; sign = '-'; color = 'var(--warning)'; }
@@ -2260,7 +2268,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
 
                 // Handle implicit amounts defined by the smart contract
                 if (tx.type === 'STREAM_COMPLETED') { 
-                    if (isSender) { amount = 5000; sign = '+'; color = 'var(--success)'; }
+                    if (isSender) { amount = '5k 🎧 / 20k 🎵'; sign = '+'; color = 'var(--success)'; }
                     else { amount = 'Royalties'; sign = '+'; color = 'var(--success)'; }
                 } else if (tx.type === 'SONG_UPLOAD' && isSender) { amount = 50000; sign = '-'; color = 'var(--warning)'; }
                 else if (tx.type === 'IMAGE_POST' && isSender) { amount = 5000; sign = '-'; color = 'var(--warning)'; }
