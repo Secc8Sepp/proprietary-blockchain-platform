@@ -404,12 +404,27 @@ body.mobile-chat-active .chat-module-close-btn { display: inline-block; color: v
     }
 
     /* Switch multi-column grids to single column on mobile */
-    #profile-dashboard-grid,
     #ui-zine-articles,
     #ui-zine-owned,
     #ui-market-items {
         grid-template-columns: 1fr;
     }
+
+    /* Stack Profile Dashboard explicitly and reorder for mobile */
+    #profile-dashboard-grid {
+        display: flex !important;
+        flex-direction: column !important;
+    }
+    #profile-col-left, #profile-col-right {
+        display: contents !important;
+    }
+    #profile-section-playlist { order: 1; }
+    #profile-section-gallery { order: 2; }
+    #profile-section-top8 { order: 3; }
+    #profile-section-network { order: 4; }
+    #profile-section-shoutbox { order: 5; }
+    #profile-section-vst { order: 6; }
+    #profile-section-feed { order: 7; }
 
     /* Allow composer, post headers, and interaction rows to wrap on small screens */
     .composer-actions, .post-header, .post-interactions, .profile-actions {

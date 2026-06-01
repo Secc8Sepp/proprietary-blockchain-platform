@@ -385,18 +385,6 @@ class ProfileService {
                     if (tx.type === 'SET_TOP_8') {
                         profile.top8 = Array.isArray(tx.data.top8Keys) ? tx.data.top8Keys : [];
                     }
-                    if (tx.type === 'IMAGE_POST' || tx.type === 'VIDEO_POST' || tx.type === 'PROJECT_FILE_POST') {
-                        if (!(tx.type === 'IMAGE_POST' && tx.data && tx.data.isFlyer)) {
-                            const assetHash = tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
-                            profile.uploadedImages.push({
-                                caption: tx.data.caption,
-                                hash: assetHash,
-                                timestamp: tx.timestamp,
-                                transactionHash: block.hash,
-                                metadata: tx.data.metadata || ''
-                            });
-                        }
-                    }
                 }
 
                 // 1. Process mutations belonging to this specific user profile
@@ -486,6 +474,17 @@ class ProfileService {
         
         const { feed: allFeedItems } = this.getFeedEngine(); // Get all feed items once
         profile.posts = allFeedItems.filter(item => item.sender === publicKey || item.reposter === publicKey);
+
+        // Rebuild the gallery directly from the validated feed items to completely strip any flyers
+        profile.uploadedImages = profile.posts
+            .filter(p => (p.type === 'IMAGE_POST' || p.type === 'VIDEO_POST' || p.type === 'PROJECT_FILE_POST') && !(p.type === 'IMAGE_POST' && p.data && p.data.isFlyer) && p.sender === publicKey && !p.isRepost)
+            .map(p => ({
+                caption: p.data.caption,
+                hash: p.data.imageHash || p.data.videoHash || p.data.fileHash,
+                timestamp: p.timestamp,
+                transactionHash: p.transactionHash,
+                metadata: p.data.metadata || ''
+            }));
 
         profile.ownedShares = [];
         for (const [hash, shares] of Object.entries(shareDistribution)) {
