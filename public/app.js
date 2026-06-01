@@ -581,22 +581,34 @@ async function loadMainGlobalFeed() {
                 const prof = resolveProfile(tx.sender);
                 let action = tx.type;
                 let color = 'var(--text-muted)';
+                let amountStr = '';
                 
-                if (tx.type === 'SONG_UPLOAD') { action = 'Minted Track'; color = 'var(--primary)'; }
-                else if (tx.type === 'IMAGE_POST') { action = 'Minted Image'; color = 'var(--primary)'; }
+                if (tx.type === 'SONG_UPLOAD') { action = 'Minted Track'; color = 'var(--primary)'; amountStr = '-50,000'; }
+                else if (tx.type === 'IMAGE_POST') { action = 'Minted Image'; color = 'var(--primary)'; amountStr = '-5,000'; }
                 else if (tx.type === 'PROFILE_UPDATE') { action = 'Updated Profile'; color = 'var(--warning)'; }
-                else if (tx.type === 'STREAM_COMPLETED') { action = 'Mined $VOD'; color = 'var(--success)'; }
+                else if (tx.type === 'STREAM_COMPLETED') { action = 'Mined $VOD'; color = 'var(--success)'; amountStr = '+5,000'; }
                 else if (tx.type === 'FOLLOW_USER') { action = 'Locked Crew'; color = 'var(--primary)'; }
                 else if (tx.type === 'TEXT_POST') { action = 'Broadcasted Status'; color = '#fff'; }
-                else if (tx.type === 'LIKE_POST') { action = 'Liked Post'; color = 'var(--danger)'; }
+                else if (tx.type === 'LIKE_POST') { action = 'Liked Post'; color = 'var(--danger)'; amountStr = '+500'; }
                 else if (tx.type === 'REPLY_POST') { action = 'Replied'; color = '#fff'; }
+                else if (tx.type === 'TRANSFER_COIN') { action = 'Tipped'; color = 'var(--success)'; amountStr = `-${(tx.data && tx.data.amount) ? tx.data.amount.toLocaleString() : 0}`; }
+                else if (tx.type === 'BUY_ITEM') { action = 'Bought Asset'; color = 'var(--success)'; amountStr = `-${(tx.data && tx.data.price) ? tx.data.price.toLocaleString() : 0}`; }
+                else if (tx.type === 'BUY_SONG_SHARE') { action = 'Bought Stake'; color = 'var(--success)'; amountStr = `-${(tx.data ? (tx.data.shareCount * tx.data.pricePerShare) : 0).toLocaleString()}`; }
+                else if (tx.type === 'CREATE_COMMISSION') { action = 'Funded Escrow'; color = 'var(--primary)'; amountStr = `-${(tx.data && tx.data.amount) ? tx.data.amount.toLocaleString() : 0}`; }
+                else if (tx.type === 'CREATE_BOUNTY') { action = 'Posted Bounty'; color = 'var(--primary)'; amountStr = `-${(tx.data && tx.data.amount) ? tx.data.amount.toLocaleString() : 0}`; }
+                else if (tx.type === 'LIST_ITEM') { action = 'Listed Asset'; color = 'var(--warning)'; amountStr = '-500'; }
+
+                const amountHtml = amountStr ? `<span style="font-size: 10px; font-family: monospace; color: ${amountStr.startsWith('+') ? 'var(--success)' : 'var(--warning)'};">${amountStr} VOD</span>` : '';
 
                 return `<div style="display:flex; flex-direction: column; padding:8px; border-bottom:1px solid rgba(255,255,255,0.1); font-size:12px; cursor: pointer; transition: 0.2s;" onclick="inspectTargetNode('${tx.sender}')" onmouseover="this.style.background='rgba(102, 252, 241, 0.05)'" onmouseout="this.style.background='transparent'">
                     <div style="display:flex; justify-content:space-between;">
                         <span style="font-weight: bold; color: ${color};">${escapeHtml(prof.username)}</span>
                         <span style="color:var(--text-muted); font-size: 10px;">${new Date(tx.timestamp).toLocaleTimeString()}</span>
                     </div>
-                    <span style="color: var(--text-dark);">${action}</span>
+                    <div style="display:flex; justify-content:space-between; margin-top: 2px;">
+                        <span style="color: var(--text-dark);">${action}</span>
+                        ${amountHtml}
+                    </div>
                 </div>`;
             }).join('');
         }
