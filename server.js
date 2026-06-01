@@ -11,6 +11,7 @@ const socialRoutes = require('./routes/social');
 const feedRoutes = require('./routes/feed');
 const blockchainService = require('./services/blockchainService');
 const profileService = require('./services/profileService');
+const goalsService = require('./services/goalsService');
 const cloutService = require('./services/cloutService');
 const Wallet = require('./core/wallet');
 
@@ -1018,6 +1019,7 @@ async function startServer() {
 
             // Update in-memory state based on new transactions
             block.transactions.forEach(tx => {
+                goalsService.processTransaction(tx);
                 if (tx.type === 'PURCHASE_ZINE_RIGHTS' && tx.data) {
                     const article = dbMemory.zineArticles.find(a => a.id === tx.data.articleId);
                     if (article && !article.ownersList.includes(tx.sender)) {
@@ -1039,4 +1041,5 @@ async function startServer() {
     });
 }
 
+goalsService.initCron();
 startServer();

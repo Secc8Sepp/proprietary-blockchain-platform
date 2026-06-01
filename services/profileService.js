@@ -980,6 +980,9 @@ class ProfileService {
                 if (tx.type === 'ADMIN_MINT') {
                     totalMinted += parseFloat(tx.data.amount) || 0;
                 }
+                if (tx.type === 'GOAL_REWARD') {
+                    totalMinted += parseFloat(tx.data.amount) || 0;
+                }
                 
                 if (tx.type === 'BUY_ITEM' && tx.data && tx.data.price) {
                     if (referrals[tx.sender]) totalMinted += (parseFloat(tx.data.price) || 0) * 0.02;

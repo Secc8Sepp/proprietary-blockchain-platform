@@ -485,6 +485,27 @@ class BlockchainService extends EventEmitter {
         this.emit('new_block', newBlock);
         return newBlock;
     }
+
+    addSystemTransaction(receiver, type, data) {
+        const chain = this.getChain();
+        const latestBlock = this.getLatestBlock();
+        const nextIndex = latestBlock.index + 1;
+        const nextTimestamp = Date.now();
+        const txData = { sender: 'SYSTEM', receiver, type, data, timestamp: nextTimestamp, signature: 'SYSTEM_SIG' };
+        const transactions = [txData];
+        
+        let nonce = 0;
+        let hash = this.calculateHash(nextIndex, latestBlock.hash, nextTimestamp, transactions, nonce);
+        while (!hash.startsWith('00')) {
+            nonce++;
+            hash = this.calculateHash(nextIndex, latestBlock.hash, nextTimestamp, transactions, nonce);
+        }
+        const newBlock = { index: nextIndex, timestamp: nextTimestamp, transactions, previousHash: latestBlock.hash, nonce, hash };
+        chain.push(newBlock);
+        this.saveChain(chain);
+        this.emit('new_block', newBlock);
+        return newBlock;
+    }
 }
 
 module.exports = new BlockchainService();
