@@ -475,7 +475,10 @@ class ProfileService {
         profile.bounties = this.getMarketData().bounties.filter(b => b.creator === publicKey);
         
         const { feed: allFeedItems } = this.getFeedEngine(); // Get all feed items once
-        profile.posts = allFeedItems.filter(item => item.sender === publicKey || item.reposter === publicKey);
+        profile.posts = allFeedItems.filter(item => 
+            (item.sender === publicKey || item.reposter === publicKey) && 
+            !(item.type === 'IMAGE_POST' && item.data && item.data.isFlyer)
+        );
 
         // Rebuild the gallery directly from the validated feed items to completely strip any flyers
         profile.uploadedImages = profile.posts
@@ -709,7 +712,7 @@ class ProfileService {
             
             for (const tx of block.transactions) {
                 if (deletedUsers.has(tx.sender)) continue;
-                if (['SONG_UPLOAD', 'TEXT_POST', 'PROFILE_UPDATE', 'FOLLOW_USER', 'LIKE_POST', 'LIKE_IMAGE', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'THEME_UPDATE', 'SHOUTBOX_POST', 'SET_TOP_8', 'STREAM_COMPLETED', 'BUY_SONG_SHARE', 'TRANSFER_COIN', 'REQUEST_SONG_SHARE', 'ACCEPT_SHARE_REQUEST', 'STORY_POST', 'PURCHASE_ZINE_RIGHTS', 'REPOST_POST', 'LIST_SONG_STAKE'].includes(tx.type)) {
+                if (['SONG_UPLOAD', 'TEXT_POST', 'PROFILE_UPDATE', 'FOLLOW_USER', 'LIKE_POST', 'LIKE_IMAGE', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'THEME_UPDATE', 'SHOUTBOX_POST', 'SET_TOP_8', 'STREAM_COMPLETED', 'BUY_SONG_SHARE', 'TRANSFER_COIN', 'REQUEST_SONG_SHARE', 'ACCEPT_SHARE_REQUEST', 'STORY_POST', 'PURCHASE_ZINE_RIGHTS', 'REPOST_POST', 'LIST_SONG_STAKE', 'GOAL_REWARD'].includes(tx.type)) {
                     
                     const senderBalance = blockchainService.calculateBalance(tx.sender, chain);
                     const adminAddress = blockchainService.getAdminAddress(chain);
@@ -861,6 +864,32 @@ class ProfileService {
             bounties: Object.values(bounties).sort((a,b) => b.timestamp - a.timestamp),
             items: Object.values(items).sort((a,b) => b.timestamp - a.timestamp)
         };
+    }
+
+    getEventCalendar() {
+        const chain = blockchainService.getChain();
+        const deletedUsers = getDeletedUsers(chain);
+        const events = [];
+
+        for (const block of chain) {
+            for (const tx of block.transactions) {
+                if (deletedUsers.has(tx.sender)) continue;
+                if (tx.type === 'IMAGE_POST' && tx.data && tx.data.isFlyer && tx.data.eventDetails) {
+                    events.push({
+                        id: block.hash,
+                        sender: tx.sender,
+                        title: tx.data.eventDetails.title || 'Untitled Event',
+                        date: tx.data.eventDetails.date || 'TBD',
+                        time: tx.data.eventDetails.time || 'TBD',
+                        location: tx.data.eventDetails.location || 'TBD',
+                        flyerHash: tx.data.imageHash,
+                        timestamp: tx.timestamp
+                    });
+                }
+            }
+        }
+        
+        return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     }
 
     getHotOrNotEngine() {

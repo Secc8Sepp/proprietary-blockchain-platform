@@ -688,7 +688,24 @@ window.ActionEngine = {
         eventsState.isPlacing = false; document.body.style.cursor = 'default'; document.getElementById('ui-flyer-cursor').style.display = 'none';
         try {
             const hash = await uploadMediaAssetFile(eventsState.currentFile);
-            await window.CoreEngine.sendSignedTransaction('IMAGE_POST', "0x00", { imageHash: hash, isFlyer: true, localHash: eventsState.currentFile.localHash, x, y, rotation: rot, lat, lng });
+            
+            // Task 3 & 4: Hook into AI Vision API to extract event details
+            let eventData = { title: "Untitled Event", date: "TBD", time: "TBD", location: "TBD" };
+            try {
+                const scanRes = await fetch('/api/events/scan-flyer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ imageHash: hash })
+                });
+                if (scanRes.ok) {
+                    eventData = await scanRes.json();
+                    alert(`AI Scanner automatically extracted: ${eventData.title} at ${eventData.location}`);
+                }
+            } catch (err) {
+                console.warn("AI Flyer Scan Failed", err);
+            }
+
+            await window.CoreEngine.sendSignedTransaction('IMAGE_POST', "0x00", { imageHash: hash, isFlyer: true, localHash: eventsState.currentFile.localHash, x, y, rotation: rot, lat, lng, eventDetails: eventData });
             loadEvents();
         } catch (err) { alert(err.message); }
         eventsState.currentFile = null;

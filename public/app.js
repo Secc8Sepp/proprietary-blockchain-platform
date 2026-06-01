@@ -600,7 +600,7 @@ async function loadMainGlobalFeed() {
         const sidebarTx = document.getElementById('ui-sidebar-tx-history');
         if (sidebarTx) {
             sidebarTx.innerHTML = data.slice(0, 30).map(tx => {
-                const prof = resolveProfile(tx.sender);
+                const prof = resolveProfile(tx.type === 'GOAL_REWARD' ? tx.receiver : tx.sender);
                 let action = tx.type;
                 let color = 'var(--text-muted)';
                 let amountStr = '';
@@ -617,6 +617,7 @@ async function loadMainGlobalFeed() {
                 else if (tx.type === 'BUY_ITEM') { action = 'Bought Asset'; color = 'var(--success)'; amountStr = `-${(tx.data && tx.data.price) ? tx.data.price.toLocaleString() : 0}`; }
                 else if (tx.type === 'BUY_SONG_SHARE') { action = 'Bought Stake'; color = 'var(--success)'; amountStr = `-${(tx.data ? (tx.data.shareCount * tx.data.pricePerShare) : 0).toLocaleString()}`; }
                 else if (tx.type === 'LIST_SONG_STAKE') { action = 'Listed Stake'; color = 'var(--warning)'; amountStr = ''; }
+                else if (tx.type === 'GOAL_REWARD') { action = 'Goal Completed'; color = 'var(--success)'; amountStr = `+${(tx.data && tx.data.amount) ? tx.data.amount.toLocaleString() : 0}`; }
                 else if (tx.type === 'CREATE_COMMISSION') { action = 'Funded Escrow'; color = 'var(--primary)'; amountStr = `-${(tx.data && tx.data.amount) ? tx.data.amount.toLocaleString() : 0}`; }
                 else if (tx.type === 'CREATE_BOUNTY') { action = 'Posted Bounty'; color = 'var(--primary)'; amountStr = `-${(tx.data && tx.data.amount) ? tx.data.amount.toLocaleString() : 0}`; }
                 else if (tx.type === 'LIST_ITEM') { action = 'Listed Asset'; color = 'var(--warning)'; amountStr = '-500'; }
@@ -1131,6 +1132,8 @@ function renderPostContent(item) {
                     return `<div class="post-body" style="color: var(--primary); font-style: italic;">📬 Sent a request to acquire ${item.data.shareCount} shares in a track for ${item.data.pricePerShare} $VOD each.</div>`;
     } else if (item.type === 'LIST_SONG_STAKE') {
         return `<div class="post-body" style="color: var(--warning); font-style: italic;">🛒 Listed ${item.data.sellPercentage} shares of a track on the open market!</div>`;
+    } else if (item.type === 'GOAL_REWARD') {
+        return `<div class="post-body" style="color: var(--success); font-style: italic;">🎯 Completed a network goal! (+${(item.data && item.data.amount) ? item.data.amount.toLocaleString() : 0} $VOD)</div>`;
     }
     return `<div class="post-body" style="opacity: 0.5;">System Broadcast: ${item.type}</div>`;
 }
@@ -1650,8 +1653,43 @@ async function loadEvents() {
             const img = flyerEl.querySelector('img');
             img.onload = img.onerror = () => { imagesToLoad--; if (imagesToLoad <= 0) cleanUpCoveredFlyers(); };
         });
+
+        // Render the Event Calendar feed
+        renderEventCalendar();
     } catch(e) {
         if (loadingText) loadingText.innerText = "Failed to load Events from ledger.";
+    }
+}
+
+async function renderEventCalendar() {
+    const container = document.getElementById('ui-event-calendar');
+    if (!container) return;
+    
+    try {
+        const res = await fetch('/api/social/events');
+        const events = await res.json();
+        
+        if (events.length === 0) {
+            container.innerHTML = '<div style="color: var(--text-muted);">No upcoming events. Post a flyer to add one!</div>';
+            return;
+        }
+        
+        container.innerHTML = events.map(ev => {
+            const prof = resolveProfile(ev.sender);
+            return `
+                <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); padding: 15px; border-radius: 8px; display: flex; gap: 15px; align-items: center; margin-bottom: 10px;">
+                    <img src="/tracks/${ev.flyerHash}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px; cursor: pointer;" onclick="window.open('/tracks/${ev.flyerHash}', '_blank')">
+                    <div style="flex: 1;">
+                        <h4 style="color: var(--primary); margin: 0 0 5px 0;">${escapeHtml(ev.title)}</h4>
+                        <div style="font-size: 12px; color: #fff; margin-bottom: 3px;">📅 ${escapeHtml(ev.date)} @ ${escapeHtml(ev.time)}</div>
+                        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 5px;">📍 ${escapeHtml(ev.location)}</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Posted by @${escapeHtml(prof.username)}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (e) {
+        container.innerHTML = '<div style="color: var(--danger);">Failed to load Event Calendar.</div>';
     }
 }
 
@@ -2041,6 +2079,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                     else if (tx.type === 'IMAGE_POST' && isSender) { amount = 5000; sign = '-'; color = 'var(--warning)'; }
                     else if (tx.type === 'LIST_ITEM' && isSender) { amount = 500; sign = '-'; color = 'var(--warning)'; }
                     else if (tx.type === 'LIST_SONG_STAKE') { amount = ''; sign = ''; color = 'var(--warning)'; }
+                    else if (tx.type === 'GOAL_REWARD') { amount = tx.data ? tx.data.amount : 0; sign = '+'; color = 'var(--success)'; }
                     else if (tx.type === 'LIKE_IMAGE' || tx.type === 'LIKE_POST') {
                         if (isSender) { amount = 500; sign = '+'; color = 'var(--success)'; }
                         else { amount = 2000; sign = '+'; color = 'var(--success)'; }
@@ -2296,6 +2335,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                 else if (tx.type === 'IMAGE_POST' && isSender) { amount = 5000; sign = '-'; color = 'var(--warning)'; }
                 else if (tx.type === 'LIST_ITEM' && isSender) { amount = 500; sign = '-'; color = 'var(--warning)'; }
                 else if (tx.type === 'LIST_SONG_STAKE') { amount = ''; sign = ''; color = 'var(--warning)'; }
+                else if (tx.type === 'GOAL_REWARD') { amount = tx.data ? tx.data.amount : 0; sign = '+'; color = 'var(--success)'; }
                 else if (tx.type === 'LIKE_IMAGE' || tx.type === 'LIKE_POST') {
                     if (isSender) { amount = 500; sign = '+'; color = 'var(--success)'; }
                     else { amount = 2000; sign = '+'; color = 'var(--success)'; }

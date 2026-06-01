@@ -216,6 +216,67 @@ app.get('/api/social/goals', (req, res) => {
     res.json(goalsService.getUserGoals(publicKey));
 });
 
+app.get('/api/social/events', (req, res) => {
+    res.json(profileService.getEventCalendar());
+});
+
+app.post('/api/events/scan-flyer', express.json(), async (req, res) => {
+    const { imageHash } = req.body;
+    try {
+        const filePath = path.join(IPFS_DIR, imageHash);
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ error: "Image not found." });
+        }
+
+        if (!process.env.GEMINI_API_KEY) {
+            console.warn("⚠️ GEMINI_API_KEY not found in .env. Falling back to mock data.");
+            return res.json({
+                title: "Underground Swarm Rave",
+                date: new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0],
+                time: "11:00 PM",
+                location: "Warehouse District"
+            });
+        }
+
+        const imageBuffer = fs.readFileSync(filePath);
+        const base64Image = imageBuffer.toString('base64');
+        
+        // Simple magic byte check for mime type
+        const isPng = imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50 && imageBuffer[2] === 0x4E && imageBuffer[3] === 0x47;
+        const mimeType = isPng ? 'image/png' : 'image/jpeg';
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [
+                        { text: "Extract the event details from this flyer. Return ONLY a valid JSON object with the exact keys: 'title', 'date', 'time', 'location'. Do not use markdown. If a piece of data is missing, use 'TBD'." },
+                        { inline_data: { mime_type: mimeType, data: base64Image } }
+                    ]
+                }],
+                generationConfig: { response_mime_type: "application/json" }
+            })
+        });
+
+        if (!response.ok) throw new Error(`Gemini API Error: ${await response.text()}`);
+
+        const aiData = await response.json();
+        const parsedData = JSON.parse(aiData.candidates[0].content.parts[0].text);
+
+        res.json({
+            title: parsedData.title || "Untitled Event",
+            date: parsedData.date || "TBD",
+            time: parsedData.time || "TBD",
+            location: parsedData.location || "TBD"
+        });
+    } catch (err) {
+        console.error("AI Scan Error:", err);
+        // Fallback so it doesn't break the user's upload flow if the AI gets confused
+        res.json({ title: "Untitled Event", date: "TBD", time: "TBD", location: "TBD" });
+    }
+});
+
 app.get('/api/feed/discover', (req, res) => {
     const { publicKey } = req.query;
     const { feed: feedItems } = profileService.getFeedEngine();
@@ -1027,6 +1088,9 @@ async function startServer() {
             // Update in-memory state based on new transactions
             block.transactions.forEach(tx => {
                 goalsService.processTransaction(tx);
+                if (tx.type === 'GOAL_REWARD') {
+                    io.emit('blockchain_update', { type: tx.type, transaction: tx });
+                }
                 if (tx.type === 'PURCHASE_ZINE_RIGHTS' && tx.data) {
                     const article = dbMemory.zineArticles.find(a => a.id === tx.data.articleId);
                     if (article && !article.ownersList.includes(tx.sender)) {
