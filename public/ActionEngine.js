@@ -263,6 +263,44 @@ window.ActionEngine = {
         }
     },
 
+    promptStakeSong(audioHash) {
+        if (!window.CoreEngine.userKeys.publicKey) return;
+
+        const modalTitle = document.getElementById('form-modal-title');
+        const modalBody = document.getElementById('form-modal-body');
+        
+        modalTitle.innerText = 'Put Up For Stake';
+        modalBody.innerHTML = `
+            <p style="font-size: 13px; color: var(--text-muted);">List fractional shares of this track on the open market.</p>
+            <label>Number of Shares to List</label>
+            <input id="form-input-stake-shares" type="number" placeholder="e.g. 10" min="1" style="margin-bottom:8px;"/>
+            <label>Total Price for these Shares ($VOD)</label>
+            <input id="form-input-stake-total-price" type="number" placeholder="e.g. 10000" min="1" style="margin-bottom:8px;"/>
+            <button id="form-modal-submit" style="width: 100%; margin-top: 10px;">List on Market</button>
+        `;
+
+        const submitBtn = document.getElementById('form-modal-submit');
+        submitBtn.onclick = async () => {
+            const listedShares = parseInt(document.getElementById('form-input-stake-shares').value);
+            const totalPrice = parseFloat(document.getElementById('form-input-stake-total-price').value);
+
+            if (!listedShares || listedShares <= 0) return alert("Please enter a valid number of shares.");
+            if (!totalPrice || totalPrice <= 0) return alert("Please enter a valid total price.");
+
+            const pricePerShare = totalPrice / listedShares;
+
+            try {
+                let data = { audioHash: audioHash, sellPercentage: listedShares, pricePerShare: pricePerShare };
+                await window.CoreEngine.sendSignedTransaction('LIST_SONG_STAKE', '0x00', data);
+                alert("Successfully listed shares on the market!"); 
+                toggleModal('form-modal');
+                if (window.currentView === 'profile') window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, false); 
+                window.loadMainGlobalFeed();
+            } catch(err) { alert("Failed to list: " + err.message); }
+        };
+        toggleModal('form-modal');
+    },
+
     requestSongShare(hash, seller) {
         if (seller === window.CoreEngine.userKeys.publicKey) return alert("You already own this track's equity.");
 

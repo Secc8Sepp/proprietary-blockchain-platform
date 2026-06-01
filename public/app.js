@@ -608,6 +608,7 @@ async function loadMainGlobalFeed() {
                 else if (tx.type === 'TRANSFER_COIN') { action = 'Tipped'; color = 'var(--success)'; amountStr = `-${(tx.data && tx.data.amount) ? tx.data.amount.toLocaleString() : 0}`; }
                 else if (tx.type === 'BUY_ITEM') { action = 'Bought Asset'; color = 'var(--success)'; amountStr = `-${(tx.data && tx.data.price) ? tx.data.price.toLocaleString() : 0}`; }
                 else if (tx.type === 'BUY_SONG_SHARE') { action = 'Bought Stake'; color = 'var(--success)'; amountStr = `-${(tx.data ? (tx.data.shareCount * tx.data.pricePerShare) : 0).toLocaleString()}`; }
+                else if (tx.type === 'LIST_SONG_STAKE') { action = 'Listed Stake'; color = 'var(--warning)'; amountStr = ''; }
                 else if (tx.type === 'CREATE_COMMISSION') { action = 'Funded Escrow'; color = 'var(--primary)'; amountStr = `-${(tx.data && tx.data.amount) ? tx.data.amount.toLocaleString() : 0}`; }
                 else if (tx.type === 'CREATE_BOUNTY') { action = 'Posted Bounty'; color = 'var(--primary)'; amountStr = `-${(tx.data && tx.data.amount) ? tx.data.amount.toLocaleString() : 0}`; }
                 else if (tx.type === 'LIST_ITEM') { action = 'Listed Asset'; color = 'var(--warning)'; amountStr = '-500'; }
@@ -1025,7 +1026,7 @@ function renderPostContent(item) {
 
         if (isOwner) {
             listingHtml = `
-                <button class="secondary" style="padding:8px 15px; font-size: 12px;" onclick="alert('Stake management coming soon!')">
+                <button class="secondary" style="padding:8px 15px; font-size: 12px;" onclick="window.ActionEngine.promptStakeSong('${item.data.audioHash}')">
                     🛒 Put up for Stake
                 </button>
             `;
@@ -1120,6 +1121,8 @@ function renderPostContent(item) {
         return `<div class="post-body" style="color: var(--success); font-style: italic;">📈 Acquired ${item.data.shareCount} shares of a track on the open market!</div>`;
     } else if (item.type === 'REQUEST_SONG_SHARE') {
                     return `<div class="post-body" style="color: var(--primary); font-style: italic;">📬 Sent a request to acquire ${item.data.shareCount} shares in a track for ${item.data.pricePerShare} $VOD each.</div>`;
+    } else if (item.type === 'LIST_SONG_STAKE') {
+        return `<div class="post-body" style="color: var(--warning); font-style: italic;">🛒 Listed ${item.data.sellPercentage} shares of a track on the open market!</div>`;
     }
     return `<div class="post-body" style="opacity: 0.5;">System Broadcast: ${item.type}</div>`;
 }
@@ -1301,6 +1304,7 @@ function switchTab(tabName, element, targetKey = null) {
     if (tabName === 'tools' && window.StemSplitterEngine) window.StemSplitterEngine.render();
     if (tabName === 'wallet' && window.WalletEngine) window.WalletEngine.renderWalletDashboard();
     if (tabName === 'clout') window.loadCloutStatus();
+    if (tabName === 'goals') window.loadGoalsDashboard();
 }
 
 function renderServerList() {
@@ -2028,6 +2032,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                     } else if (tx.type === 'SONG_UPLOAD' && isSender) { amount = 50000; sign = '-'; color = 'var(--warning)'; }
                     else if (tx.type === 'IMAGE_POST' && isSender) { amount = 5000; sign = '-'; color = 'var(--warning)'; }
                     else if (tx.type === 'LIST_ITEM' && isSender) { amount = 500; sign = '-'; color = 'var(--warning)'; }
+                    else if (tx.type === 'LIST_SONG_STAKE') { amount = ''; sign = ''; color = 'var(--warning)'; }
                     else if (tx.type === 'LIKE_IMAGE' || tx.type === 'LIKE_POST') {
                         if (isSender) { amount = 500; sign = '+'; color = 'var(--success)'; }
                         else { amount = 2000; sign = '+'; color = 'var(--success)'; }
@@ -2282,6 +2287,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                 } else if (tx.type === 'SONG_UPLOAD' && isSender) { amount = 50000; sign = '-'; color = 'var(--warning)'; }
                 else if (tx.type === 'IMAGE_POST' && isSender) { amount = 5000; sign = '-'; color = 'var(--warning)'; }
                 else if (tx.type === 'LIST_ITEM' && isSender) { amount = 500; sign = '-'; color = 'var(--warning)'; }
+                else if (tx.type === 'LIST_SONG_STAKE') { amount = ''; sign = ''; color = 'var(--warning)'; }
                 else if (tx.type === 'LIKE_IMAGE' || tx.type === 'LIKE_POST') {
                     if (isSender) { amount = 500; sign = '+'; color = 'var(--success)'; }
                     else { amount = 2000; sign = '+'; color = 'var(--success)'; }
@@ -3312,5 +3318,53 @@ window.loadCloutStatus = async function() {
         }
     } catch(e) {
         console.error('Failed to load clout status:', e);
+    }
+};
+
+window.loadGoalsDashboard = async function() {
+    if (!window.CoreEngine || !window.CoreEngine.userKeys.publicKey) {
+        const msg = '<div style="color:var(--danger); font-size: 13px;">Please log in to view your goals.</div>';
+        if (document.getElementById('ui-daily-goals')) document.getElementById('ui-daily-goals').innerHTML = msg;
+        if (document.getElementById('ui-weekly-goals')) document.getElementById('ui-weekly-goals').innerHTML = msg;
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/social/goals?publicKey=${window.CoreEngine.userKeys.publicKey}`);
+        if (!res.ok) throw new Error("Failed to load goals");
+        const goalsData = await res.json();
+
+        const renderGoal = (g) => {
+            const percent = Math.min(100, Math.round((g.progress / g.target) * 100));
+            const isDone = g.completed;
+            const statusColor = isDone ? 'var(--success)' : 'var(--primary)';
+            return `
+                <div style="background: rgba(0,0,0,0.3); border: 1px solid ${isDone ? 'var(--success)' : 'var(--border)'}; padding: 15px; border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <strong style="color: #fff; font-size: 14px;">${escapeHtml(g.desc)}</strong>
+                        <span style="color: ${statusColor}; font-weight: bold; font-size: 14px;">+${g.reward.toLocaleString()} $VOD</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 5px; color: var(--text-muted);">
+                        <span>Progress: ${g.progress} / ${g.target}</span>
+                        <span>${isDone ? '✅ Complete' : `${percent}%`}</span>
+                    </div>
+                    <div style="width: 100%; background: #222; border-radius: 4px; height: 6px; overflow: hidden;">
+                        <div style="height: 100%; width: ${percent}%; background: ${statusColor}; border-radius: 4px; transition: width 0.3s;"></div>
+                    </div>
+                </div>
+            `;
+        };
+
+        const dailyContainer = document.getElementById('ui-daily-goals');
+        const weeklyContainer = document.getElementById('ui-weekly-goals');
+        
+        if (dailyContainer) dailyContainer.innerHTML = (goalsData.daily && goalsData.daily.length > 0) ? goalsData.daily.map(renderGoal).join('') : '<div style="color:var(--text-muted); font-size: 13px;">No daily goals active.</div>';
+        if (weeklyContainer) weeklyContainer.innerHTML = (goalsData.weekly && goalsData.weekly.length > 0) ? goalsData.weekly.map(renderGoal).join('') : '<div style="color:var(--text-muted); font-size: 13px;">No weekly goals active.</div>';
+        
+    } catch (err) {
+        console.error(err);
+        const msg = '<div style="color:var(--danger); font-size: 13px;">Error loading goals. Check your connection.</div>';
+        if (document.getElementById('ui-daily-goals')) document.getElementById('ui-daily-goals').innerHTML = msg;
+        if (document.getElementById('ui-weekly-goals')) document.getElementById('ui-weekly-goals').innerHTML = msg;
     }
 };

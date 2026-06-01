@@ -633,6 +633,19 @@ class ProfileService {
                     playCounts[assetHash] = playCounts[assetHash] || 0;
                     if (tx.data.forStake) songListings[assetHash] = { available: parseInt(tx.data.sellPercentage)||0, price: parseFloat(tx.data.pricePerShare)||0, totalShares: parseInt(tx.data.totalShares)||100 };
                 }
+                if (tx.type === 'LIST_SONG_STAKE' && tx.data) {
+                    if (shareDistribution[tx.data.audioHash] && shareDistribution[tx.data.audioHash][tx.sender] >= parseInt(tx.data.sellPercentage)) {
+                         let totalTrackShares = 100;
+                         if (shareDistribution[tx.data.audioHash]) {
+                             totalTrackShares = Object.values(shareDistribution[tx.data.audioHash]).reduce((a,b)=>a+b, 0);
+                         }
+                        songListings[tx.data.audioHash] = {
+                            available: parseInt(tx.data.sellPercentage) || 0,
+                            price: parseFloat(tx.data.pricePerShare) || 0,
+                            totalShares: totalTrackShares
+                        };
+                    }
+                }
                 if (tx.type === 'EDIT_SONG_METADATA' && tx.data) {
                     if (trackMetadata[tx.data.audioHash] && trackMetadata[tx.data.audioHash].creator === tx.sender) {
                         if (tx.data.title) trackMetadata[tx.data.audioHash].title = tx.data.title;
@@ -696,7 +709,7 @@ class ProfileService {
             
             for (const tx of block.transactions) {
                 if (deletedUsers.has(tx.sender)) continue;
-                if (['SONG_UPLOAD', 'TEXT_POST', 'PROFILE_UPDATE', 'FOLLOW_USER', 'LIKE_POST', 'LIKE_IMAGE', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'THEME_UPDATE', 'SHOUTBOX_POST', 'SET_TOP_8', 'STREAM_COMPLETED', 'BUY_SONG_SHARE', 'TRANSFER_COIN', 'REQUEST_SONG_SHARE', 'ACCEPT_SHARE_REQUEST', 'STORY_POST', 'PURCHASE_ZINE_RIGHTS', 'REPOST_POST'].includes(tx.type)) {
+                if (['SONG_UPLOAD', 'TEXT_POST', 'PROFILE_UPDATE', 'FOLLOW_USER', 'LIKE_POST', 'LIKE_IMAGE', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'THEME_UPDATE', 'SHOUTBOX_POST', 'SET_TOP_8', 'STREAM_COMPLETED', 'BUY_SONG_SHARE', 'TRANSFER_COIN', 'REQUEST_SONG_SHARE', 'ACCEPT_SHARE_REQUEST', 'STORY_POST', 'PURCHASE_ZINE_RIGHTS', 'REPOST_POST', 'LIST_SONG_STAKE'].includes(tx.type)) {
                     
                     const senderBalance = blockchainService.calculateBalance(tx.sender, chain);
                     const adminAddress = blockchainService.getAdminAddress(chain);

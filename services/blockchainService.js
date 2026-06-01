@@ -218,6 +218,23 @@ class BlockchainService extends EventEmitter {
                     if (tx.sender === publicKey) balance -= 15000; // Cost to mint project file (15k VOD)
                 }
 
+                if (tx.type === 'LIST_SONG_STAKE') {
+                    const assetHash = tx.data.audioHash;
+                    const availableShares = parseInt(tx.data.sellPercentage) || 0;
+                    
+                    if (assetShareDistribution[assetHash] && assetShareDistribution[assetHash][tx.sender] >= availableShares) {
+                         let totalTrackShares = 100;
+                         if (assetShareDistribution[assetHash]) {
+                             totalTrackShares = Object.values(assetShareDistribution[assetHash]).reduce((a,b)=>a+b, 0);
+                         }
+                         songListings[assetHash] = {
+                             price: parseFloat(tx.data.pricePerShare) || 0,
+                             available: availableShares,
+                             totalShares: totalTrackShares
+                         };
+                    }
+                }
+
                 // --- ZERO-SUM TRANSFERS ---
                 if (tx.type === 'BUY_SONG_SHARE') {
                     const assetHash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
