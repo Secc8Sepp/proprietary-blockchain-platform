@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-title" content="VOD Social">
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
     
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/styles.css?v=1.0.1">
 
     <!-- User's dynamic CSS injected here (Sanitized) AFTER main styles to ensure override -->
     <style id="ui-dynamic-user-theme"></style>
@@ -730,24 +730,24 @@
          ========================================== -->
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/elliptic@6.5.4/dist/elliptic.min.js"></script>
-    <script src="/utils.js"></script>
-    <script src="/crypto.js"></script>
-    <script src="/CoreEngine.js"></script>
-    <script src="/MeshEngine.js"></script>
-    <script src="/WalletEngine.js"></script>
-    <script src="/AudioEngine.js"></script>
-    <script src="/LayoutEngine.js"></script>
-    <script src="/ActionEngine.js"></script>
-    <script src="/NotificationEngine.js"></script>
-    <script src="/GlobalTagEngine.js"></script>
-    <script src="/BattleEngines.js"></script>
-    <script src="/StemSplitterEngine.js"></script>
-    <script src="/app.js"></script>
+    <script src="/utils.js?v=1.0.1"></script>
+    <script src="/crypto.js?v=1.0.1"></script>
+    <script src="/CoreEngine.js?v=1.0.1"></script>
+    <script src="/MeshEngine.js?v=1.0.1"></script>
+    <script src="/WalletEngine.js?v=1.0.1"></script>
+    <script src="/AudioEngine.js?v=1.0.1"></script>
+    <script src="/LayoutEngine.js?v=1.0.1"></script>
+    <script src="/ActionEngine.js?v=1.0.1"></script>
+    <script src="/NotificationEngine.js?v=1.0.1"></script>
+    <script src="/GlobalTagEngine.js?v=1.0.1"></script>
+    <script src="/BattleEngines.js?v=1.0.1"></script>
+    <script src="/StemSplitterEngine.js?v=1.0.1"></script>
+    <script src="/app.js?v=1.0.1"></script>
 
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
+          navigator.serviceWorker.register('/sw.js?v=1.0.1')
             .then(reg => { window.swRegistration = reg; console.log('[PWA] Service Worker registered successfully.'); })
             .catch(err => console.error('[PWA] Service Worker registration failed:', err));
         });

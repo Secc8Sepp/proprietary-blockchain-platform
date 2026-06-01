@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vod-network-v8';
+const CACHE_NAME = 'vod-network-v9';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -55,7 +55,7 @@ self.addEventListener('fetch', event => {
 
   // For all other GET requests, use a cache-first strategy.
   event.respondWith(
-    caches.match(event.request).then(cachedResponse => {
+    caches.match(event.request, { ignoreSearch: true }).then(cachedResponse => {
       // If we have a cached response, return it immediately.
       if (cachedResponse) {
         return cachedResponse;

@@ -375,7 +375,10 @@ app.post('/api/auth/register', (req, res) => {
         const salt = crypto.randomBytes(16).toString('hex');
         // Use pbkdf2 to derive a deterministic private key from password and salt
         crypto.pbkdf2(password, salt, 100000, 32, 'sha512', (err, derivedKey) => {
-            if (err) throw err;
+            if (err) {
+                console.error("Key derivation failed during registration:", err);
+                return res.status(500).json({ error: 'Key derivation failed.' });
+            }
             
             const privateKeyHex = derivedKey.toString('hex');
             const keyPair = blockchainService.ec.keyFromPrivate(privateKeyHex);
@@ -417,6 +420,12 @@ app.post('/api/auth/login', (req, res) => {
 
 // 4. FALLBACK
 app.get('*', (req, res) => {
+    // Set headers to prevent caching of the main index.html file.
+    // This ensures the browser always fetches the latest version, which will have updated
+    // links to versioned assets like JS and CSS files.
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
