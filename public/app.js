@@ -427,6 +427,12 @@ async function subscribeToPush(publicKey) {
         window.swRegistration = await navigator.serviceWorker.ready;
         const res = await fetch('/api/push/vapidPublicKey');
         const { publicKey: vapidPublicKey } = await res.json();
+        
+        if (!vapidPublicKey) {
+            console.log('[PWA] Push subscription skipped: VAPID keys not configured on server.');
+            return;
+        }
+
         const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
 
         let subscription;
