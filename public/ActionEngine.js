@@ -825,10 +825,10 @@ window.ActionEngine = {
         data.replyId = Date.now() + '_' + window.CoreEngine.userKeys.publicKey.substring(0, 10);
 
         // If this is a reply on a song post, check for an active waveform to make it a timed comment
-        if (audioHash && window.waveformInstances && window.waveformInstances[audioHash]) {
-            const wavesurfer = window.waveformInstances[audioHash];
-            if (wavesurfer.isPlaying()) {
-                data.audioTimestamp = wavesurfer.getCurrentTime();
+        if (audioHash && window.AudioEngine && window.AudioEngine.activeTrackHash === audioHash) {
+            const globalPlayer = document.getElementById('global-audio-player');
+            if (globalPlayer && !globalPlayer.paused && globalPlayer.currentTime > 0) {
+                data.audioTimestamp = globalPlayer.currentTime;
             }
         }
 

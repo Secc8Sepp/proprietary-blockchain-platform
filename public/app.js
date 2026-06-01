@@ -859,28 +859,20 @@ function renderPostContent(item) {
              // Store by transactionHash to avoid cross-contamination on reposts
              window.waveformInstances[transactionHash] = wavesurfer;
 
-             let hasLoaded = false;
+             let visualizerLoaded = false;
              const playButton = document.getElementById(`play-btn-${transactionHash}`);
              if (playButton) {
                  playButton.onclick = () => {
-                     if (!hasLoaded) {
-                         hasLoaded = true;
+                    // ALWAYS call the AudioEngine. It's the source of truth for playback.
+                    // The AudioEngine will handle toggling play/pause if it's the same track.
+                    window.AudioEngine.playTrack(item.data.trackTitle, audioHash, item.sender, displayArtist, item.data.coverHash);
+
+                    // Load the visualizer waveform if it hasn't been loaded yet for this post.
+                    // This is for visuals only and is decoupled from the actual audio playback.
+                     if (!visualizerLoaded) {
+                         visualizerLoaded = true;
                          playButton.innerText = '⏳ Loading...';
                          wavesurfer.load(`/tracks/${encodeURIComponent(audioHash)}`);
-                         
-                         // Start global audio immediately for snappy UX
-                         if (window.AudioEngine && window.AudioEngine.playTrack && window.AudioEngine.activeTrackHash !== audioHash) {
-                             window.AudioEngine.playTrack(item.data.trackTitle, audioHash, item.sender, displayArtist, item.data.coverHash);
-                         } else {
-                             const globalPlayer = document.getElementById('global-audio-player');
-                             if (globalPlayer && globalPlayer.paused) globalPlayer.play();
-                         }
-                     } else {
-                         // Pause any currently playing waveform
-                         if (window.activeWaveform && window.activeWaveform !== wavesurfer) {
-                             window.activeWaveform.pause();
-                         }
-                         wavesurfer.playPause();
                      }
                  };
              }
@@ -902,43 +894,39 @@ function renderPostContent(item) {
                 console.log(`[Waveform] Ready: ${transactionHash}`);
              });
 
-             wavesurfer.on('play', () => {
-                if (playButton) playButton.innerText = '⏸️ Pause';
-                const globalPlayer = document.getElementById('global-audio-player');
-
-                // If a different track is playing on the global player, pause it.
-                if (globalPlayer && !globalPlayer.paused && window.AudioEngine.activeTrackHash !== audioHash) {
-                    globalPlayer.pause();
+            // --- NEW Centralized Event Listeners for UI Sync ---
+            const handleGlobalPlay = (e) => {
+                if (e.detail.audioHash === audioHash) {
+                    if (playButton) playButton.innerText = '⏸️ Pause';
+                    if (wavesurfer.isReady) wavesurfer.play();
+                } else {
+                    // Another track is playing, so this one should be paused.
+                    if (playButton) playButton.innerText = '▶ Play';
+                    if (wavesurfer.isReady) wavesurfer.pause();
                 }
+            };
 
-                // If this is a new track, start it on the global player.
-                if (window.AudioEngine.activeTrackHash !== audioHash) {
-                    if (window.AudioEngine && window.AudioEngine.playTrack) {
-                        window.AudioEngine.playTrack(item.data.trackTitle, audioHash, item.sender, displayArtist, item.data.coverHash);
-                    }
-                } 
-                // If it's the same track but paused, play it.
-                else if (globalPlayer && globalPlayer.paused) {
-                    globalPlayer.play();
-                }
-                
-                window.activeWaveform = wavesurfer;
-             });
-
-             wavesurfer.on('pause', () => {
+            const handleGlobalPause = (e) => {
+                // This event is for any pause, so we don't need to check the hash.
+                // Every waveform should show the play icon when the global player is paused.
                 if (playButton) playButton.innerText = '▶ Play';
-                if (window.activeWaveform === wavesurfer) {
-                    window.activeWaveform = null;
-                }
-                // Sync Pause: If this waveform is for the active track, pause the global player.
-                const globalPlayer = document.getElementById('global-audio-player');
-                if (globalPlayer && window.AudioEngine.activeTrackHash === audioHash && !globalPlayer.paused) {
-                    globalPlayer.pause();
-                }
-             });
+                if (wavesurfer.isReady) wavesurfer.pause();
+            };
+            
+            document.addEventListener('vod-global-play', handleGlobalPlay);
+            document.addEventListener('vod-global-pause', handleGlobalPause);
+            document.addEventListener('vod-global-ended', handleGlobalPause); // Treat 'ended' as a pause for UI purposes
+
+            // Clean up event listeners when the waveform is destroyed to prevent memory leaks
+            wavesurfer.on('destroy', () => {
+                document.removeEventListener('vod-global-play', handleGlobalPlay);
+                document.removeEventListener('vod-global-pause', handleGlobalPause);
+                document.removeEventListener('vod-global-ended', handleGlobalPause);
+            });
 
              wavesurfer.on('seek', (progress) => {
                 const globalPlayer = document.getElementById('global-audio-player');
+                // Only seek the global player if this waveform's track is the active one.
                 if (globalPlayer && window.AudioEngine.activeTrackHash === audioHash) {
                     const duration = globalPlayer.duration;
                     if (duration && isFinite(duration)) {

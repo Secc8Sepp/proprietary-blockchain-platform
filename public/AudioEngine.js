@@ -70,7 +70,18 @@ window.AudioEngine = {
             });
         }
 
+        player.addEventListener('timeupdate', () => {
+            document.dispatchEvent(new CustomEvent('vod-global-timeupdate', { detail: { 
+                audioHash: this.activeTrackHash,
+                currentTime: player.currentTime,
+                duration: player.duration
+            }}));
+        });
+
         player.addEventListener('play', () => {
+            // Broadcast that the global player is playing this track
+            document.dispatchEvent(new CustomEvent('vod-global-play', { detail: { audioHash: this.activeTrackHash } }));
+
             if (!this.activeTrackHash || !window.CoreEngine.userKeys.publicKey) return;
             if (this.listenTrackingInterval) clearInterval(this.listenTrackingInterval);
             
@@ -88,9 +99,16 @@ window.AudioEngine = {
             }, 5000);
         });
         
-        player.addEventListener('pause', () => this.stopPlaybackTrackingLoop(false));
+        player.addEventListener('pause', () => {
+            this.stopPlaybackTrackingLoop(false);
+            // Broadcast that the global player has paused
+            document.dispatchEvent(new CustomEvent('vod-global-pause', { detail: { audioHash: this.activeTrackHash } }));
+        });
         player.addEventListener('ended', () => {
             this.stopPlaybackTrackingLoop(true);
+            // Broadcast that the track ended (which is a form of pause for the UI)
+            document.dispatchEvent(new CustomEvent('vod-global-ended', { detail: { audioHash: this.activeTrackHash } }));
+
             if (this.isPreviewMode) {
                 this.isPreviewMode = false; // It ended before 30s, reset.
                 return; // Don't play next track in preview mode.
@@ -137,6 +155,18 @@ window.AudioEngine = {
     },
 
     playTrack(title, audioHash, artistPublicKey, artistName, coverHash, isPreview = false) {
+        const player = document.getElementById('global-audio-player');
+
+        // If this track is already the active one, just toggle play/pause.
+        if (this.activeTrackHash === audioHash && player.src.includes(audioHash)) {
+            if (player.paused) {
+                player.play();
+            } else {
+                player.pause();
+            }
+            return; // Done.
+        }
+
         // Send a "play" transaction only once per track per session to avoid spam.
         if (!this.playedTracksForTx.has(audioHash) && !isPreview) {
             this.triggerProofOfListenMint(audioHash, artistPublicKey);
@@ -151,7 +181,6 @@ window.AudioEngine = {
         
         if (window.CoreEngine) window.CoreEngine.setPresence(undefined, 'Listening to Track', { title, hash: audioHash, creator: artistPublicKey, artistName });
 
-        const player = document.getElementById('global-audio-player');
         player.src = `/tracks/${encodeURIComponent(audioHash)}`;
         player.play().catch(error => { console.error("Playback error:", error); alert("Streaming Error: Track not found on network."); });
         

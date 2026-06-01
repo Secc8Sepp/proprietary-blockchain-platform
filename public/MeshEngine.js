@@ -18,29 +18,22 @@ window.MeshEngine = {
         // It requires networkProfiles to be a non-null object and serversData to be an array.
         // The previous strict check for an empty profile directory caused a deadlock on initial user signup.
         if (this._initialRenderComplete || !window.networkProfiles || !this.serversData) {
-            return;
+            return; // Not ready yet, wait for both data sources.
         }
 
-        console.log('[MeshEngine] Profiles and Servers ready. Performing initial render.');
+        console.log('[MeshEngine] Initial data (profiles, servers) is ready. Unlocking render promise.');
         this._initialRenderComplete = true;
 
-        // Resolve the promise to unblock any waiting functions
-        if (this._readyResolver) this._readyResolver();
-
-        // Now we can safely render everything.
-        if (window.loadMainGlobalFeed) window.loadMainGlobalFeed();
-        if (window.fetchUserProfile && window.CoreEngine.userKeys.publicKey) {
-            window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, true);
-        }
-        if (typeof window.loadCloutStatus === 'function') window.loadCloutStatus();
-
-        window.renderServerList();
-        if (!this.currentChatServer && this.serversData && this.serversData.length > 0) {
-            window.switchServer(this.serversData[0].id);
+        // Resolve the promise to unblock any functions that are waiting for initial data.
+        if (this._readyResolver) {
+            this._readyResolver();
+            this._readyResolver = null; // Prevent future resolutions.
         }
 
-        if (this.currentChatServer === '@dms') window.renderDMList();
-        if (typeof window.renderNewUsers === 'function') window.renderNewUsers();
+        // These are safe to call here as they only depend on the now-available data.
+        // They don't trigger large, async re-renders of the main content view.
+        window.renderServerList(); // Render the server icons
+        if (typeof window.renderNewUsers === 'function') window.renderNewUsers(); // Render the user list in the sidebar
     },
 
     init(socket) {
@@ -49,6 +42,28 @@ window.MeshEngine = {
 
         this._readyPromise = new Promise(resolve => {
             this._readyResolver = resolve;
+        });
+
+        // This block will execute once the initial data (profiles, servers) is loaded and the promise is resolved.
+        // This is the single, reliable entry point for initial application rendering.
+        this._readyPromise.then(() => {
+            console.log('[MeshEngine] Readiness promise resolved. Performing initial UI setup.');
+            
+            // If we are logged in, fetch our own full profile to populate sidebars, wallet, etc.
+            if (window.CoreEngine.userKeys.publicKey) {
+                window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, false); // Full fetch, not silent
+            }
+
+            // Load the initial view, which defaults to the feed.
+            if (window.currentView === 'feed') {
+                window.loadMainGlobalFeed();
+            }
+
+            // Render other components that depend on the initial data.
+            if (typeof window.loadCloutStatus === 'function') window.loadCloutStatus();
+            if (!this.currentChatServer && this.serversData && this.serversData.length > 0) {
+                window.switchServer(this.serversData[0].id);
+            }
         });
 
         // Fallback: Release the render lock after 3 seconds if socket data is delayed/blocked
