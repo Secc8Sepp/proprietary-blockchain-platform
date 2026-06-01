@@ -386,14 +386,16 @@ class ProfileService {
                         profile.top8 = Array.isArray(tx.data.top8Keys) ? tx.data.top8Keys : [];
                     }
                     if (tx.type === 'IMAGE_POST' || tx.type === 'VIDEO_POST' || tx.type === 'PROJECT_FILE_POST') {
-                        const assetHash = tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
-                        profile.uploadedImages.push({
-                            caption: tx.data.caption,
-                            hash: assetHash,
-                            timestamp: tx.timestamp,
-                            transactionHash: block.hash,
-                            metadata: tx.data.metadata || ''
-                        });
+                        if (!(tx.type === 'IMAGE_POST' && tx.data && tx.data.isFlyer)) {
+                            const assetHash = tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
+                            profile.uploadedImages.push({
+                                caption: tx.data.caption,
+                                hash: assetHash,
+                                timestamp: tx.timestamp,
+                                transactionHash: block.hash,
+                                metadata: tx.data.metadata || ''
+                            });
+                        }
                     }
                 }
 
