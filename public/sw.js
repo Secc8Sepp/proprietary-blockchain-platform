@@ -92,3 +92,13 @@ self.addEventListener('push', event => {
     self.registration.showNotification(data.title, { body: data.body, icon: '/icons/icon-192x192.png' })
   );
 });
+
+self.addEventListener('sync', (event) => {
+  console.log('Background sync triggered', event);
+  // Future logic for sending offline posts when connection returns
+});
+
+self.addEventListener('periodicsync', (event) => {
+  console.log('Periodic background sync triggered', event);
+  // Future logic for fetching new feed data in the background
+});
