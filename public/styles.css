@@ -342,12 +342,12 @@ body.mobile-chat-active .chat-module-close-btn { display: inline-block; color: v
         padding: 0 10px;
         z-index: 9997;
     }
-    .mobile-top-nav button { font-size: 22px; background: transparent; color: var(--text-muted); padding: 5px 10px; border: none; }
+    .mobile-top-nav button { font-size: 20px; background: transparent; color: var(--text-muted); padding: 5px 6px; border: none; }
     .mobile-nav-icon-btn {
         position: relative;
         padding: 5px !important;
     }
-    .mobile-top-nav .mobile-nav-center { display: flex; gap: 15px; align-items: center; }
+    .mobile-top-nav .mobile-nav-center { display: flex; gap: 5px; align-items: center; }
 
     /* 2. Nuke resizers and prepare sidebars to be togglable overlays */
     .right-sidebar,
