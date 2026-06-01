@@ -1292,6 +1292,7 @@ function switchTab(tabName, element, targetKey = null) {
     if (tabName === 'feed') window.loadMainGlobalFeed();
     if (tabName === 'tools' && window.StemSplitterEngine) window.StemSplitterEngine.render();
     if (tabName === 'wallet' && window.WalletEngine) window.WalletEngine.renderWalletDashboard();
+    if (tabName === 'clout') window.loadCloutStatus();
 }
 
 function renderServerList() {
@@ -3270,27 +3271,36 @@ window.loadCloutStatus = async function() {
         if (!res.ok) return;
         const ranks = await res.json();
         
-        const myRankInfo = ranks.find(r => r.address === window.CoreEngine.userKeys.publicKey);
-        if (myRankInfo) {
-            const scoreEl = document.getElementById('ui-clout-score');
-            if (scoreEl) scoreEl.innerText = Math.floor(myRankInfo.liveClout).toLocaleString();
-            
-            const rankEl = document.getElementById('ui-clout-rank');
-            if (rankEl) rankEl.innerText = `#${myRankInfo.current_rank}`;
-            
-            const trendEl = document.getElementById('ui-clout-trend');
-            if (trendEl) {
-                if (myRankInfo.spotsMoved > 0) {
-                    trendEl.innerHTML = `▲ +${myRankInfo.spotsMoved}`;
-                    trendEl.className = 'clout-trend up';
-                } else if (myRankInfo.spotsMoved < 0) {
-                    trendEl.innerHTML = `▼ ${Math.abs(myRankInfo.spotsMoved)}`;
-                    trendEl.className = 'clout-trend down';
-                } else {
-                    trendEl.innerHTML = `-`;
-                    trendEl.className = 'clout-trend dash';
-                }
+        const container = document.getElementById('ui-clout-leaderboard');
+        if (container) {
+            if (ranks.length === 0) {
+                container.innerHTML = '<div style="color:var(--text-muted); text-align:center;">No clout data available.</div>';
+                return;
             }
+            container.innerHTML = ranks.map(r => {
+                const profile = window.resolveProfile(r.address);
+                let trendHtml = '-';
+                let trendClass = 'dash';
+                if (r.spotsMoved > 0) { trendHtml = `▲ +${r.spotsMoved}`; trendClass = 'up'; }
+                else if (r.spotsMoved < 0) { trendHtml = `▼ ${Math.abs(r.spotsMoved)}`; trendClass = 'down'; }
+
+                const isMe = r.address === window.CoreEngine.userKeys.publicKey;
+                const highlightStyle = isMe ? 'border: 1px solid var(--primary); background: rgba(102, 252, 241, 0.1);' : 'border: 1px solid var(--border); background: rgba(0,0,0,0.3);';
+
+                return `
+                    <div style="display:flex; align-items:center; justify-content:space-between; padding: 15px; border-radius: 8px; ${highlightStyle}">
+                        <div style="display:flex; align-items:center; gap: 15px;">
+                            <div style="font-size: 24px; font-weight: bold; color: var(--text-muted); width: 40px; text-align: center;">#${r.current_rank}</div>
+                            <img src="${window.getAvatarUrl(r.address)}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; cursor: pointer;" onclick="window.inspectTargetNode('${r.address}')">
+                            <div style="display: flex; flex-direction: column;">
+                                <span style="font-size: 16px; font-weight: bold; color: #fff; cursor: pointer;" onclick="window.inspectTargetNode('${r.address}')">${escapeHtml(profile.username)}</span>
+                                <span style="font-size: 12px; color: var(--text-muted);">Clout: ${Math.floor(r.liveClout).toLocaleString()}</span>
+                            </div>
+                        </div>
+                        <div class="clout-trend ${trendClass}" style="font-size: 16px;">${trendHtml}</div>
+                    </div>
+                `;
+            }).join('');
         }
     } catch(e) {
         console.error('Failed to load clout status:', e);
