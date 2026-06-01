@@ -323,6 +323,26 @@ function initializeApplicationListeners() {
     // Wire up the handler for server-relayed direct messages
     socket.on('direct_message', handleDirectMessage);
 
+    // Wire up Listen-to-Earn (Mining) UI updates
+    socket.on('l2e_status', (data) => {
+        const tracker = document.getElementById('l2e-status-tracker');
+        if (!tracker) return;
+        if (data.error) {
+            tracker.innerText = data.error;
+            tracker.style.color = 'var(--danger)';
+        } else {
+            tracker.innerText = `Mining $VOD... (${data.pings}/${data.max})`;
+            tracker.style.color = 'var(--success)';
+        }
+    });
+
+    socket.on('l2e_reward', (data) => {
+        const tracker = document.getElementById('l2e-status-tracker');
+        if (!tracker) return;
+        tracker.innerText = `Block Mined! (+${data.reward} $VOD)`;
+        tracker.style.color = 'var(--primary)';
+    });
+
     // --- PWA & Mobile App Readiness: Offline/Online Detection ---
     window.addEventListener('offline', () => {
         console.warn('[PWA] Network connection lost. Application is offline.');
@@ -641,7 +661,24 @@ async function loadMainGlobalFeed() {
             return ['SONG_UPLOAD', 'IMAGE_POST', 'VIDEO_POST', 'PROJECT_FILE_POST', 'TEXT_POST', 'SHOUTBOX_POST'].includes(item.type);
         });
         
-        displayablePosts.forEach(item => {
+        if (displayablePosts.length === 0) {
+            const emptyEl = document.createElement('div');
+            emptyEl.className = 'card';
+            emptyEl.style.textAlign = 'center';
+            emptyEl.style.padding = '40px';
+            emptyEl.style.color = 'var(--text-muted)';
+            
+            if (feedFilterMode === 'following') {
+                emptyEl.innerHTML = '<h4>Your Following Feed is Empty</h4><p>You aren\'t following anyone who has posted yet. Switch to the Global Feed to discover new nodes!</p>';
+            } else if (window.GlobalTagEngine && window.GlobalTagEngine.activeFeedTag) {
+                emptyEl.innerHTML = `<h4>No posts found</h4><p>No content matches the tag <strong>${escapeHtml(window.GlobalTagEngine.activeFeedTag)}</strong>.</p>`;
+            } else {
+                emptyEl.innerHTML = '<h4>Nothing here yet!</h4><p>Be the first to broadcast a track or post to the swarm.</p>';
+            }
+            
+            container.appendChild(emptyEl);
+        } else {
+            displayablePosts.forEach(item => {
             const postEl = document.createElement('div');
             postEl.className = 'card post';
 
@@ -719,6 +756,7 @@ async function loadMainGlobalFeed() {
             `;
             container.appendChild(postEl);
         });
+        }
     } catch (err) { 
         console.error("Feed error:", err);
         if (container) {
