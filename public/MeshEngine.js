@@ -32,6 +32,7 @@ window.MeshEngine = {
         if (window.fetchUserProfile && window.CoreEngine.userKeys.publicKey) {
             window.fetchUserProfile(window.CoreEngine.userKeys.publicKey, true);
         }
+        if (typeof window.loadCloutStatus === 'function') window.loadCloutStatus();
 
         window.renderServerList();
         if (!this.currentChatServer && this.serversData && this.serversData.length > 0) {
@@ -115,6 +116,7 @@ window.MeshEngine = {
                 if (window.currentView === 'feed') window.loadMainGlobalFeed();
                 else if (window.currentView === 'profile' && window.viewingUserPublicKey) window.fetchUserProfile(window.viewingUserPublicKey, false);
                 
+                if (typeof window.loadCloutStatus === 'function') window.loadCloutStatus();
                 // Re-render sidebars that contain user info
                 if (typeof window.renderNewUsers === 'function') window.renderNewUsers();
                 this.renderOnlineUsers(this.onlineNodes); // Re-render online list with new usernames
@@ -147,6 +149,7 @@ window.MeshEngine = {
             const tx = payload ? payload.transaction : null;
             if (myKey && tx && (tx.sender === myKey || tx.receiver === myKey)) {
                 window.fetchUserProfile(myKey, true); // Silent update
+                if (typeof window.loadCloutStatus === 'function') window.loadCloutStatus();
             }
 
             // Only reload the entire global feed if a relevant transaction occurred

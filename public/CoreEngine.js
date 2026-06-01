@@ -155,6 +155,7 @@ window.CoreEngine = {
 
         if (typeof window.subscribeToPush === 'function') window.subscribeToPush(publicKey);
         if (typeof window.syncFullChain === 'function') window.syncFullChain();
+        if (typeof window.loadCloutStatus === 'function') window.loadCloutStatus();
     },
 
     async sendSignedTransaction(type, receiver, data) {

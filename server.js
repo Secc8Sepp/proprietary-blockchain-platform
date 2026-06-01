@@ -11,6 +11,7 @@ const socialRoutes = require('./routes/social');
 const feedRoutes = require('./routes/feed');
 const blockchainService = require('./services/blockchainService');
 const profileService = require('./services/profileService');
+const cloutService = require('./services/cloutService');
 const Wallet = require('./core/wallet');
 
 
@@ -150,6 +151,58 @@ try {
         console.warn("⚠️  './routes/tools.js' not found, skipping. AI Stem Splitter will be disabled.");
     } else { throw e; }
 }
+
+app.get('/api/social/clout', (req, res) => {
+    try {
+        const profiles = profileService.getProfileDirectory();
+        const chain = blockchainService.getChain();
+        
+        const userStatsMap = {};
+        for (const addr in profiles) {
+            userStatsMap[addr] = {
+                friends: (profiles[addr].followers?.length || 0) + (profiles[addr].following?.length || 0),
+                assets: (profiles[addr].uploadedTracks?.length || 0) + (profiles[addr].uploadedImages?.length || 0) + (profiles[addr].ownedItems?.length || 0),
+                shares: 0,
+                comments: 0,
+                likes: 0,
+                plays: 0,
+                last_active_date: 0,
+                historical_rank: profiles[addr].historical_rank || 0
+            };
+        }
+        
+        for (const block of chain) {
+            for (const tx of block.transactions) {
+                const sender = tx.sender;
+                if (!userStatsMap[sender]) continue;
+                
+                userStatsMap[sender].last_active_date = Math.max(userStatsMap[sender].last_active_date, tx.timestamp);
+                
+                if (tx.type === 'LIKE_POST' || tx.type === 'LIKE_IMAGE' || tx.type === 'LIKE_SONG') userStatsMap[sender].likes++;
+                if (tx.type === 'REPLY_POST') userStatsMap[sender].comments++;
+                if (tx.type === 'STREAM_COMPLETED') userStatsMap[sender].plays++;
+                if (tx.type === 'BUY_SONG_SHARE' || tx.type === 'REQUEST_SONG_SHARE') userStatsMap[sender].shares++;
+            }
+        }
+        
+        const usersArray = Object.keys(userStatsMap).map(addr => {
+            const stats = userStatsMap[addr];
+            let daysInactive = stats.last_active_date > 0 ? (Date.now() - stats.last_active_date) / (1000 * 60 * 60 * 24) : 30;
+            if (daysInactive < 0) daysInactive = 0;
+            const liveClout = cloutService.calculateLiveClout(stats, daysInactive);
+            return {
+                address: addr,
+                liveClout,
+                historical_rank: stats.historical_rank
+            };
+        });
+        
+        const rankedUsers = cloutService.generateFeedRanks(usersArray);
+        res.json(rankedUsers);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
 app.get('/api/social/hotornot', (req, res) => {
     res.json(require('./services/profileService').getHotOrNotEngine());

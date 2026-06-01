@@ -3262,3 +3262,37 @@ window.renderMarketplace = function() {
         }).join('') || '<div style="color:var(--text-muted); grid-column: 1 / -1; text-align:center;">No assets match your search.</div>';
   }
 };
+
+window.loadCloutStatus = async function() {
+    if (!window.CoreEngine || !window.CoreEngine.userKeys.publicKey) return;
+    try {
+        const res = await fetch('/api/social/clout');
+        if (!res.ok) return;
+        const ranks = await res.json();
+        
+        const myRankInfo = ranks.find(r => r.address === window.CoreEngine.userKeys.publicKey);
+        if (myRankInfo) {
+            const scoreEl = document.getElementById('ui-clout-score');
+            if (scoreEl) scoreEl.innerText = Math.floor(myRankInfo.liveClout).toLocaleString();
+            
+            const rankEl = document.getElementById('ui-clout-rank');
+            if (rankEl) rankEl.innerText = `#${myRankInfo.current_rank}`;
+            
+            const trendEl = document.getElementById('ui-clout-trend');
+            if (trendEl) {
+                if (myRankInfo.spotsMoved > 0) {
+                    trendEl.innerHTML = `▲ +${myRankInfo.spotsMoved}`;
+                    trendEl.className = 'clout-trend up';
+                } else if (myRankInfo.spotsMoved < 0) {
+                    trendEl.innerHTML = `▼ ${Math.abs(myRankInfo.spotsMoved)}`;
+                    trendEl.className = 'clout-trend down';
+                } else {
+                    trendEl.innerHTML = `-`;
+                    trendEl.className = 'clout-trend dash';
+                }
+            }
+        }
+    } catch(e) {
+        console.error('Failed to load clout status:', e);
+    }
+};

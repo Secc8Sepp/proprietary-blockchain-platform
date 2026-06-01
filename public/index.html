@@ -17,6 +17,33 @@
 
     <!-- User's dynamic CSS injected here (Sanitized) AFTER main styles to ensure override -->
     <style id="ui-dynamic-user-theme"></style>
+
+    <style>
+        /* Clout Status Widget - Classic MySpace Blocky Aesthetic */
+        .clout-widget {
+            background-color: #ffffff;
+            border: 2px solid #003399; /* Classic MySpace Blue border */
+            padding: 10px;
+            margin-bottom: 15px;
+            font-family: 'Verdana', sans-serif; /* Classic web-safe font */
+            color: #000000;
+            border-radius: 0; /* Hard blocky edges */
+        }
+        .clout-header {
+            background-color: #6699cc; /* Classic MySpace Light Blue header */
+            color: #ffffff;
+            font-weight: bold;
+            font-size: 14px;
+            text-align: center;
+            padding: 5px;
+            margin: -10px -10px 10px -10px;
+        }
+        .clout-stat { font-size: 12px; line-height: 1.5; margin-bottom: 5px; }
+        .clout-trend { font-weight: bold; margin-left: 5px; }
+        .clout-trend.up { color: #009900; }
+        .clout-trend.down { color: #cc0000; }
+        .clout-trend.dash { color: #888888; }
+    </style>
 </head>
 <body>
 
@@ -148,6 +175,16 @@
             
             <!-- LEFT SIDEBAR -->
             <div class="side-nav left" id="side-nav-left">
+                <!-- Clout Status Widget -->
+                <div class="clout-widget" id="ui-clout-widget">
+                    <div class="clout-header">Clout Status</div>
+                    <div class="clout-stat">Live Clout: <strong id="ui-clout-score">0</strong></div>
+                    <div class="clout-stat">
+                        Platform Rank: <strong id="ui-clout-rank">#0</strong>
+                        <span id="ui-clout-trend" class="clout-trend dash">-</span>
+                    </div>
+                </div>
+
                 <div class="side-card" id="card-main-nav" style="padding: 0; background: transparent; border: none;">
                     <div class="side-nav-item active" onclick="switchTab('feed', this)">🏠 The Global Feed</div>
                     <div class="side-nav-item" id="nav-discover-tab" onclick="switchTab('discover', this)">🌊 Discover Feed</div>
