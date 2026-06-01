@@ -823,20 +823,34 @@ function renderPostContent(item) {
              // Store by transactionHash to avoid cross-contamination on reposts
              window.waveformInstances[transactionHash] = wavesurfer;
 
+             let hasLoaded = false;
              const playButton = document.getElementById(`play-btn-${transactionHash}`);
              if (playButton) {
-                 playButton.disabled = true;
                  playButton.onclick = () => {
-                     // Pause any currently playing waveform
-                     if (window.activeWaveform && window.activeWaveform !== wavesurfer) {
-                         window.activeWaveform.pause();
+                     if (!hasLoaded) {
+                         hasLoaded = true;
+                         playButton.innerText = '⏳ Loading...';
+                         wavesurfer.load(`/tracks/${encodeURIComponent(audioHash)}`);
+                         
+                         // Start global audio immediately for snappy UX
+                         if (window.AudioEngine && window.AudioEngine.playTrack && window.AudioEngine.activeTrackHash !== audioHash) {
+                             window.AudioEngine.playTrack(item.data.trackTitle, audioHash, item.sender, displayArtist, item.data.coverHash);
+                         } else {
+                             const globalPlayer = document.getElementById('global-audio-player');
+                             if (globalPlayer && globalPlayer.paused) globalPlayer.play();
+                         }
+                     } else {
+                         // Pause any currently playing waveform
+                         if (window.activeWaveform && window.activeWaveform !== wavesurfer) {
+                             window.activeWaveform.pause();
+                         }
+                         wavesurfer.playPause();
                      }
-                     wavesurfer.playPause();
                  };
              }
 
              wavesurfer.on('ready', () => {
-                if (playButton) playButton.disabled = false;
+                if (playButton && playButton.innerText === '⏳ Loading...') playButton.innerText = '▶ Play';
                 wavesurfer.setMute(true); // Mute the visualizer
 
                 // Sync with global player state on load
@@ -963,8 +977,6 @@ function renderPostContent(item) {
                     playButton.disabled = true;
                 }
              });
-
-             wavesurfer.load(`/tracks/${encodeURIComponent(audioHash)}`);
         };
 
         initWaveform(); // Start the initialization process.
@@ -2378,6 +2390,8 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             // Check if there are any manually created playlists
             const userCreatedPlaylists = allPlaylists.filter(p => p.type === 'listener' && !p.isAutoPlaylist);
 
+            let html = '';
+
             if (userCreatedPlaylists.length > 0) {
                 // If user has custom playlists, show all available playlist cards
                 allPlaylists.forEach(p => {
@@ -2385,18 +2399,21 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                         window.profilePlaylistContext[p.id] = p.tracks;
                     }
                 });
-                playlistSectionContainer.innerHTML = allPlaylists.map(p => renderPlaylistCard(p, isOwner)).join('');
-            } else {
-                // If no custom playlists, default to showing the last 5 uploads as a simple list
-                const artistPlaylist = allPlaylists.find(p => p.type === 'artist');
-                if (artistPlaylist && artistPlaylist.tracks && artistPlaylist.tracks.length > 0) {
-                    // Sort tracks by most recent and take the top 5
-                    const latestUploads = artistPlaylist.tracks.slice().sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
-                    renderProfileTrackList(latestUploads, playlistSectionContainer, 'default-uploads');
-                } else {
-                    playlistSectionContainer.innerHTML = '<div style="color:var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">No tracks uploaded yet.</div>';
-                }
+                html += allPlaylists.map(p => renderPlaylistCard(p, isOwner)).join('');
             }
+
+            // ALWAYS show the last 5 uploads as a simple list below the playlists
+            const artistPlaylist = allPlaylists.find(p => p.type === 'artist');
+            if (artistPlaylist && artistPlaylist.tracks && artistPlaylist.tracks.length > 0) {
+                if (userCreatedPlaylists.length > 0) html += '<h4 style="margin-top: 15px; margin-bottom: 10px; color: var(--text-muted); font-size: 12px; text-transform: uppercase;">Recent Uploads</h4>';
+                const latestUploads = artistPlaylist.tracks.slice().sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
+                window.profilePlaylistContext['default-uploads'] = latestUploads;
+                html += latestUploads.map((track, index) => renderProfileTrackRow(track, index, 'default-uploads')).join('');
+            } else if (userCreatedPlaylists.length === 0) {
+                html = '<div style="color:var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">No tracks uploaded yet.</div>';
+            }
+            
+            playlistSectionContainer.innerHTML = html;
         }
 
         // Render Gallery
