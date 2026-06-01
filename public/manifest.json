@@ -24,39 +24,51 @@
   "categories": ["music", "social", "entertainment"],
   "icons": [
     {
-      "src": "icons/icon-192x192.png",
+      "src": "/icons/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "icons/icon-512x512.png",
+      "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "screenshots": [
     {
-      "src": "screenshots/mobile-screenshot-1.png",
+      "src": "/screenshots/mobile-screenshot-1.png",
       "sizes": "1080x1920",
       "type": "image/png",
       "form_factor": "narrow"
     },
     {
-      "src": "screenshots/mobile-screenshot-2.png",
+      "src": "/screenshots/mobile-screenshot-2.png",
       "sizes": "1080x1920",
       "type": "image/png",
       "form_factor": "narrow"
     },
     {
-      "src": "screenshots/mobile-screenshot-3.png",
+      "src": "/screenshots/mobile-screenshot-3.png",
       "sizes": "1080x1920",
       "type": "image/png",
       "form_factor": "narrow"
     },
     {
-      "src": "screenshots/mobile-screenshot-4.png",
+      "src": "/screenshots/mobile-screenshot-4.png",
       "sizes": "1080x1920",
       "type": "image/png",
       "form_factor": "narrow"
