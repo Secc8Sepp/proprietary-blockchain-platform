@@ -2522,12 +2522,22 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             }
 
             // ALWAYS show the last 5 uploads as a simple list below the playlists
-            const artistPlaylist = allPlaylists.find(p => p.type === 'artist');
-            if (artistPlaylist && artistPlaylist.tracks && artistPlaylist.tracks.length > 0) {
+            // Use profile.uploadedTracks (which is properly populated from the backend)
+            const uploadedTracks = profile.uploadedTracks || [];
+            if (uploadedTracks.length > 0) {
                 if (userCreatedPlaylists.length > 0) html += '<h4 style="margin-top: 15px; margin-bottom: 10px; color: var(--text-muted); font-size: 12px; text-transform: uppercase;">Recent Uploads</h4>';
-                const latestUploads = artistPlaylist.tracks.slice().sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
-                window.profilePlaylistContext['default-uploads'] = latestUploads;
-                html += latestUploads.map((track, index) => renderProfileTrackRow(track, index, 'default-uploads')).join('');
+                const latestUploads = uploadedTracks.slice().sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
+                // Transform uploadedTracks format to match renderProfileTrackRow expectations
+                const formattedTracks = latestUploads.map(t => ({
+                    data: {
+                        audioHash: t.hash,
+                        trackTitle: t.title
+                    },
+                    playCount: t.playCount || 0,
+                    isRepost: false
+                }));
+                window.profilePlaylistContext['default-uploads'] = formattedTracks;
+                html += formattedTracks.map((track, index) => renderProfileTrackRow(track, index, 'default-uploads')).join('');
             } else if (userCreatedPlaylists.length === 0) {
                 html = '<div style="color:var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">No tracks uploaded yet.</div>';
             }
