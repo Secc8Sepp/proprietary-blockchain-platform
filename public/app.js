@@ -52,7 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 const handleDirectMessage = (msg) => {
-    const otherAddr = msg.sender === window.CoreEngine.userKeys.publicKey ? msg.to : msg.sender;
+    const myKey = (window.CoreEngine && window.CoreEngine.userKeys) ? window.CoreEngine.userKeys.publicKey : null;
+    const otherAddr = msg.sender === myKey ? msg.to : msg.sender;
     if (!window.MeshEngine.dmHistory[otherAddr]) window.MeshEngine.dmHistory[otherAddr] = [];
     msg.roles = msg.roles || [];
     const exists = window.MeshEngine.dmHistory[otherAddr].find(m => m.time === msg.time && m.sender === msg.sender);
@@ -65,11 +66,11 @@ const handleDirectMessage = (msg) => {
             const chatLog = document.getElementById('ui-chat-log');
             chatLog.scrollTop = chatLog.scrollHeight;
         }
-        if (msg.sender !== window.CoreEngine.userKeys.publicKey) socket.emit('message_read', { to: msg.sender, time: msg.time });
+        if (msg.sender !== myKey) socket.emit('message_read', { to: msg.sender, time: msg.time });
     } else {
         if (!exists) {
             const badge = document.getElementById('ui-inbox-badge');
-            if (badge && msg.sender !== window.CoreEngine.userKeys.publicKey) { badge.innerText = parseInt(badge.innerText) + 1; badge.classList.remove('hidden'); }
+            if (badge && msg.sender !== myKey) { badge.innerText = parseInt(badge.innerText) + 1; badge.classList.remove('hidden'); }
         }
     }
     if (window.MeshEngine.currentChatServer === '@dms') renderDMList();
@@ -1272,7 +1273,7 @@ function switchServer(serverId) {
     if (!srv) return;
     
     let adminHtml = '';
-    if (srv.owner === window.CoreEngine.userKeys.publicKey) {
+    if (window.CoreEngine && window.CoreEngine.userKeys && srv.owner === window.CoreEngine.userKeys.publicKey) {
         adminHtml = `
             <span style="color: var(--warning); cursor: pointer; font-size: 11px; margin-left: 10px;" onclick="promptInviteToServer('${srv.id}')" title="Invite User">➕ Invite</span>
             <span style="color: var(--danger); cursor: pointer; font-size: 11px; margin-left: 10px;" onclick="promptKickFromServer('${srv.id}')" title="Kick User">👢 Kick</span>
