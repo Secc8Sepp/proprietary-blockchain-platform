@@ -54,11 +54,23 @@ window.ActionEngine = {
 
                 const tags = document.getElementById('audio-meta-genre').value.trim();
                 const forStake = document.getElementById('audio-stake-checkbox').checked;
-                let sellPercentage = 0; let pricePerShare = 0;
+                let sellPercentage = 0; let pricePerShare = 0; let totalShares = 100;
                 if (forStake) {
-                    sellPercentage = parseInt(document.getElementById('audio-stake-percent').value) || 0;
-                    pricePerShare = parseFloat(document.getElementById('audio-stake-price').value) || 0;
+                    const equityPercent = parseInt(document.getElementById('audio-stake-percent').value) || 0;
+                    const totalPrice = parseFloat(document.getElementById('audio-stake-total-price').value) || 0;
+                    const listedShares = parseInt(document.getElementById('audio-stake-shares').value) || 0;
+
+                    if (equityPercent > 0 && listedShares > 0) {
+                        totalShares = Math.floor(listedShares / (equityPercent / 100));
+                        pricePerShare = totalPrice / listedShares;
+                        sellPercentage = listedShares;
+                    }
                 }
+                
+                // Adjust collabs to represent exact share quantities instead of flat percentages
+                collabs.forEach(c => {
+                    c.percentage = Math.floor((c.percentage / 100) * totalShares);
+                });
                 
                 type = 'SONG_UPLOAD';
                 data = { 
@@ -72,6 +84,7 @@ window.ActionEngine = {
                     forStake: forStake, 
                     sellPercentage: sellPercentage, 
                     pricePerShare: pricePerShare, 
+                    totalShares: totalShares,
                     collaborators: collabs 
                 };
             } else if (imgFile) {
@@ -258,9 +271,9 @@ window.ActionEngine = {
         
         modalTitle.innerText = 'Request Track Stake';
         modalBody.innerHTML = `
-            <p style="font-size: 13px; color: var(--text-muted);">Make an offer to the creator to acquire a percentage of their track's streaming royalties.</p>
-            <label>Shares to Request (%)</label>
-            <input id="form-input-share-count" type="number" placeholder="e.g., 10" min="1" max="100" style="margin-bottom: 15px;">
+            <p style="font-size: 13px; color: var(--text-muted);">Make an offer to the creator to acquire fractional shares of their track's streaming royalties.</p>
+            <label>Number of Shares to Request</label>
+            <input id="form-input-share-count" type="number" placeholder="e.g., 10" min="1" style="margin-bottom: 15px;">
             <label>Offer Price per Share ($VOD)</label>
             <input id="form-input-share-price" type="number" placeholder="e.g., 5000" style="margin-bottom: 15px;">
             <button id="form-modal-submit" style="width: 100%;">Send Stake Request</button>
@@ -271,12 +284,12 @@ window.ActionEngine = {
             const count = document.getElementById('form-input-share-count').value;
             const price = document.getElementById('form-input-share-price').value;
 
-            if (!count || isNaN(count) || count <= 0) return alert("Please enter a valid percentage to request.");
+            if (!count || isNaN(count) || count <= 0) return alert("Please enter a valid number of shares to request.");
             if (!price || isNaN(price) || price <= 0) return alert("Please enter a valid price to offer.");
 
             try {
                 await window.CoreEngine.sendSignedTransaction('REQUEST_SONG_SHARE', seller, { audioHash: hash, shareCount: parseInt(count), pricePerShare: parseFloat(price) });
-                alert(`Stake Request sent to the creator for ${count}% at ${price} $VOD each!`);
+                alert(`Stake Request sent to the creator for ${count} shares at ${price} $VOD each!`);
                 toggleModal('form-modal');
                 fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
             } catch(err) { alert(err.message); }
@@ -286,11 +299,11 @@ window.ActionEngine = {
     },
 
     async buySongShareDirect(hash, seller, price) {
-        const count = prompt("How many available shares (percentage) do you want to buy?");
+        const count = prompt("How many shares do you want to buy?");
         if (!count || isNaN(count)) return;
         try {
             await window.CoreEngine.sendSignedTransaction('BUY_SONG_SHARE', seller, { audioHash: hash, shareCount: parseInt(count), pricePerShare: parseFloat(price) });
-            alert(`Successfully purchased ${count}% stake!`);
+            alert(`Successfully purchased ${count} shares!`);
             loadMainGlobalFeed();
             fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
         } catch(err) { alert(err.message); }

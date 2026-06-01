@@ -151,6 +151,7 @@ class BlockchainService extends EventEmitter {
         const openBounties = {};
         const songListings = {};
         const shareRequests = {};
+        const referrals = {};
 
         // The Admin receives the Genesis Airdrop to jumpstart the economy
         const adminAddress = this.getAdminAddress(chain);
@@ -158,6 +159,10 @@ class BlockchainService extends EventEmitter {
 
         for (const block of chain) {
             for (const tx of block.transactions) {
+                
+                if (tx.type === 'PROFILE_UPDATE' && tx.data && tx.data.referrer && !referrals[tx.sender]) {
+                    referrals[tx.sender] = tx.data.referrer;
+                }
                 
                 // --- DEFLATIONARY ASSET MINTING ---
                 if (tx.type === 'SONG_UPLOAD' || tx.type === 'IMAGE_POST' || tx.type === 'VIDEO_POST' || tx.type === 'PROJECT_FILE_POST') {
@@ -229,6 +234,11 @@ class BlockchainService extends EventEmitter {
                         if (!assetShareDistribution[assetHash][buyer]) assetShareDistribution[assetHash][buyer] = 0;
                         assetShareDistribution[assetHash][buyer] += count;
                         listing.available -= count;
+                        
+                        const referrer = referrals[buyer];
+                        if (referrer && referrer === publicKey) {
+                            balance += totalCost * 0.02;
+                        }
                     }
                 }
                 if (tx.type === 'TRANSFER_COIN') {
@@ -246,9 +256,15 @@ class BlockchainService extends EventEmitter {
                     // Dividend splits: 20,000 $VOD minted and split across shareholders
                     const sharesTable = assetShareDistribution[audioHash];
                     if (sharesTable) {
+                        let totalTrackShares = 0;
+                        for (const shares of Object.values(sharesTable)) {
+                            totalTrackShares += shares;
+                        }
+                        if (totalTrackShares <= 0) totalTrackShares = 100;
+
                         for (const [holderKey, sharesOwned] of Object.entries(sharesTable)) {
                             if (sharesOwned > 0 && holderKey === publicKey) {
-                                balance += (sharesOwned / 100) * 20000;
+                                balance += (sharesOwned / totalTrackShares) * 20000;
                             }
                         }
                     }
@@ -301,12 +317,22 @@ class BlockchainService extends EventEmitter {
 
                     if (tx.sender === publicKey) balance -= price; // Buyer pays full price
                     if (tx.receiver === publicKey) balance += netEarnings; // Seller gets 95%
+                    
+                    const referrer = referrals[tx.sender];
+                    if (referrer && referrer === publicKey) {
+                        balance += price * 0.02;
+                    }
                 }
 
                 if (tx.type === 'PURCHASE_ZINE_RIGHTS') {
                     const price = parseFloat(tx.data.price) || 0;
                     if (tx.sender === publicKey) balance -= price;
                     if (tx.receiver === publicKey) balance += price; // No tax on zine rights for now
+                    
+                    const referrer = referrals[tx.sender];
+                    if (referrer && referrer === publicKey) {
+                        balance += price * 0.02;
+                    }
                 }
 
 

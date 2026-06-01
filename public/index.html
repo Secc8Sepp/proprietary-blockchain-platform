@@ -54,6 +54,8 @@
                     <input id="input-signup-password" type="password" placeholder="Choose a strong password..." style="margin-bottom: 12px;" />
                     <label>Confirm Password</label>
                     <input id="input-signup-password-confirm" type="password" placeholder="Confirm your password..." style="margin-bottom: 12px;" />
+                    <label>Referral Code (Optional)</label>
+                    <input id="input-signup-referrer" placeholder="Inviter's username..." style="margin-bottom: 12px;" />
                     <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px;">Upload your profile picture</label>
                     <input id="input-signup-avatar" type="file" accept="image/*" style="margin-bottom: 12px;" />
                 </div>
@@ -262,8 +264,9 @@
                                     </label>
                                     
                                     <div id="audio-stake-options" style="display:none;">
-                                        <input type="number" id="audio-stake-percent" placeholder="% of shares to sell (e.g. 50)" style="margin-bottom:8px;" max="100" min="1"/>
-                                        <input type="number" id="audio-stake-price" placeholder="Price per share ($VOD)" style="margin-bottom:8px;" min="1"/>
+                                        <input type="number" id="audio-stake-percent" placeholder="% of equity to sell (e.g. 50)" style="margin-bottom:8px;" max="100" min="1"/>
+                                        <input type="number" id="audio-stake-total-price" placeholder="Total Price for these shares ($VOD)" style="margin-bottom:8px;" min="1"/>
+                                        <input type="number" id="audio-stake-shares" placeholder="Number of shares to issue for this %" style="margin-bottom:8px;" min="1"/>
                                     </div>
                                 </div>
                             </div>

@@ -23,15 +23,28 @@ window.CoreEngine = {
             const usernameInput = document.getElementById('input-signup-username');
             const passwordInput = document.getElementById('input-signup-password');
             const confirmPasswordInput = document.getElementById('input-signup-password-confirm');
+            const referrerInput = document.getElementById('input-signup-referrer');
             const avatarFile = document.getElementById('input-signup-avatar').files[0];
 
             const username = usernameInput.value.trim();
             const password = passwordInput.value;
             const confirmPassword = confirmPasswordInput.value;
+            const referrerUsername = referrerInput ? referrerInput.value.trim() : '';
 
             if (!username || !password || !avatarFile) return alert("Username, password, and a profile picture are required.");
             if (password !== confirmPassword) return alert("Passwords do not match.");
             if (password.length < 8) return alert("Password must be at least 8 characters long.");
+            
+            let referrerPublicKey = null;
+            if (referrerUsername) {
+                if (!window.networkProfiles) return alert("Network is still syncing, please wait a moment.");
+                const profileEntry = Object.entries(window.networkProfiles).find(([addr, prof]) => prof.username.toLowerCase() === referrerUsername.toLowerCase());
+                if (profileEntry) {
+                    referrerPublicKey = profileEntry[0];
+                } else {
+                    return alert("Referral username not found. Check the spelling or leave it blank.");
+                }
+            }
 
             const btn = document.getElementById('btn-signup');
             btn.innerText = "Uploading Avatar...";
@@ -63,7 +76,12 @@ window.CoreEngine = {
                         modalSubmitBtn.disabled = true;
                     }
 
-                    await this.sendSignedTransaction('PROFILE_UPDATE', this.userKeys.publicKey, { username: username, bio: "Active on the Vibe or Die Network.", avatarHash: avatarHash });
+                    const profileData = { username: username, bio: "Active on the Vibe or Die Network.", avatarHash: avatarHash };
+                    if (referrerPublicKey) {
+                        profileData.referrer = referrerPublicKey;
+                    }
+
+                    await this.sendSignedTransaction('PROFILE_UPDATE', this.userKeys.publicKey, profileData);
                     
                     if (window.toggleModal) window.toggleModal('form-modal');
                     this.unlockApplication(this.userKeys.publicKey);
@@ -84,8 +102,11 @@ window.CoreEngine = {
                 window.showKeyModal(this.userKeys, onKeySavedCallback);
             } else {
                 this.promptKeyDownload(this.userKeys);
-                // If modal function isn't present, we must still create the profile and unlock.
-                await this.sendSignedTransaction('PROFILE_UPDATE', this.userKeys.publicKey, { username: username, bio: "Active on the Vibe or Die Network.", avatarHash: avatarHash });
+                const profileData = { username: username, bio: "Active on the Vibe or Die Network.", avatarHash: avatarHash };
+                if (referrerPublicKey) {
+                    profileData.referrer = referrerPublicKey;
+                }
+                await this.sendSignedTransaction('PROFILE_UPDATE', this.userKeys.publicKey, profileData);
                 this.unlockApplication(this.userKeys.publicKey);
             }
         } catch (err) { 

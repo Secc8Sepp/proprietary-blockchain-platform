@@ -32,6 +32,7 @@ function _getAggregatedProfileData(chain) {
                     if (tx.data.username !== undefined) profiles[tx.sender].username = tx.data.username;
                     if (tx.data.avatarHash) profiles[tx.sender].avatarHash = tx.data.avatarHash;
                     if (tx.data.tags) profiles[tx.sender].tags = tx.data.tags;
+                    if (tx.data.referrer) profiles[tx.sender].referrer = tx.data.referrer;
                 }
             }
         });
@@ -157,6 +158,7 @@ class ProfileService {
             followingCount: 0,
             followers: [],
             following: [],
+            referrer: baseProfile.referrer || null,
             tags: baseProfile.tags || [],
             recommended: [],
             uploadedTracks: [],
@@ -937,6 +939,7 @@ class ProfileService {
 
         let totalMinted = 0;
         let totalBurned = 0;
+        const referrals = {};
 
         // 1. Calculate initial airdrops from all non-deleted profiles
         const liveProfiles = this.getProfileDirectory();
@@ -954,6 +957,10 @@ class ProfileService {
         for (const block of chain) {
             for (const tx of block.transactions) {
                 if (deletedUsers.has(tx.sender)) continue;
+                
+                if (tx.type === 'PROFILE_UPDATE' && tx.data && tx.data.referrer && !referrals[tx.sender]) {
+                    referrals[tx.sender] = tx.data.referrer;
+                }
 
                 // --- Mints (excluding airdrops) ---
                 if (tx.type === 'STREAM_COMPLETED') {
@@ -972,6 +979,16 @@ class ProfileService {
                 }
                 if (tx.type === 'ADMIN_MINT') {
                     totalMinted += parseFloat(tx.data.amount) || 0;
+                }
+                
+                if (tx.type === 'BUY_ITEM' && tx.data && tx.data.price) {
+                    if (referrals[tx.sender]) totalMinted += (parseFloat(tx.data.price) || 0) * 0.02;
+                }
+                if (tx.type === 'BUY_SONG_SHARE' && tx.data) {
+                    if (referrals[tx.sender]) totalMinted += (parseInt(tx.data.shareCount) || 0) * (parseFloat(tx.data.pricePerShare) || 0) * 0.02;
+                }
+                if (tx.type === 'PURCHASE_ZINE_RIGHTS' && tx.data && tx.data.price) {
+                    if (referrals[tx.sender]) totalMinted += (parseFloat(tx.data.price) || 0) * 0.02;
                 }
 
                 // --- Burns ---

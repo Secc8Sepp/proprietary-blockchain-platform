@@ -1015,16 +1015,24 @@ function renderPostContent(item) {
             const shareHolders = Object.entries(item.shares).filter(([_, count]) => count > 0);
             sharesHtml += shareHolders.map(([addr, count]) => {
                 const name = resolveProfile(addr).username;
-                return `<span onclick="inspectTargetNode('${addr}')" style="cursor:pointer; color:var(--primary);">${name} (${count}%)</span>`;
+                return `<span onclick="inspectTargetNode('${addr}')" style="cursor:pointer; color:var(--primary);">${name} (${count} shares)</span>`;
             }).join(' • ');
             sharesHtml += `</div>`;
         }
 
         let listingHtml = '';
-        if (item.listing && item.listing.available > 0) {
+        const isOwner = window.CoreEngine && window.CoreEngine.userKeys && item.sender === window.CoreEngine.userKeys.publicKey;
+
+        if (isOwner) {
+            listingHtml = `
+                <button class="secondary" style="padding:8px 15px; font-size: 12px;" onclick="alert('Stake management coming soon!')">
+                    🛒 Put up for Stake
+                </button>
+            `;
+        } else if (item.listing && item.listing.available > 0) {
             listingHtml = `
                 <button class="secondary" style="padding:8px 15px; font-size: 12px;" onclick="window.ActionEngine.buySongShareDirect('${item.data.audioHash}', '${item.sender}', ${item.listing.price})">
-                    🛒 Buy Stake (${item.listing.available}% avail @ ${item.listing.price} VOD)
+                    🛒 Buy Stake (${item.listing.available} shares avail @ ${item.listing.price} VOD)
                 </button>
             `;
         }
@@ -1111,7 +1119,7 @@ function renderPostContent(item) {
     } else if (item.type === 'BUY_SONG_SHARE') {
         return `<div class="post-body" style="color: var(--success); font-style: italic;">📈 Acquired ${item.data.shareCount} shares of a track on the open market!</div>`;
     } else if (item.type === 'REQUEST_SONG_SHARE') {
-        return `<div class="post-body" style="color: var(--primary); font-style: italic;">📬 Sent a request to acquire a ${item.data.shareCount}% stake in a track for ${item.data.pricePerShare} $VOD each.</div>`;
+                    return `<div class="post-body" style="color: var(--primary); font-style: italic;">📬 Sent a request to acquire ${item.data.shareCount} shares in a track for ${item.data.pricePerShare} $VOD each.</div>`;
     }
     return `<div class="post-body" style="opacity: 0.5;">System Broadcast: ${item.type}</div>`;
 }
@@ -2317,7 +2325,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                 stakeReqContainer.innerHTML = profile.shareRequestsReceived.map(r => `
                     <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--primary); padding: 12px; border-radius: 8px;">
                         <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
-                            <strong style="color: var(--primary);">Request for ${r.count}% stake</strong>
+                            <strong style="color: var(--primary);">Request for ${r.count} shares</strong>
                             <div>
                                 <button style="padding: 4px 10px; font-size: 11px; background:var(--success); color:#fff; cursor:pointer;" onclick="window.ActionEngine.respondToStakeRequest('${r.id}', 'ACCEPT_SHARE_REQUEST')">Accept</button>
                                 <button style="padding: 4px 10px; font-size: 11px; background:var(--danger); color:#fff; cursor:pointer;" onclick="window.ActionEngine.respondToStakeRequest('${r.id}', 'DECLINE_SHARE_REQUEST')">Decline</button>
