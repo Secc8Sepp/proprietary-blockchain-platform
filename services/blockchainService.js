@@ -378,6 +378,7 @@ class BlockchainService extends EventEmitter {
         // Therefore, we use the `type` from the payload directly for verification.
         const verificationPayload = { sender, receiver, type, data, timestamp };
         if (!this.verifySignature(sender, verificationPayload, signature)) {
+            console.error(`[BLOCKCHAIN] Transaction dropped: Invalid signature from ${sender}`);
             throw new Error("Invalid transaction signature.");
         }
 
@@ -385,13 +386,15 @@ class BlockchainService extends EventEmitter {
         const normalizedType = (type || '').toString().trim().toUpperCase();
 
         if (type === 'LIKE_SONG' || type === 'UNLIKE_SONG') {
-            if (!data.songId) throw new Error('Missing songId for like action.');
+            if (!data.songId) { console.error('[BLOCKCHAIN] Dropped: Missing songId'); throw new Error('Missing songId for like action.'); }
         }
 
         if (type === 'REPOST_POST') {
-            if (!data.originalTxHash) throw new Error('Missing originalTxHash for repost action.');
+            if (!data.originalTxHash) { console.error('[BLOCKCHAIN] Dropped: Missing originalTxHash'); throw new Error('Missing originalTxHash for repost action.'); }
             // Optional caption validation
-            if (data.caption && (typeof data.caption !== 'string' || data.caption.length > 280)) throw new Error('Invalid repost caption (max 280 chars).');
+            if (data.caption && (typeof data.caption !== 'string' || data.caption.length > 280)) {
+                console.error('[BLOCKCHAIN] Dropped: Invalid caption'); throw new Error('Invalid repost caption (max 280 chars).');
+            }
         }
 
         const currentBalance = this.calculateBalance(sender, chain);

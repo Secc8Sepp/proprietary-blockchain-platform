@@ -197,7 +197,7 @@ const handleAuthRegistration = (req, res) => {
             return res.status(409).json({ error: 'Username is already taken.' });
         }
 
-        const wallet = new Wallet();
+        const wallet = Wallet.generateKeyPair();
         authMemory[normalizedUser] = {
             username,
             password, 
