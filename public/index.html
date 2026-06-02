@@ -704,7 +704,7 @@
                 <h4 id="global-track-title" style="margin: 0 0 5px 0;">No Track Selected</h4>
                 <div style="font-size: 11px; margin-bottom: 5px; display: flex; align-items: center; gap: 10px;">
                     <span>Uploader: <a id="global-track-artist-link" style="color: var(--primary); cursor: pointer;">Unknown</a></span>
-                    <select id="playlist-selector" onchange="changePlaylistContext(this.value)" style="padding: 2px 5px; font-size: 10px; background: #111; color: #fff; border: 1px solid var(--border); border-radius: 4px; width: 120px; outline: none; margin: 0;">
+                    <select id="playlist-selector" onchange="window.AudioEngine.changePlaylistContext(this.value)" style="padding: 2px 5px; font-size: 10px; background: #111; color: #fff; border: 1px solid var(--border); border-radius: 4px; width: 120px; outline: none; margin: 0;">
                         <option value="global">Global Feed</option>
                         <option value="profile">Current Profile</option>
                     </select>

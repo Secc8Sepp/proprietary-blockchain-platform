@@ -143,6 +143,7 @@ function switchAuthTab(tabName) {
     const tab = document.getElementById(`tab-btn-${tabName}`);
     if (tab) tab.classList.add('active');
 }
+window.switchAuthTab = switchAuthTab;
 
 function toggleAdvancedLogin() {
     const standardView = document.getElementById('auth-view-login');
@@ -152,6 +153,7 @@ function toggleAdvancedLogin() {
     standardView.classList.toggle('hidden', isHidden);
     advancedView.classList.toggle('hidden', !isHidden);
 }
+window.toggleAdvancedLogin = toggleAdvancedLogin;
 
 /**
  * Attaches a 'tap' event listener that works for both mobile and desktop.
