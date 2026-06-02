@@ -45,8 +45,8 @@
             
             <!-- Tab buttons -->
             <div id="auth-tabs" style="display: flex; border-bottom: 1px solid var(--border); margin-bottom: 20px;">
-                <button id="tab-btn-signup" class="auth-tab-btn active">Sign Up</button>
-                <button id="tab-btn-login" class="auth-tab-btn">Log In</button>
+                <button id="tab-btn-signup" class="auth-tab-btn active" onclick="switchAuthTab('signup')">Sign Up</button>
+                <button id="tab-btn-login" class="auth-tab-btn" onclick="switchAuthTab('login')">Log In</button>
             </div>
 
             <!-- Signup Form -->
@@ -60,10 +60,10 @@
                     <input id="input-signup-password-confirm" type="password" placeholder="Confirm your password..." style="margin-bottom: 12px;" />
                     <label>Referral Code (Optional)</label>
                     <input id="input-signup-referrer" placeholder="Inviter's username..." style="margin-bottom: 12px;" />
-                    <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px;">Upload your profile picture</label>
+                    <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px;">Upload your profile picture (Required)</label>
                     <input id="input-signup-avatar" type="file" accept="image/*" style="margin-bottom: 12px;" />
                 </div>
-                <button class="wallet-btn" id="btn-signup">Create Account</button>
+                <button class="wallet-btn" id="btn-signup" onclick="window.CoreEngine.handleSignup()">Create Account</button>
             </div>
 
             <!-- Login Form -->
@@ -74,7 +74,7 @@
                     <label>Password</label>
                     <input id="input-login-password" type="password" placeholder="Your password..." style="margin-bottom: 12px;" />
                 </div>
-                <button class="wallet-btn" id="btn-login-submit">Log In</button>
+                <button class="wallet-btn" id="btn-login-submit" onclick="window.CoreEngine.handlePasswordLogin()">Log In</button>
                 <p style="font-size: 12px; color: var(--text-muted); margin-top: 20px; cursor: pointer;" onclick="toggleAdvancedLogin()">
                     Advanced / High Security Login &raquo;
                 </p>
@@ -90,7 +90,7 @@
                     <textarea id="input-login-key" rows="4" placeholder="Paste your vod_private_key.json content here" style="width:100%; border:1px solid rgba(69,162,158,0.5); background: rgba(11,12,16,0.9); color:#fff; border-radius:12px; padding:10px;"></textarea>
                     <label for="login-key-file-input" style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px; margin-top: 15px;">Or upload key file</label>
                     <input id="login-key-file-input" type="file" accept=".json" style="margin-bottom: 12px;" />
-                    <button class="wallet-btn" id="btn-key-login-submit" style="margin-top: 12px; width: 100%;">Unlock Profile with Key</button>
+                    <button class="wallet-btn" id="btn-key-login-submit" style="margin-top: 12px; width: 100%;" onclick="window.CoreEngine.handleKeyLogin()">Unlock Profile with Key</button>
                 </div>
                  <p style="font-size: 12px; color: var(--text-muted); margin-top: 20px; cursor: pointer;" onclick="toggleAdvancedLogin()">
                     &laquo; Back to Standard Login

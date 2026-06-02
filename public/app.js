@@ -223,17 +223,6 @@ function initializeApplicationListeners() {
     }
 
     // Identity & Auth Flow
-    const signupBtn = document.getElementById('btn-signup');
-    addTapListener(signupBtn, () => window.CoreEngine.handleSignup());
-    if (signupBtn) console.log('[INIT] ✓ Signup button wired'); else console.warn('[INIT] ✗ btn-signup not found');
-    
-    const loginBtn = document.getElementById('btn-login-submit');
-    addTapListener(loginBtn, () => window.CoreEngine.handlePasswordLogin());
-    if (loginBtn) console.log('[INIT] ✓ Login button wired'); else console.warn('[INIT] ✗ btn-login-submit not found');
-
-    const keyLoginBtn = document.getElementById('btn-key-login-submit');
-    addTapListener(keyLoginBtn, () => window.CoreEngine.handleKeyLogin());
-    if (keyLoginBtn) console.log('[INIT] ✓ Key Login button wired');
 
     const loginFileInput = document.getElementById('login-key-file-input');
     if (loginFileInput) {
@@ -251,11 +240,6 @@ function initializeApplicationListeners() {
         });
     }
 
-    // Auth Tabs
-    const signupTabBtn = document.getElementById('tab-btn-signup');
-    addTapListener(signupTabBtn, () => switchAuthTab('signup'));
-    const loginTabBtn = document.getElementById('tab-btn-login');
-    addTapListener(loginTabBtn, () => switchAuthTab('login'));
     // Set initial auth view
     switchAuthTab('signup');
     
@@ -1263,6 +1247,7 @@ function executeGlobalSearch(query) {
     }
     alert("No results found for: " + query);
 }
+window.executeGlobalSearch = executeGlobalSearch;
 
 function inspectTargetNode(publicKey) {
     if (!publicKey) return;

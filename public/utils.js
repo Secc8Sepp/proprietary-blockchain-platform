@@ -24,9 +24,7 @@ function escapeJsArg(str) {
 function parseMentions(text) {
     if (!text) return '';
     const escaped = escapeHtml(text);
-    return escaped.replace(/@([a-zA-Z0-9_]+)/g, (match, p1) => {
-        return `<span class="mention" onclick="inspectTargetNode('${p1}')">${match}</span>`;
-    });
+    return escaped.replace(/@([a-zA-Z0-9_]+)/g, (match, p1) => `<span class="mention" onclick="window.executeGlobalSearch('${escapeJsArg(p1)}')">${match}</span>`);
 }
 
 function renderBadges(roles) {

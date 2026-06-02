@@ -30,7 +30,6 @@ window.CoreEngine = {
             const password = passwordInput.value;
             const confirmPassword = confirmPasswordInput.value;
             const referrerUsername = referrerInput ? referrerInput.value.trim() : '';
-
             if (!username || !password || !avatarFile) return alert("Username, password, and a profile picture are required.");
             if (password !== confirmPassword) return alert("Passwords do not match.");
             if (password.length < 8) return alert("Password must be at least 8 characters long.");
@@ -49,10 +48,10 @@ window.CoreEngine = {
             const btn = document.getElementById('btn-signup');
             btn.innerText = "Uploading Avatar...";
             btn.disabled = true;
-            
+
             const avatarHash = await window.uploadMediaAssetFile(avatarFile);
             if (!avatarHash) throw new Error("Avatar upload failed. Please try again.");
-
+            
             btn.innerText = "Creating Account...";
             const res = await fetch('/api/auth/register', { 
                 method: 'POST',
