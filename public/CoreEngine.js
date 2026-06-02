@@ -49,7 +49,6 @@ window.CoreEngine = {
             btn.innerText = "Uploading Avatar...";
             btn.disabled = true;
 
-            const avatarHash = await window.uploadMediaAssetFile(avatarFile);
             const avatarHash = await uploadMediaAssetFile(avatarFile);
             if (!avatarHash) throw new Error("Avatar upload failed. Please try again.");
             
