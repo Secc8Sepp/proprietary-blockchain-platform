@@ -204,7 +204,9 @@ const handleAuthRegistration = (req, res) => {
             publicKey: wallet.publicKey,
             privateKey: wallet.privateKey
         };
-        fs.writeFileSync(AUTH_DB_FILE, JSON.stringify(authMemory, null, 2));
+        const tmpFile = AUTH_DB_FILE + '.tmp';
+        fs.writeFileSync(tmpFile, JSON.stringify(authMemory, null, 2));
+        fs.renameSync(tmpFile, AUTH_DB_FILE);
 
         res.json({ publicKey: wallet.publicKey, privateKey: wallet.privateKey });
     } catch (e) {
@@ -250,7 +252,9 @@ if (authModule) {
         const userKey = Object.keys(authMemory).find(k => authMemory[k].publicKey === address);
         if (userKey) {
             delete authMemory[userKey];
-            fs.writeFileSync(AUTH_DB_FILE, JSON.stringify(authMemory, null, 2));
+            const tmpFile = AUTH_DB_FILE + '.tmp';
+            fs.writeFileSync(tmpFile, JSON.stringify(authMemory, null, 2));
+            fs.renameSync(tmpFile, AUTH_DB_FILE);
         }
     };
 }
@@ -585,12 +589,14 @@ function purgeDeletedUserData(deletedUserAddress) {
 
 function saveDBMemory() {
     try {
-        fs.writeFileSync(CHAT_DB_FILE, JSON.stringify({
+        const tmpFile = CHAT_DB_FILE + '.tmp';
+        fs.writeFileSync(tmpFile, JSON.stringify({
             servers: dbMemory.servers,
             directMessages: dbMemory.directMessages,
             zineArticles: dbMemory.zineArticles,
             dailyStreamNotifs: dbMemory.dailyStreamNotifs
         }, null, 2));
+        fs.renameSync(tmpFile, CHAT_DB_FILE);
     } catch (e) { console.error('Error saving DB file:', e); }
 }
 

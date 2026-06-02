@@ -26,6 +26,7 @@ const CHAIN_FILE = path.join(LEDGER_DIR, 'chain.json');
 class BlockchainService extends EventEmitter {
     constructor() {
         super();
+        this.chain = null;
         this.initializeChainFile();
         this.stemSplitUsage = {
             lastReset: Date.now(),
@@ -44,28 +45,34 @@ class BlockchainService extends EventEmitter {
                 nonce: 0,
                 hash: "00000"
             };
-            fs.writeFileSync(CHAIN_FILE, JSON.stringify([genesisBlock], null, 2));
-        }
-    }
-
-    getChain() {
-        try {
-            const data = fs.readFileSync(CHAIN_FILE, 'utf8');
-            return JSON.parse(data);
-        } catch (error) {
-            console.error(`[BLOCKCHAIN ERROR] Failed to read or parse ${CHAIN_FILE}:`, error.message);
-            console.error("Falling back to a fresh Genesis block to prevent server crash.");
-            return [
-                {
+            this.chain = [genesisBlock];
+            this.saveChain(this.chain);
+        } else {
+            try {
+                const data = fs.readFileSync(CHAIN_FILE, 'utf8');
+                this.chain = JSON.parse(data);
+            } catch (error) {
+                console.error(`[BLOCKCHAIN ERROR] Failed to read or parse ${CHAIN_FILE}:`, error.message);
+                console.error("Falling back to a fresh Genesis block to prevent server crash.");
+                const genesisBlock = {
                     index: 0,
                     timestamp: 1700000000000,
                     transactions: [],
                     previousHash: "0",
                     nonce: 0,
                     hash: "00000"
-                }
-            ];
+                };
+                this.chain = [genesisBlock];
+                this.saveChain(this.chain);
+            }
         }
+    }
+
+    getChain() {
+        if (!this.chain) {
+            this.initializeChainFile();
+        }
+        return this.chain;
     }
 
     getBlockByHash(hash) {
@@ -74,7 +81,17 @@ class BlockchainService extends EventEmitter {
     }
 
     saveChain(chain) {
-        fs.writeFileSync(CHAIN_FILE, JSON.stringify(chain, null, 2));
+        if (chain) {
+            this.chain = chain;
+        }
+        const tmpFile = CHAIN_FILE + '.tmp';
+        try {
+            fs.writeFileSync(tmpFile, JSON.stringify(this.chain, null, 2));
+            fs.renameSync(tmpFile, CHAIN_FILE);
+        } catch (error) {
+            console.error(`[BLOCKCHAIN ERROR] Failed to write ${CHAIN_FILE}:`, error.message);
+            fs.writeFileSync(CHAIN_FILE, JSON.stringify(this.chain, null, 2));
+        }
     }
 
     getLatestBlock() {
