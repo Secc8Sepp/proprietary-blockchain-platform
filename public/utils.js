@@ -2,8 +2,23 @@
 // GLOBAL UTILITIES & UI HELPERS
 // ==========================================
 
-function resolveProfile(address) {
-    return networkProfiles[address] || { username: `Node_${address.substring(0,6)}`, avatarHash: '' };
+function resolveProfile(publicKey) {
+    if (!publicKey) {
+        return { username: "Anonymous Node", bio: "", avatarHash: "" };
+    }
+    
+    // Check if the directory mapping exists in global memory
+    if (window.networkProfiles && window.networkProfiles[publicKey]) {
+        return window.networkProfiles[publicKey];
+    }
+    
+    // FALLBACK HYGIENE: If a transaction exists from an outdated or purged node,
+    // return a default object layout instead of dropping execution and throwing a null error.
+    return {
+        username: `Node_${publicKey.substring(0, 6)}`,
+        bio: "Swarm participant.",
+        avatarHash: ""
+    };
 }
 
 function getAvatarUrl(address) {
