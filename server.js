@@ -105,10 +105,12 @@ app.post('/api/upload', upload.single('asset'), (req, res) => {
         const fileBuffer = fs.readFileSync(req.file.path);
         const hash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
         
-        const finalPath = path.join(IPFS_DIR, hash);
+        const ext = req.file.originalname ? path.extname(req.file.originalname).toLowerCase() : '';
+        const finalName = hash + ext;
+        const finalPath = path.join(IPFS_DIR, finalName);
         fs.renameSync(req.file.path, finalPath);
 
-        res.json({ hash: hash });
+        res.json({ fileHash: finalName, hash: finalName });
     } catch (err) {
         console.error('File upload processing error:', err);
         // Clean up temp file if it exists

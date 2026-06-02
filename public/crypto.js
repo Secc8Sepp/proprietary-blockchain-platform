@@ -32,5 +32,5 @@ async function uploadMediaAssetFile(fileObject) {
     let result;
     try { result = JSON.parse(text); } catch (e) { throw new Error(`Server returned invalid response. Response: ${text.substring(0, 80)}...`); }
     if (!response.ok) throw new Error(result.error || "Upload failed.");
-    return result.fileHash;
+    return result.fileHash || result.hash;
 }
