@@ -422,6 +422,7 @@ app.get('/api/feed/discover', (req, res) => {
     // Filter for recent public song uploads
     let discoverItems = feedItems.filter(item =>
         item.type === 'SONG_UPLOAD' &&
+        !item.isRepost &&
         (!publicKey || item.sender !== publicKey) // Exclude user's own tracks if logged in
     );
 

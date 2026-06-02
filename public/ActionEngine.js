@@ -191,6 +191,21 @@ window.ActionEngine = {
         list.appendChild(div);
     },
 
+    addEditCollaboratorField() {
+        const list = document.getElementById('edit-collaborator-list');
+        const id = Date.now();
+        const div = document.createElement('div');
+        div.id = 'edit-collab-' + id;
+        div.className = 'edit-collab-row';
+        div.style = 'display:flex; gap:10px; margin-bottom: 5px;';
+        div.innerHTML = `
+            <input placeholder="Public Key" class="edit-collab-address" style="margin:0; flex: 2; padding: 6px;" />
+            <input type="number" placeholder="Shares" class="edit-collab-percent" style="margin:0; flex: 1; padding: 6px;" min="1" />
+            <button type="button" class="secondary" style="padding: 0 10px;" onclick="document.getElementById('edit-collab-${id}').remove()">X</button>
+        `;
+        list.appendChild(div);
+    },
+
     promptPublishZineArticle(bodyText) {
         const modalTitle = document.getElementById('form-modal-title');
         const modalBody = document.getElementById('form-modal-body');
@@ -391,6 +406,11 @@ window.ActionEngine = {
             <input id="form-input-edit-offcollab" type="text" value="${escapeHtml(track.offPlatformCollaborator || '')}">
             <label>Tags (comma-separated)</label>
             <input id="form-input-edit-tags" type="text" value="${escapeHtml(track.metadata || '')}" placeholder="e.g. lofi, hiphop, instrumental">
+            <hr style="border: 0; border-top: 1px solid var(--border); margin: 15px 0;">
+            <label>Transfer Shares to Network Collaborators</label>
+            <p style="font-size: 11px; color: var(--warning);">Note: This will permanently transfer your owned shares of this track to the specified users.</p>
+            <div id="edit-collaborator-list"></div>
+            <button type="button" class="secondary" style="margin-bottom: 10px; width: 100%;" onclick="window.ActionEngine.addEditCollaboratorField()">+ Add Share Transfer</button>
             <button id="form-modal-submit" style="width: 100%; margin-top: 10px;">Update Metadata</button>
         `;
 
@@ -401,12 +421,20 @@ window.ActionEngine = {
             const newOffCollab = document.getElementById('form-input-edit-offcollab').value;
             const newTags = document.getElementById('form-input-edit-tags').value;
 
+            const collabs = [];
+            document.querySelectorAll('.edit-collab-row').forEach(row => {
+                const addr = row.querySelector('.edit-collab-address').value.trim();
+                const pct = parseInt(row.querySelector('.edit-collab-percent').value);
+                if (addr && pct > 0) collabs.push({ address: addr, percentage: pct });
+            });
+
             try {
                 let data = { audioHash: audioHash };
                 if (newTitle) data.title = newTitle;
                 if (newArtist) data.artist = newArtist;
                 if (newOffCollab !== undefined) data.offPlatformCollaborator = newOffCollab;
                 if (newTags !== undefined) data.metadata = newTags;
+                if (collabs.length > 0) data.collaborators = collabs;
                 await window.CoreEngine.sendSignedTransaction('EDIT_SONG_METADATA', '0x00', data);
                 alert("Metadata updated!"); 
                 toggleModal('form-modal');
@@ -512,9 +540,10 @@ window.ActionEngine = {
             
             if (!isReply && this.socket) {
                 this.socket.emit('send_crew_request', { target: targetPeerPublicKey, from: window.CoreEngine.userKeys.publicKey });
+                alert("Crew request sent!");
+            } else {
+                alert("Crew connection established.");
             }
-            
-            alert("Crew connection established.");
             
             // Refresh profiles to immediately update the button UI and feed priorities
             fetchUserProfile(targetPeerPublicKey, false);
@@ -862,6 +891,12 @@ window.ActionEngine = {
 
     declineCrewRequest(fromAddress) {
         window.pendingCrewRequests = window.pendingCrewRequests.filter(r => r.from !== fromAddress);
+        let declined = [];
+        try { declined = JSON.parse(localStorage.getItem('vod_declined_requests') || '[]'); } catch(e){}
+        if (!declined.includes(fromAddress)) {
+            declined.push(fromAddress);
+            localStorage.setItem('vod_declined_requests', JSON.stringify(declined));
+        }
         window.renderCrewRequests();
     },
 

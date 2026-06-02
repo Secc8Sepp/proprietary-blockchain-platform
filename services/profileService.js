@@ -468,6 +468,16 @@ class ProfileService {
                             trackMetadata[tx.data.audioHash].metadata = tx.data.metadata;
                         }
                     }
+                    if (tx.data.collaborators && Array.isArray(tx.data.collaborators)) {
+                        shareDistribution[tx.data.audioHash] = shareDistribution[tx.data.audioHash] || {};
+                        for (const collab of tx.data.collaborators) {
+                            const p = parseInt(collab.percentage) || 0;
+                            if (p > 0 && shareDistribution[tx.data.audioHash][tx.sender] >= p) {
+                                shareDistribution[tx.data.audioHash][tx.sender] -= p;
+                                shareDistribution[tx.data.audioHash][collab.address] = (shareDistribution[tx.data.audioHash][collab.address] || 0) + p;
+                            }
+                        }
+                    }
                 }
                 if (tx.type === 'STREAM_COMPLETED' && tx.data) {
                     playCounts[tx.data.audioHash] = (playCounts[tx.data.audioHash] || 0) + 1;

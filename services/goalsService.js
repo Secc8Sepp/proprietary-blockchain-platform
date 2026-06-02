@@ -10,13 +10,15 @@ const GOAL_DICT = {
         { id: 'd_listen_5', type: 'LISTEN_SONGS', target: 5, reward: 1000, desc: 'Listen to 5 songs' },
         { id: 'd_comment_3', type: 'LEAVE_COMMENTS', target: 3, reward: 500, desc: 'Leave 3 comments on the feed' },
         { id: 'd_friend_2', type: 'ADD_FRIENDS', target: 2, reward: 1500, desc: 'Lock in 2 new crew members' },
-        { id: 'd_listen_15', type: 'LISTEN_SONGS', target: 15, reward: 3000, desc: 'Listen to 15 songs' }
+        { id: 'd_listen_15', type: 'LISTEN_SONGS', target: 15, reward: 3000, desc: 'Listen to 15 songs' },
+        { id: 'd_like_5', type: 'LIKE_POSTS', target: 5, reward: 500, desc: 'Like 5 posts or images' }
     ],
     weekly: [
         { id: 'w_refer_1', type: 'REFER_USERS', target: 1, reward: 25000, desc: 'Refer 1 new user to VOD' },
         { id: 'w_upload_1', type: 'UPLOAD_TRACK', target: 1, reward: 10000, desc: 'Upload a new track' },
         { id: 'w_stake_1', type: 'STAKE_SONG', target: 1, reward: 15000, desc: 'Put a song up for stake' },
-        { id: 'w_listen_50', type: 'LISTEN_SONGS', target: 50, reward: 10000, desc: 'Listen to 50 songs' }
+        { id: 'w_listen_50', type: 'LISTEN_SONGS', target: 50, reward: 10000, desc: 'Listen to 50 songs' },
+        { id: 'w_post_5', type: 'PUBLISH_POSTS', target: 5, reward: 5000, desc: 'Publish 5 new posts' }
     ]
 };
 
@@ -50,13 +52,13 @@ class GoalsService {
 
         if (now - this.db.lastDailyRotation > DAY) {
             this.db.lastDailyRotation = now;
-            for (const user in this.db.users) this.db.users[user].daily = this.getRandomGoals('daily', 2);
+            for (const user in this.db.users) this.db.users[user].daily = this.getRandomGoals('daily', 5);
             rotated = true;
         }
 
         if (now - this.db.lastWeeklyRotation > WEEK) {
             this.db.lastWeeklyRotation = now;
-            for (const user in this.db.users) this.db.users[user].weekly = this.getRandomGoals('weekly', 2);
+            for (const user in this.db.users) this.db.users[user].weekly = this.getRandomGoals('weekly', 5);
             rotated = true;
         }
 
@@ -72,7 +74,20 @@ class GoalsService {
 
     getUserGoals(address) {
         if (!this.db.users[address]) {
-            this.db.users[address] = { daily: this.getRandomGoals('daily', 2), weekly: this.getRandomGoals('weekly', 2) };
+            this.db.users[address] = { daily: this.getRandomGoals('daily', 5), weekly: this.getRandomGoals('weekly', 5) };
+            this.saveDB();
+        }
+        
+        let updated = false;
+        if (this.db.users[address].daily.length < 5) {
+            this.db.users[address].daily = this.getRandomGoals('daily', 5);
+            updated = true;
+        }
+        if (this.db.users[address].weekly.length < 5) {
+            this.db.users[address].weekly = this.getRandomGoals('weekly', 5);
+            updated = true;
+        }
+        if (updated) {
             this.saveDB();
         }
         return this.db.users[address];
@@ -94,6 +109,8 @@ class GoalsService {
         }
         if (tx.type === 'REPLY_POST') actions.push('LEAVE_COMMENTS');
         if (tx.type === 'FOLLOW_USER') actions.push('ADD_FRIENDS');
+        if (tx.type === 'LIKE_POST' || tx.type === 'LIKE_IMAGE') actions.push('LIKE_POSTS');
+        if (tx.type === 'TEXT_POST' || tx.type === 'IMAGE_POST' || tx.type === 'VIDEO_POST' || tx.type === 'SONG_UPLOAD') actions.push('PUBLISH_POSTS');
 
         if (actions.length > 0 && actor && actor !== 'SYSTEM' && actor !== '0x00') {
             actions.forEach(actionType => this.incrementGoal(actor, actionType));

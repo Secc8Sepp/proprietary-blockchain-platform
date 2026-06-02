@@ -251,6 +251,21 @@ class BlockchainService extends EventEmitter {
                     }
                 }
 
+                // --- POST-MINT COLLABORATION TRANSFERS ---
+                if (tx.type === 'EDIT_SONG_METADATA') {
+                    const assetHash = tx.data.audioHash;
+                    if (assetHash && tx.data.collaborators && Array.isArray(tx.data.collaborators)) {
+                        assetShareDistribution[assetHash] = assetShareDistribution[assetHash] || {};
+                        for (const collab of tx.data.collaborators) {
+                            const percent = parseInt(collab.percentage) || 0;
+                            if (percent > 0 && assetShareDistribution[assetHash][tx.sender] >= percent) {
+                                assetShareDistribution[assetHash][tx.sender] -= percent;
+                                assetShareDistribution[assetHash][collab.address] = (assetShareDistribution[assetHash][collab.address] || 0) + percent;
+                            }
+                        }
+                    }
+                }
+
                 // --- ZERO-SUM TRANSFERS ---
                 if (tx.type === 'BUY_SONG_SHARE') {
                     const assetHash = tx.data.audioHash || tx.data.imageHash || tx.data.videoHash || tx.data.fileHash;
@@ -393,6 +408,13 @@ class BlockchainService extends EventEmitter {
                 if (tx.type === 'ADMIN_MINT') {
                     if (tx.sender === adminAddress && tx.receiver === publicKey) {
                         balance += parseFloat(tx.data.amount) || 0; // Create $VOD out of thin air for the investor
+                    }
+                }
+
+                // --- GOAL REWARDS ---
+                if (tx.type === 'GOAL_REWARD') {
+                    if (tx.receiver === publicKey) {
+                        balance += parseFloat(tx.data.amount) || 0;
                     }
                 }
 

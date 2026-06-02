@@ -85,7 +85,7 @@ const handleDirectMessage = (msg) => {
         if (!exists) {
             appendChatMessage(msg);
             const chatLog = document.getElementById('ui-chat-log');
-            chatLog.scrollTop = chatLog.scrollHeight;
+            if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
         }
         if (msg.sender !== myKey) socket.emit('message_read', { to: msg.sender, time: msg.time });
     } else {
@@ -333,6 +333,13 @@ function initializeApplicationListeners() {
     document.addEventListener('mousemove', () => window.CoreEngine.resetIdleTimer());
     document.addEventListener('keypress', () => window.CoreEngine.resetIdleTimer());
 
+    window.sendChatMessage = function() {
+        const chatInput = document.getElementById('chat-input');
+        if (chatInput && chatInput.value.trim() !== '') {
+            handleChatEnter({ key: 'Enter', target: chatInput });
+        }
+    };
+
     const chatInput = document.getElementById('chat-input');
     if (chatInput) {
         chatInput.addEventListener('input', handleChatTyping);
@@ -350,7 +357,7 @@ function initializeApplicationListeners() {
             sendBtn.title = 'Send Message';
             sendBtn.style.marginLeft = '10px';
             sendBtn.style.padding = '8px 15px';
-            sendBtn.addEventListener('click', sendChatMessage);
+            sendBtn.addEventListener('click', window.sendChatMessage);
             
             parent.appendChild(sendBtn);
         }
@@ -630,7 +637,7 @@ async function loadMainGlobalFeed() {
             if (isNodeBlocked(item.sender)) return false;
             
             if (feedFilterMode === 'following') {
-                if (item.sender !== window.CoreEngine.userKeys.publicKey && !myFollowing.includes(item.sender)) return false;
+                if (item.sender === window.CoreEngine.userKeys.publicKey || !myFollowing.includes(item.sender)) return false;
             }
             
             if (window.GlobalTagEngine && window.GlobalTagEngine.activeFeedTag) {
@@ -800,8 +807,11 @@ function renderPostContent(item) {
 
              window.waveformInstances[transactionHash] = wavesurfer;
 
-             let visualizerLoaded = false;
+             let visualizerLoaded = true;
              const playButton = document.getElementById(`play-btn-${transactionHash}`);
+
+             // Automatically load the waveform so it's fully drawn on the feed
+             wavesurfer.load(`/tracks/${encodeURIComponent(audioHash)}`);
 
              wavesurfer.on('ready', () => {
                 if (playButton && playButton.innerText === '⏳ Loading...') playButton.innerText = '⏸️ Pause';
@@ -1150,7 +1160,7 @@ window.showSearchResultsDialog = function(matches, query) {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'search-results-modal';
-        modal.className = 'modal hidden';
+            modal.className = 'modal-overlay hidden';
         modal.innerHTML = `
             <div class="modal-content" style="max-width: 500px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -2017,6 +2027,20 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                     return `<div style="display:flex; justify-content:space-between; padding:8px; border-bottom:1px solid rgba(255,255,255,0.1); font-size:12px;"><span><strong>${tx.type}</strong><br><span style="color:var(--text-muted); font-size:10px;">${new Date(tx.timestamp).toLocaleString()}</span></span>${amtDisplay}</div>`;
                 }).join('') || '<div style="color:var(--text-muted); font-size:12px; text-align: center; padding: 10px;">No transactions yet.</div>';
             }
+
+            if (profile.followers && profile.following) {
+                let declined = [];
+                try { declined = JSON.parse(localStorage.getItem('vod_declined_requests') || '[]'); } catch(e){}
+                if (!window.pendingCrewRequests) window.pendingCrewRequests = [];
+                profile.followers.forEach(follower => {
+                    if (!profile.following.includes(follower) && !declined.includes(follower)) {
+                        if (!window.pendingCrewRequests.find(r => r.from === follower)) {
+                            window.pendingCrewRequests.push({ from: follower });
+                        }
+                    }
+                });
+                if (typeof window.renderCrewRequests === 'function') window.renderCrewRequests();
+            }
         }
 
         if(isNavUpdateOnly) return;
@@ -2065,8 +2089,13 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             } else {
                 followBtn.style.display = 'block';
                 if (profile.followers && profile.followers.includes(window.CoreEngine.userKeys.publicKey)) {
-                    followBtn.innerText = "Crew Locked 🤝";
-                    followBtn.disabled = true;
+                    if (profile.following && profile.following.includes(window.CoreEngine.userKeys.publicKey)) {
+                        followBtn.innerText = "Crew Locked 🤝";
+                        followBtn.disabled = true;
+                    } else {
+                        followBtn.innerText = "Pending...";
+                        followBtn.disabled = true;
+                    }
                 } else {
                     followBtn.innerText = "Lock In Crew";
                     followBtn.disabled = false;
@@ -2793,13 +2822,21 @@ function toggleReplyBox(txHash) {
 
 window.renderCrewRequests = function() {
     const list = document.getElementById('ui-requests-list');
-    if (!list) return;
-    if (window.pendingCrewRequests.length === 0) {
-        list.innerHTML = '<div style="color: var(--text-muted); font-size: 13px; text-align: center;">No pending requests.</div>';
-        document.querySelectorAll('.ui-requests-badge').forEach(badge => {
+    const badgeCount = window.pendingCrewRequests ? window.pendingCrewRequests.length : 0;
+    
+    document.querySelectorAll('.ui-requests-badge').forEach(badge => {
+        if (badgeCount > 0) {
+            badge.innerText = badgeCount;
+            badge.classList.remove('hidden');
+        } else {
             badge.innerText = '0';
             badge.classList.add('hidden');
-        });
+        }
+    });
+
+    if (!list) return;
+    if (badgeCount === 0) {
+        list.innerHTML = '<div style="color: var(--text-muted); font-size: 13px; text-align: center;">No pending requests.</div>';
         return;
     }
     list.innerHTML = window.pendingCrewRequests.map(req => {
@@ -3017,7 +3054,7 @@ window.showAddToPlaylistModal = function(trackHash) {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'add-to-playlist-modal';
-        modal.className = 'modal hidden';
+            modal.className = 'modal-overlay hidden';
         modal.innerHTML = `
             <div class="modal-content" style="max-width: 400px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
