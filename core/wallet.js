@@ -2,15 +2,12 @@ const crypto = require('crypto');
 
 class Wallet {
     static generateKeyPair() {
-        // Generate standard Web3 cryptographic keypair natively
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { 
             namedCurve: 'secp256k1' 
         });
 
-        // Export public key as standard SPKI DER hex mapping
         const publicKeyHex = publicKey.export({ type: 'spki', format: 'der' }).toString('hex');
         
-        // Export private key natively to extract the raw 32-byte scalar hex
         const jwk = privateKey.export({ format: 'jwk' });
         const d_base64 = jwk.d.replace(/-/g, '+').replace(/_/g, '/');
         const privateKeyHex = Buffer.from(d_base64, 'base64').toString('hex');
@@ -23,42 +20,49 @@ class Wallet {
     }
 
     static getPrivateKeyObj(privateKeyHex) {
-        // Clean the incoming hex key string strings
+        // Clean the string inputs seamlessly
         const cleanHex = privateKeyHex.trim().replace(/^0x/i, '');
-        const rawKeyBuffer = Buffer.from(cleanHex, 'hex');
+        
+        // Ensure the private scalar string is exactly 64 characters (32 bytes) long
+        const paddedHex = cleanHex.padStart(64, '0');
+        
+        // Convert straight to safe base64url padding layout
+        const dBase64Url = Buffer.from(paddedHex, 'hex')
+            .toString('base64')
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=/g, '');
 
-        // Wrapping the raw 32-byte hash sequence inside a native PKCS#8 structural key object wrapper.
-        // This ensures Node's core OpenSSL layer executes key bindings without checking for manual JWK fields.
+        // Use standard JWK mapping format. This satisfies both password hash lines 
+        // and asymmetric ledger validations without tripping ASN.1 sequence parsers.
         return crypto.createPrivateKey({
-            key: crypto.createPrivateKey({
-                key: rawKeyBuffer,
-                format: 'der',
-                type: 'sec1',
-                derOptions: { namedCurve: 'secp256k1' }
-            }).export({ type: 'pkcs8', format: 'der' }),
-            format: 'der',
-            type: 'pkcs8'
+            key: {
+                kty: 'EC',
+                crv: 'secp256k1',
+                d: dBase64Url
+            },
+            format: 'jwk'
         });
     }
 
     static getPublicKeyFromPrivate(privateKeyHex) {
         try {
             const cleanHex = privateKeyHex.trim().replace(/^0x/i, '');
-            const privateKeyBuffer = Buffer.from(cleanHex, 'hex');
+            const paddedHex = cleanHex.padStart(64, '0');
+            const privateKeyBuffer = Buffer.from(paddedHex, 'hex');
 
-            // Use native ECDH mechanics to resolve keys straight from raw password strings safely
+            // Handle the raw password key bytes directly using native ECDH structures
             const ecdh = crypto.createECDH('secp256k1');
             ecdh.setPrivateKey(privateKeyBuffer);
             const rawPublicKey = ecdh.getPublicKey();
 
-            // Export standard SPKI DER formats straight to the asset registration handlers
             return crypto.createPublicKey({
                 key: rawPublicKey,
                 format: 'der',
                 type: 'pkcs1'
             }).export({ type: 'spki', format: 'der' }).toString('hex');
         } catch (error) {
-            // Secure fallback path running direct mathematical derivation structures
+            // High-compatibility safe extraction backup gate
             const privateKeyObj = this.getPrivateKeyObj(privateKeyHex);
             return crypto.createPublicKey(privateKeyObj).export({ type: 'spki', format: 'der' }).toString('hex');
         }

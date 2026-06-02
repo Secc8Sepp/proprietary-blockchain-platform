@@ -125,7 +125,6 @@ function closeChatMode() {
             container.classList.remove('chat-mode');
         }
     }
-    // When closing chat, switch back to the feed as a sensible default.
     const feedTab = document.querySelector('.side-nav-item');
     if (feedTab) switchTab('feed', feedTab);
 }
@@ -161,12 +160,6 @@ function toggleAdvancedLogin() {
     advancedView.classList.toggle('hidden', !isHidden);
 }
 
-/**
- * Attaches a 'tap' event listener that works for both mobile and desktop.
- * It uses 'touchend' on mobile devices for better responsiveness and 'click' on desktops.
- * @param {HTMLElement} element The DOM element to attach the listener to.
- * @param {Function} handler The function to execute on tap/click.
- */
 function addTapListener(element, handler) {
     if (!element) return;
     const eventName = ('ontouchend' in document.documentElement) ? 'touchend' : 'click';
@@ -177,7 +170,6 @@ function initializeApplicationListeners() {
     console.log('[INIT] Wiring up event listeners...');
     loadGoogleMapsScript();
 
-    // Dynamically load WaveSurfer.js and regions plugin
     const wsScript = document.createElement('script');
     wsScript.src = 'https://unpkg.com/wavesurfer.js@6.6.4/dist/wavesurfer.js';
     document.head.appendChild(wsScript);
@@ -188,13 +180,9 @@ function initializeApplicationListeners() {
         regionsScript.onload = () => console.log('[INIT] ✓ Waveform Engine ready.');
     };
 
-    // PWA Install Prompt Handler
     window.addEventListener('beforeinstallprompt', (e) => {
-        // Prevent the mini-infobar from appearing on mobile
         e.preventDefault();
-        // Stash the event so it can be triggered later.
         deferredInstallPrompt = e;
-        // Update UI to notify the user they can install the PWA
         const installBtn = document.getElementById('btn-install-pwa');
         if (installBtn) {
             console.log('[PWA] App is installable. Showing install button.');
@@ -211,9 +199,7 @@ function initializeApplicationListeners() {
         }
     });
     
-    // PWA Install Prompt Handler for iOS
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    // Check if the app is running in standalone mode (i.e., installed)
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
 
     if (isIOS && !isStandalone) {
@@ -230,9 +216,6 @@ function initializeApplicationListeners() {
         }
     }
 
-    // Identity & Auth Flow
-
-    // Auth Tabs
     const signupTabBtn = document.getElementById('tab-btn-signup');
     if (signupTabBtn) addTapListener(signupTabBtn, () => switchAuthTab('signup'));
     const loginTabBtn = document.getElementById('tab-btn-login');
@@ -252,16 +235,14 @@ function initializeApplicationListeners() {
     if (loginTextarea) {
         loginTextarea.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault(); // Prevent adding a newline
+                e.preventDefault();
                 window.CoreEngine.handleKeyLogin();
             }
         });
     }
 
-    // Set initial auth view
     switchAuthTab('signup');
     
-    // Global Navigation & Search
     const searchInput = document.getElementById('search-input');
     if(searchInput) {
         searchInput.addEventListener('keypress', (e) => {
@@ -272,7 +253,6 @@ function initializeApplicationListeners() {
         console.log('[INIT] ✓ Search input wired');
     }
 
-    // Mobile Top Nav Listeners
     const mobileSearchBtn = document.getElementById('mobile-search-btn');
     if (mobileSearchBtn) {
         mobileSearchBtn.addEventListener('click', openMobileSearch);
@@ -286,7 +266,6 @@ function initializeApplicationListeners() {
         mobileWalletBtn.addEventListener('click', toggleRightSidebar);
     }
 
-    // Add listeners to close mobile sidebars when a nav item is clicked
     document.querySelectorAll('.side-nav-item').forEach(item => {
         item.addEventListener('click', () => {
             if (window.innerWidth <= 768) {
@@ -302,12 +281,11 @@ function initializeApplicationListeners() {
         console.log('[INIT] ✓ Discover tab wired');
     }
 
-    // Unified Media Composer
     const publishBtn = document.getElementById('btn-publish-post');
     if(publishBtn) {
         publishBtn.addEventListener('click', () => window.ActionEngine.handlePublishPost(false));
         console.log('[INIT] ✓ Publish button wired');
-    } else console.warn('[INIT] ✗ btn-publish-post not found');
+    }
     
     const storyBtn = document.getElementById('btn-publish-story');
     if(storyBtn) {
@@ -331,7 +309,7 @@ function initializeApplicationListeners() {
     if(followBtn) {
         followBtn.addEventListener('click', () => window.ActionEngine.executeTargetFollow(viewingUserPublicKey));
         console.log('[INIT] ✓ Follow button wired');
-    } else console.warn('[INIT] ✗ btn-profile-follow not found');
+    }
 
     document.addEventListener('mousemove', (e) => {
         if (eventsState.isPlacing) {
@@ -340,7 +318,6 @@ function initializeApplicationListeners() {
         }
     });
 
-    // Presence Idle Detection
     document.addEventListener('mousemove', () => window.CoreEngine.resetIdleTimer());
     document.addEventListener('keypress', () => window.CoreEngine.resetIdleTimer());
 
@@ -349,14 +326,11 @@ function initializeApplicationListeners() {
         chatInput.addEventListener('input', handleChatTyping);
         chatInput.addEventListener('keypress', handleChatEnter);
 
-        // Dynamically create and append a send button for mobile usability
         if (chatInput.parentElement && !document.getElementById('btn-send-chat')) {
             const parent = chatInput.parentElement;
-            // Ensure the parent is a flex container for proper layout
             parent.style.display = 'flex';
             parent.style.alignItems = 'center';
-            
-            chatInput.style.flexGrow = '1'; // Make input field take up available space
+            chatInput.style.flexGrow = '1';
 
             const sendBtn = document.createElement('button');
             sendBtn.id = 'btn-send-chat';
@@ -370,13 +344,9 @@ function initializeApplicationListeners() {
         }
     }
 
-    // Request initial data
     socket.emit('get_zine_data');
-
-    // Wire up the handler for server-relayed direct messages
     socket.on('direct_message', handleDirectMessage);
 
-    // Wire up Listen-to-Earn (Mining) UI updates
     socket.on('l2e_status', (data) => {
         const tracker = document.getElementById('l2e-status-tracker');
         if (!tracker) return;
@@ -396,7 +366,6 @@ function initializeApplicationListeners() {
         tracker.style.color = 'var(--primary)';
     });
 
-    // --- PWA & Mobile App Readiness: Offline/Online Detection ---
     window.addEventListener('offline', () => {
         console.warn('[PWA] Network connection lost. Application is offline.');
         const banner = document.getElementById('offline-banner');
@@ -407,7 +376,6 @@ function initializeApplicationListeners() {
         console.log('[PWA] Network connection restored. Application is online.');
         const banner = document.getElementById('offline-banner');
         if (banner) banner.classList.add('hidden');
-        // Optional: Trigger a data refresh now that we're back online
         if (currentView === 'feed') loadMainGlobalFeed();
     });
     console.log('[INIT] Event listeners initialized');
@@ -426,7 +394,6 @@ function handleKeyFileUpload(event) {
                 const pkInput = document.getElementById('input-login-key'); 
                 if (pkInput) {
                     pkInput.value = fileContent;
-                    // Attempt to automatically log in
                     if (window.CoreEngine && typeof window.CoreEngine.handleKeyLogin === 'function') {
                         console.log('Key file loaded. Attempting to log in...');
                         window.CoreEngine.handleKeyLogin();
@@ -435,7 +402,6 @@ function handleKeyFileUpload(event) {
                     }
                 } else {
                     alert('Could not find the key input field on the page. Please enter it manually.');
-                    console.warn("Could not find input with ID 'input-login-key'");
                 }
             } else {
                 alert('Invalid key file. The JSON file must contain a "privateKey" property.');
@@ -462,17 +428,12 @@ async function loadGoogleMapsScript() {
         script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry&v=beta`;
         script.async = true;
         script.defer = true;
-        // The initEventsMap function already has a retry loop, so we can just append.
         document.head.appendChild(script);
         console.log('[INIT] ✓ Google Maps script injected dynamically.');
     } catch (error) {
         console.error('[MAPS] Error loading Google Maps script:', error);
     }
 }
-
-// ==========================================
-// PWA & LOCAL NODE (INDEXEDDB) LOGIC
-// ==========================================
 
 async function subscribeToPush(publicKey) {
     if (!('serviceWorker' in navigator)) return;
@@ -488,7 +449,6 @@ async function subscribeToPush(publicKey) {
 
         let convertedVapidKey;
         try {
-            // Clean any accidental spaces or quotes loaded from the .env file
             const cleanKey = vapidPublicKey.replace(/['"]/g, '').trim();
             convertedVapidKey = urlBase64ToUint8Array(cleanKey);
         } catch (err) {
@@ -532,29 +492,13 @@ async function syncFullChain() {
     } catch(e) {}
 }
 
-// ==========================================
-// 2. MEDIA & CRYPTO ENGINE
-// ==========================================
-
-// ==========================================
-// 3. MINING & AUDIO ENGINE
-// ==========================================
-
-// ==========================================
-// 4. RENDERING & UI NAVIGATION
-// ==========================================
-
 async function loadMainGlobalFeed() {
-    // New Guard: Wait for the MeshEngine to signal that initial data (profiles, servers) is loaded.
-    // This prevents rendering with incomplete data, regardless of when this function is called.
     if (window.MeshEngine && typeof window.MeshEngine.onReady === 'function') {
         await window.MeshEngine.onReady();
     } else {
-        // Fallback for safety, though MeshEngine should always be present.
         return;
     }
 
-    // Destroy old waveform instances before re-rendering to prevent memory leaks and event listener conflicts.
     const container = document.getElementById('feed-container');
     if(!container) return;
     if (window.waveformInstances) {
@@ -564,7 +508,7 @@ async function loadMainGlobalFeed() {
             }
         }
     }
-    window.waveformInstances = {}; // Reset the container
+    window.waveformInstances = {};
     try {
         container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted);">📡 Accessing Ledger...</div>';
         const res = await fetch('/api/feed');
@@ -576,7 +520,6 @@ async function loadMainGlobalFeed() {
         } else if (responsePayload && Array.isArray(responsePayload.feed)) {
             data = responsePayload.feed;
             if (responsePayload.profiles) {
-                // Atomically update the profile directory to match the feed's context
                 window.networkProfiles = responsePayload.profiles;
             }
         } else if (responsePayload && responsePayload.error) {
@@ -587,7 +530,6 @@ async function loadMainGlobalFeed() {
 
         feedTracks = data.filter(item => item.type === 'SONG_UPLOAD');
 
-        // POPULATE SIDEBAR TRANSACTIONS GLOBALLY
         const sidebarTx = document.getElementById('ui-sidebar-tx-history');
         if (sidebarTx) {
             sidebarTx.innerHTML = data.slice(0, 30).map(tx => {
@@ -667,9 +609,8 @@ async function loadMainGlobalFeed() {
         }
         container.innerHTML = storiesHtml + filterHtml;
         
-        // Filter out low-level system transactions from cluttering the main public feed
         const displayablePosts = data.filter(item => {
-            if (item.type === 'IMAGE_POST' && item.data && item.data.isFlyer) return false; // Hide Flyers from Global Feed
+            if (item.type === 'IMAGE_POST' && item.data && item.data.isFlyer) return false;
             if (isNodeBlocked(item.sender)) return false;
             
             if (feedFilterMode === 'following') {
@@ -710,16 +651,15 @@ async function loadMainGlobalFeed() {
             postEl.className = 'card post';
 
             const timeStr = new Date(item.timestamp).toLocaleString();
-            const originalSender = item.sender; // The creator of the content
-            const actionTaker = item.isRepost ? item.reposter : item.sender; // The person who performed the action we're seeing (post or repost)
-            const actionHash = item.transactionHash; // The hash of the post or repost action
+            const originalSender = item.sender;
+            const actionTaker = item.isRepost ? item.reposter : item.sender;
+            const actionHash = item.transactionHash;
 
             const isMyContent = originalSender === window.CoreEngine.userKeys.publicKey;
             const iAmActionTaker = actionTaker === window.CoreEngine.userKeys.publicKey;
 
-            const canDelete = iAmActionTaker; // You can delete your own post or your own repost
+            const canDelete = iAmActionTaker;
 
-            // --- Phase 2: Social Controls Injection ---
             const isSongPost = item.type === 'SONG_UPLOAD';
             const likedTracksPlaylist = (window.myPlaylists || []).find(p => p.id.startsWith('liked-tracks-'));
             const isLiked = isSongPost && likedTracksPlaylist && likedTracksPlaylist.tracks.some(t => t.data.audioHash === item.data.audioHash);
@@ -734,9 +674,8 @@ async function loadMainGlobalFeed() {
 
             const deleteBtn = canDelete ? `<button class="interaction-btn" onclick="window.ActionEngine.deletePost('${actionHash}')">🗑️</button>` : '';
 
-            // You can only edit the original post, not a repost of it.
             const canEdit = isMyContent && !item.isRepost;
-            const editBtn = canEdit ? `<button class="interaction-btn" onclick="window.ActionEngine.promptEditPostMetadata('${actionHash}', '${escapeJsArg(item.data.metadata || '')}')">✏️ Edit Tags</button>` : '';
+            const editBtn = canEdit ? `<button class="interaction-btn" onclick="window.ActionEngine.promptEditPostMetadata('${actionHash}', '${escapeJsArg(item.data.metadata || '')}')">✏️ Edit Tags</button>` : editBtn = '';
 
             const canTip = !isMyContent;
             const tipBtn = canTip ? `<button class="interaction-btn" onclick="window.WalletEngine.promptSendCoins('${originalSender}')">💸 Tip</button>` : '';
@@ -806,19 +745,15 @@ function renderPostContent(item) {
             displayArtist += ` ft. ${escapeHtml(item.data.offPlatformCollaborator)}`;
         }
 
-        // Robustly defer waveform rendering until the WaveSurfer library is fully loaded
-        // and the target container is appended to the DOM.
         let retries = 0;
         const initWaveform = () => {
-             if (retries++ > 50) return; // Prevent infinite loops
+             if (retries++ > 50) return;
              
              if (!window.WaveSurfer || !window.WaveSurfer.regions) {
-                // If library not ready, poll again.
                 setTimeout(initWaveform, 200);
                 return;
             }
 
-             // Use transactionHash for unique DOM targeting
              const waveformContainer = document.getElementById(`waveform-${transactionHash}`);
              if (!waveformContainer) {
                  setTimeout(initWaveform, 200);
@@ -836,8 +771,8 @@ function renderPostContent(item) {
                  barRadius: 3,
                  barGap: 2,
                  height: 80,
-                 backend: 'MediaElement', // Force HTML5 streaming so it doesn't hang on large files
-                 mediaControls: false, // Act as visualizer only
+                 backend: 'MediaElement',
+                 mediaControls: false,
                  plugins: [
                      WaveSurfer.regions.create({
                          regionsMinLength: 0.1,
@@ -847,19 +782,14 @@ function renderPostContent(item) {
                  ]
              });
 
-             // Store by transactionHash to avoid cross-contamination on reposts
              window.waveformInstances[transactionHash] = wavesurfer;
 
              let visualizerLoaded = false;
              const playButton = document.getElementById(`play-btn-${transactionHash}`);
              if (playButton) {
                  playButton.onclick = () => {
-                    // ALWAYS call the AudioEngine. It's the source of truth for playback.
-                    // The AudioEngine will handle toggling play/pause if it's the same track.
                     window.AudioEngine.playTrack(item.data.trackTitle, audioHash, item.sender, displayArtist, item.data.coverHash);
 
-                    // Load the visualizer waveform if it hasn't been loaded yet for this post.
-                    // This is for visuals only and is decoupled from the actual audio playback.
                      if (!visualizerLoaded) {
                          visualizerLoaded = true;
                          playButton.innerText = '⏳ Loading...';
@@ -870,9 +800,8 @@ function renderPostContent(item) {
 
              wavesurfer.on('ready', () => {
                 if (playButton && playButton.innerText === '⏳ Loading...') playButton.innerText = '▶ Play';
-                wavesurfer.setMute(true); // Mute the visualizer
+                wavesurfer.setMute(true);
 
-                // Sync with global player state on load
                 const globalPlayer = document.getElementById('global-audio-player');
                 if (window.AudioEngine.activeTrackHash === audioHash && !globalPlayer.paused) {
                     wavesurfer.play();
@@ -885,30 +814,25 @@ function renderPostContent(item) {
                 console.log(`[Waveform] Ready: ${transactionHash}`);
              });
 
-            // --- NEW Centralized Event Listeners for UI Sync ---
             const handleGlobalPlay = (e) => {
                 if (e.detail.audioHash === audioHash) {
                     if (playButton) playButton.innerText = '⏸️ Pause';
                     if (wavesurfer.isReady) wavesurfer.play();
                 } else {
-                    // Another track is playing, so this one should be paused.
                     if (playButton) playButton.innerText = '▶ Play';
                     if (wavesurfer.isReady) wavesurfer.pause();
                 }
             };
 
             const handleGlobalPause = (e) => {
-                // This event is for any pause, so we don't need to check the hash.
-                // Every waveform should show the play icon when the global player is paused.
                 if (playButton) playButton.innerText = '▶ Play';
                 if (wavesurfer.isReady) wavesurfer.pause();
             };
             
             document.addEventListener('vod-global-play', handleGlobalPlay);
             document.addEventListener('vod-global-pause', handleGlobalPause);
-            document.addEventListener('vod-global-ended', handleGlobalPause); // Treat 'ended' as a pause for UI purposes
+            document.addEventListener('vod-global-ended', handleGlobalPause);
 
-            // Clean up event listeners when the waveform is destroyed to prevent memory leaks
             wavesurfer.on('destroy', () => {
                 document.removeEventListener('vod-global-play', handleGlobalPlay);
                 document.removeEventListener('vod-global-pause', handleGlobalPause);
@@ -917,7 +841,6 @@ function renderPostContent(item) {
 
              wavesurfer.on('seek', (progress) => {
                 const globalPlayer = document.getElementById('global-audio-player');
-                // Only seek the global player if this waveform's track is the active one.
                 if (globalPlayer && window.AudioEngine.activeTrackHash === audioHash) {
                     const duration = globalPlayer.duration;
                     if (duration && isFinite(duration)) {
@@ -977,7 +900,7 @@ function renderPostContent(item) {
                 setTimeout(() => commentEl.style.opacity = 1, 10);
              });
 
-             wavesurfer.on('region-out', (region) => {
+            wavesurfer.on('region-out', (region) => {
                 const el = commentsOverlayContainer.querySelector('.timed-comment-popup');
                 if (el) {
                     el.style.opacity = 0;
@@ -994,7 +917,7 @@ function renderPostContent(item) {
              });
         };
 
-        initWaveform(); // Start the initialization process.
+        initWaveform();
 
         const artworkUrl = item.data.coverHash ? `/tracks/${item.data.coverHash}` : getAvatarUrl(item.sender);
         let coverHtml = `<img src="${artworkUrl}" style="width: 60px; height: 60px; border-radius: 6px; object-fit: cover;">`;
@@ -1124,24 +1047,17 @@ window.promptPwaInstall = async function() {
         return;
     }
 
-    // Show the browser's install prompt.
     deferredInstallPrompt.prompt();
 
-    // Wait for the user to respond to the prompt.
     const { outcome } = await deferredInstallPrompt.userChoice;
     console.log(`[PWA] User choice: ${outcome}`);
 
-    // We can only use the prompt once, so we null it out.
     deferredInstallPrompt = null;
 
-    // Hide the install button regardless of the choice.
     if (installBtn) {
         installBtn.classList.add('hidden');
     }
 };
-// ==========================================
-// UI NAVIGATION & UTILITIES
-// ==========================================
 
 function toggleBlockNode(publicKey) {
     let blocks = JSON.parse(localStorage.getItem('vod_blocked_nodes') || '[]');
@@ -1255,16 +1171,14 @@ window.showSearchResultsDialog = function(matches, query) {
 window.showConnectionsModal = function(friendsList, followersList) {
     let modal = document.getElementById('search-results-modal');
     const users = friendsList.map(addr => ({ address: addr, ...resolveProfile(addr) }));
-    // Reuse the search modal UI for friends
     showSearchResultsDialog(users, "Crew Connections");
 }
 
 function switchTab(tabName, element, targetKey = null) {
     currentView = tabName;
     const container = document.querySelector('.container');
-    if (container) container.classList.remove('chat-mode'); // Auto-close fullscreen chat when navigating
+    if (container) container.classList.remove('chat-mode');
     
-    // Hide all main views to ensure a clean slate
     document.querySelectorAll('.main-content > div[id^="view-"]').forEach(view => {
         view.classList.add('hidden');
     });
@@ -1275,7 +1189,6 @@ function switchTab(tabName, element, targetKey = null) {
     if (targetView) targetView.classList.remove('hidden');
     if(element) element.classList.add('active');
 
-    // Revert to personal theme when leaving someone else's profile
     if (tabName !== 'profile') {
         const dynamicStyle = document.getElementById('ui-dynamic-user-theme');
         if (dynamicStyle) dynamicStyle.innerHTML = myCustomTheme;
@@ -1290,7 +1203,6 @@ function switchTab(tabName, element, targetKey = null) {
     }
     if (tabName === 'events') { loadEvents(); setTimeout(initEventsMap, 600); }
     if (tabName === 'profile') {
-        // Reset to display mode when navigating to a profile
         const displayMode = document.getElementById('profile-display-mode');
         const editMode = document.getElementById('profile-edit-mode');
         const btnAvatar = document.getElementById('btn-edit-avatar');
@@ -1306,7 +1218,7 @@ function switchTab(tabName, element, targetKey = null) {
             viewingUserPublicKey = targetKey;
             fetchUserProfile(targetKey, false);
         } else {
-            viewingUserPublicKey = window.CoreEngine.userKeys.publicKey; // Instantly snap state to the current user
+            viewingUserPublicKey = window.CoreEngine.userKeys.publicKey;
             fetchUserProfile(window.CoreEngine.userKeys.publicKey, false);
         }
     }
@@ -1593,7 +1505,6 @@ async function loadEvents() {
         const payload = await res.json();
         const data = Array.isArray(payload) ? payload : (payload.feed || []);
         
-        // Filter by isFlyer AND selected date
         const eventPosts = data.filter(item => {
             if (item.type !== 'IMAGE_POST' || !item.data || !item.data.isFlyer) return false;
             const itemDate = new Date(item.timestamp).toISOString().split('T')[0];
@@ -1621,7 +1532,6 @@ async function loadEvents() {
 
         let imagesToLoad = eventPosts.length;
 
-        // Ascending so newest renders on top
         eventPosts.sort((a, b) => a.timestamp - b.timestamp).forEach(item => {
             if (typeof postedFlyerHashes !== 'undefined' && item.data.localHash) postedFlyerHashes.add(item.data.localHash);
             if (item.data.localHash) eventsState.hashes.add(item.data.localHash);
@@ -1657,7 +1567,6 @@ async function loadEvents() {
             img.onload = img.onerror = () => { imagesToLoad--; if (imagesToLoad <= 0) cleanUpCoveredFlyers(); };
         });
 
-        // Render the Event Calendar feed
         renderEventCalendar();
     } catch(e) {
         if (loadingText) loadingText.innerText = "Failed to load Events from ledger.";
@@ -1706,7 +1615,6 @@ function initEventsMap() {
 
     const mapDiv = document.getElementById('ui-events-map');
     
-    // Get user location for a personalized landscape background
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition((position) => {
             setupMap({ lat: position.coords.latitude, lng: position.coords.longitude });
@@ -1721,9 +1629,9 @@ function initEventsMap() {
             zoom: 18,
             tilt: 60,
             heading: 0,
-            mapTypeId: 'hybrid', // Real landscape satellite view
+            mapTypeId: 'hybrid',
             disableDefaultUI: true,
-            gestureHandling: 'none' // Map stays locked as background landscape
+            gestureHandling: 'none'
         });
     }
 }
@@ -1739,13 +1647,11 @@ function cleanUpCoveredFlyers() {
         const stepX = rect.width / 5;
         const stepY = rect.height / 5;
         
-        // Check a 4x4 coordinate grid across the surface of the flyer
         for (let x = 1; x <= 4; x++) {
             for (let y = 1; y <= 4; y++) {
                 const topEl = document.elementFromPoint(rect.left + (stepX * x), rect.top + (stepY * y));
                 const coveringFlyer = topEl ? topEl.closest('.bulletin-flyer') : null;
                 
-                // If point hits nothing, our flyer, or something that IS NOT another flyer (like UI)
                 if (!coveringFlyer || coveringFlyer === flyer) {
                     isCovered = false;
                     break;
@@ -1765,13 +1671,13 @@ function cleanUpCoveredFlyers() {
     if (removed > 0) console.log(`[FLYER WALL] Deleted ${removed} completely buried flyers to save space.`);
 }
 
-function appendChatMessage(msg) { // NOSONAR
+function appendChatMessage(msg) {
     const chatLog = document.getElementById('ui-chat-log');
     if(!chatLog) return;
     
     const el = document.createElement('div');
     el.className = 'chat-msg';
-    const msgId = msg.time + '_' + msg.sender.substring(0, 5); // Unique ID for reactions
+    const msgId = msg.time + '_' + msg.sender.substring(0, 5);
     el.id = 'msg_' + msgId;
     const isMe = msg.sender === window.CoreEngine.userKeys.publicKey;
     const senderName = isMe ? 'You' : resolveProfile(msg.sender).username;
@@ -1811,11 +1717,9 @@ function appendChatMessage(msg) { // NOSONAR
 window.profilePlaylistContext = {};
 
 function renderProfileTrackRow(track, index, contextId) {
-    // This function generates HTML for a single track row.
     const playCount = track.playCount || 0;
     const isOwner = window.currentViewedProfile.publicKey === window.CoreEngine.userKeys.publicKey;
     
-    // The track object here is a full feed item from profileService enrichment.
     const trackData = track.data;
     if (!trackData || !trackData.audioHash) return '';
 
@@ -1839,7 +1743,6 @@ function renderProfileTrackRow(track, index, contextId) {
     `;
 }
 
-// Helper to safely play a profile playlist track by context id and index.
 window.handleProfilePlay = function(contextId, index) {
     try {
         const tracks = window.profilePlaylistContext && window.profilePlaylistContext[contextId];
@@ -1853,7 +1756,6 @@ window.handleProfilePlay = function(contextId, index) {
 }
 
 function renderProfileTrackList(tracks, container, contextId) {
-    // Store tracks in context for the player
     window.profilePlaylistContext[contextId] = tracks;
 
     if (!tracks || tracks.length === 0) {
@@ -1880,27 +1782,24 @@ function handleProfilePlaylistFilterChange() {
     if (selectedValue === 'all_activity') {
         const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
         
-        // Get uploads and reposts by this user
         const allUserActivity = (profile.posts || [])
             .filter(p => (p.type === 'SONG_UPLOAD' && p.sender === profile.publicKey) || (p.isRepost && p.reposter === profile.publicKey))
             .sort((a, b) => b.timestamp - a.timestamp);
 
         let recentActivity = allUserActivity.filter(p => p.timestamp >= thirtyDaysAgo);
 
-        // Resolve original post for reposts to get track data
         const recentTracks = recentActivity.map(activity => {
             if (activity.isRepost) {
-                // The activity object is already the enriched, combined object from getFeedEngine
                 return activity;
             }
-            return activity; // It's a direct song upload
-        }).filter(Boolean); // Filter out any reposts where original couldn't be found
+            return activity;
+        }).filter(Boolean);
 
         renderProfileTrackList(recentTracks, wrapper, 'all_activity');
     } else if (selectedValue === 'liked_tracks' || selectedValue === 'reposts') {
         const playlist = profile.playlists.find(p => p.id === `${selectedValue}-${profile.publicKey}`);
         renderProfileTrackList(playlist ? playlist.tracks : [], wrapper, selectedValue);
-    } else { // A specific playlist ID is selected
+    } else {
         const playlist = profile.playlists.find(p => p.id === selectedValue);
         if (playlist) {
             renderProfileTrackList(playlist.tracks, wrapper, playlist.id);
@@ -1927,7 +1826,6 @@ function renderPlaylistCard(playlist, isOwner) {
 
     const deleteBtn = isOwner && playlist.type === 'listener' ? `<button class="secondary" style="padding: 4px 8px; font-size: 10px;" onclick="window.ActionEngine.deletePlaylist('${playlist.id}')">Delete</button>` : '';
 
-    // Build nested tracks HTML so the playlist displays its songs grouped.
     const tracksHtml = (playlist.tracks || []).map((t, i) => renderProfileTrackRow(t, i, playlist.id)).join('');
 
     return `
@@ -1950,7 +1848,6 @@ function renderPlaylistCard(playlist, isOwner) {
         </div>
     `;
 }
-
 
 function toggleInlineEdit() {
     const displayMode = document.getElementById('profile-display-mode');
@@ -2017,9 +1914,6 @@ function removeTop8User(address) {
 }
 
 async function fetchUserProfile(publicKey, isNavUpdateOnly) {
-    // Guard: Wait for the MeshEngine to signal that the initial profile directory is loaded.
-    // This ensures that functions like resolveProfile() have the data they need to render usernames,
-    // preventing UI flicker or "Node_..." placeholders.
     if (window.MeshEngine && typeof window.MeshEngine.onReady === 'function') {
         await window.MeshEngine.onReady();
     }
@@ -2030,7 +1924,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
 
         if (profile && profile.isDeleted) {
             alert("This user account has been deleted from the network.");
-            const feedTab = document.querySelector('.side-nav-item'); // Get the first nav item, which is the feed
+            const feedTab = document.querySelector('.side-nav-item');
             switchTab('feed', feedTab);
             return;
         }
@@ -2040,8 +1934,6 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             if(balDisp) balDisp.innerText = profile.balance.toLocaleString();
         }
 
-
-        // Always update the composer avatar if it's our profile
         if (profile.publicKey === window.CoreEngine.userKeys.publicKey) {
             const adminPanel = document.getElementById('ui-admin-panel');
             if (adminPanel) {
@@ -2049,8 +1941,7 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                 else adminPanel.classList.add('hidden');
             }
 
-                window.currentUserIsAdmin = !!profile.isAdmin;
-
+            window.currentUserIsAdmin = !!profile.isAdmin;
             window.myPlaylists = profile.playlists || [];
             renderMyPlaylistsWidget();
 
@@ -2059,7 +1950,6 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                 composerAvatar.src = profile.avatarHash ? `/tracks/${profile.avatarHash}` : `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(profile.publicKey)}&backgroundColor=0b0c10`;
             }
 
-            // Populate Settings Form Fields
             const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
             setVal('input-edit-username', profile.username || "");
             setVal('input-edit-bio', profile.bio || "");
@@ -2124,9 +2014,6 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
         viewingUserPublicKey = profile.publicKey;
         currentViewedProfile = profile;
 
-        // =================================================================
-        // PRE-RENDER SANITIZATION: Clear all dynamic containers to prevent data bleed from previous profile view
-        // =================================================================
         const containersToClear = [
             'ui-profile-top8', 'ui-profile-recommended', 'ui-profile-shoutbox', 'ui-profile-playlist',
             'ui-tx-history', 'ui-active-commissions', 'ui-wallet-stake-requests',
@@ -2143,7 +2030,6 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             toggleBtn.style.display = viewingUserPublicKey === window.CoreEngine.userKeys.publicKey ? 'block' : 'none';
         }
 
-        // Make profile sections draggable only for the owner
         document.querySelectorAll('#view-profile .profile-section').forEach(section => {
             section.setAttribute('draggable', viewingUserPublicKey === window.CoreEngine.userKeys.publicKey);
         });
@@ -2178,7 +2064,6 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             }
         }
         
-        // Update Profile UI Elements
         const elements = {
             'ui-profile-view-name': profile.username,
             'ui-profile-view-address': profile.publicKey,
@@ -2232,7 +2117,6 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             }
         }
 
-        // Populate Top 8
         const top8Container = document.getElementById('ui-profile-top8');
         if (top8Container) {
             top8Container.innerHTML = '';
@@ -2250,7 +2134,6 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             }
         }
 
-        // Populate Mutuals & Recommended
         const recContainer = document.getElementById('ui-profile-recommended');
         if (recContainer) {
             let html = '';
@@ -2311,12 +2194,10 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             recContainer.innerHTML = html;
         }
 
-        // Populate Shoutbox
         const shoutboxContainer = document.getElementById('ui-profile-shoutbox');
         if (shoutboxContainer) {
             shoutboxContainer.innerHTML = '';
             if (profile.shoutbox && profile.shoutbox.length > 0) {
-                // Sort descending by timestamp
                 const sortedShouts = profile.shoutbox.slice().sort((a, b) => b.timestamp - a.timestamp);
                 sortedShouts.forEach(msg => {
                     shoutboxContainer.innerHTML += `
@@ -2339,7 +2220,6 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             shoutboxForm.style.display = window.CoreEngine && window.CoreEngine.userKeys && window.CoreEngine.userKeys.publicKey ? 'block' : 'none';
         }
 
-        // Render Transaction History
         const historyContainers = [document.getElementById('ui-tx-history')];
         historyContainers.forEach(historyContainer => {
             if (historyContainer) {
@@ -2350,12 +2230,11 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                 let color = isSender ? 'var(--warning)' : 'var(--success)';
                 let amount = tx.amount;
 
-                // Handle implicit amounts defined by the smart contract
                 if (tx.type === 'STREAM_COMPLETED') { 
                     if (isSender) { amount = '5k 🎧 / 20k 🎵'; sign = '+'; color = 'var(--success)'; }
                     else { amount = 'Royalties'; sign = '+'; color = 'var(--success)'; }
                 } else if (tx.type === 'SONG_UPLOAD' && isSender) { amount = 50000; sign = '-'; color = 'var(--warning)'; }
-                else if (tx.type === 'IMAGE_POST' && isSender) { amount = 5000; sign = '-'; color = 'var(--warning)'; }
+                else if (tx.type === 'IMAGE_POST' && isSender) { amount = 500; sign = '-'; color = 'var(--warning)'; }
                 else if (tx.type === 'LIST_ITEM' && isSender) { amount = 500; sign = '-'; color = 'var(--warning)'; }
                 else if (tx.type === 'LIST_SONG_STAKE') { amount = ''; sign = ''; color = 'var(--warning)'; }
                 else if (tx.type === 'GOAL_REWARD') { amount = tx.data ? tx.data.amount : 0; sign = '+'; color = 'var(--success)'; }
@@ -2378,10 +2257,6 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             }
         });
 
-        // Obsolete escrow rendering logic removed. This is now handled by the dedicated Commissions Dashboard.
-        // The `ui-active-commissions` div in the wallet has also been removed.
-
-        // Render Incoming Stake Requests
         const stakeReqContainer = document.getElementById('ui-wallet-stake-requests');
         if (stakeReqContainer && profile.publicKey === window.CoreEngine.userKeys.publicKey) {
             if (profile.shareRequestsReceived && profile.shareRequestsReceived.length > 0) {
@@ -2402,7 +2277,6 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             }
         }
 
-        // Render Profile Bounties
         const profileBountiesContainer = document.getElementById('ui-profile-commissions');
         if (profileBountiesContainer) {
             profileBountiesContainer.innerHTML = profile.bounties.map(b => {
@@ -2420,7 +2294,6 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             }).join('') || '<div style="color:var(--text-muted); font-size: 13px;">No open commissions.</div>';
         }
 
-        // Render Profile Posts (Mini-Feed)
         const profileFeedContainer = document.getElementById('ui-profile-feed');
         if (profileFeedContainer) {
             profileFeedContainer.innerHTML = '';
@@ -2433,9 +2306,9 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                     const postEl = document.createElement('div');
                     postEl.className = 'card post';
 
-                    const originalSender = item.sender; // The creator of the content
-                    const actionTaker = item.isRepost ? item.reposter : item.sender; // The person who performed the action
-                    const actionHash = item.transactionHash; // The hash of the post or repost action
+                    const originalSender = item.sender;
+                    const actionTaker = item.isRepost ? item.reposter : item.sender;
+                    const actionHash = item.transactionHash;
 
                     const isMyContent = originalSender === window.CoreEngine.userKeys.publicKey;
                     const iAmActionTaker = actionTaker === window.CoreEngine.userKeys.publicKey;
@@ -2505,22 +2378,19 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             }
         }
 
-        // Render Profile Playlist / Discography Section
         const playlistSectionContainer = document.getElementById('ui-profile-playlist');
         if (playlistSectionContainer) {
             const isOwner = profile.publicKey === window.CoreEngine.userKeys.publicKey;
             let allPlaylists = profile.playlists || [];
  
-            if (!isOwner) { // Filter for public playlists if not viewing own profile
+            if (!isOwner) {
                 allPlaylists = allPlaylists.filter(p => p.is_public);
             }
  
-            // Check if there are any manually created playlists
             const userCreatedPlaylists = allPlaylists.filter(p => p.type === 'listener' && !p.isAutoPlaylist);
 
             let html = '';
 
-            // Always register all playlists into the profilePlaylistContext so playback helpers can find them
             allPlaylists.forEach(p => {
                 if (p && p.id && p.tracks) {
                     window.profilePlaylistContext[p.id] = p.tracks;
@@ -2530,13 +2400,10 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
                 html += allPlaylists.map(p => renderPlaylistCard(p, isOwner)).join('');
             }
 
-            // ALWAYS show the last 5 uploads as a simple list below the playlists
-            // Use profile.uploadedTracks (which is properly populated from the backend)
             const uploadedTracks = profile.uploadedTracks || [];
             if (uploadedTracks.length > 0) {
                 if (userCreatedPlaylists.length > 0) html += '<h4 style="margin-top: 15px; margin-bottom: 10px; color: var(--text-muted); font-size: 12px; text-transform: uppercase;">Recent Uploads</h4>';
                 const latestUploads = uploadedTracks.slice().sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
-                // Transform uploadedTracks format to match renderProfileTrackRow expectations
                 const formattedTracks = latestUploads.map(t => ({
                     data: {
                         audioHash: t.hash,
@@ -2554,7 +2421,6 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             playlistSectionContainer.innerHTML = html;
         }
 
-        // Render Gallery
         const galleryContainer = document.getElementById('ui-profile-gallery');
         if (galleryContainer) {
             let galleryHtml = '';;
@@ -2566,7 +2432,6 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             galleryContainer.innerHTML = galleryHtml || '<div style="color:var(--text-muted); font-size: 12px; grid-column: span 2;">No visual assets to display.</div>'
         }
 
-        // Render VST Portfolio
         const vstContainer = document.getElementById('ui-profile-vst');
         if (vstContainer) {
             if (profile.ownedShares && profile.ownedShares.length > 0) {
@@ -2581,7 +2446,6 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             }
         }
         
-        // Apply Section Images
         const profileCards = document.querySelectorAll('#view-profile .profile-section');
         if (profile.sectionImages) {
             profileCards.forEach(card => {
@@ -2600,7 +2464,6 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             if (profile.layoutOrder.right && rightCol) profile.layoutOrder.right.forEach(id => { const el = document.getElementById(id); if (el) rightCol.appendChild(el); });
         }
 
-        // Render Custom CSS
         const dynamicStyle = document.getElementById('ui-dynamic-user-theme');
         if (dynamicStyle) {
             dynamicStyle.innerHTML = profile.customCss || '';
@@ -2639,11 +2502,6 @@ function renderNewUsers() {
     }).join('');
 }
 
-// ==========================================
-// 5. UTILITIES
-// ==========================================
-
-
 function updateComposerPreview() {
     const audFile = document.getElementById('composer-audio-upload').files[0];
     const imgFile = document.getElementById('composer-image-upload').files[0];
@@ -2676,13 +2534,6 @@ function updateComposerPreview() {
         if(audioMeta) audioMeta.style.display = 'none';
     }
 }
-// ==========================================
-// 6. NODE SETTINGS & BLOCKCHAIN DEPLOYMENTS
-// ==========================================
-
-// ==========================================
-// 8. WEBRTC VOICE & DIRECT MESSAGING (DISCORD GAP)
-// ==========================================
 
 let localVoiceStream;
 let peerConnections = {};
@@ -2751,10 +2602,6 @@ window.webrtcIceCandidate = async (data) => {
     } catch(e) { console.error("WebRTC ICE Error:", e); }
 };
 
-// ==========================================
-// P2P DATA MESH (DECENTRALIZED BROWSER NODES)
-// ==========================================
-
 function connectToMeshNode(targetSocketId) {
     if (isNodeBlocked(window.MeshEngine.socketIdToAddress[targetSocketId])) return;
     const pc = new RTCPeerConnection(rtcConfig);
@@ -2819,7 +2666,6 @@ function setupDataChannel(dc, id) {
             const payload = msg.payload;
             
             if (payload.to) {
-                 // DM P2P
                  if (!window.MeshEngine.dmHistory[payload.sender]) window.MeshEngine.dmHistory[payload.sender] = [];
                  const exists = window.MeshEngine.dmHistory[payload.sender].find(m => m.time === payload.time);
                  if (!exists) {
@@ -2832,7 +2678,6 @@ function setupDataChannel(dc, id) {
                      if (window.MeshEngine.currentChatServer === '@dms') renderDMList();
                  }
             } else {
-                // Server Channel Chat P2P
                 if (window.MeshEngine.currentChatServer === payload.serverId && window.MeshEngine.currentChatChannel === payload.channelId) {
                     const chatLog = document.getElementById('ui-chat-log');
                     if (!chatLog.innerHTML.includes(payload.time + '_' + payload.sender.substring(0, 5))) {
@@ -2893,10 +2738,6 @@ window.handleNewReaction = (data) => {
         reactionContainer.innerHTML += `<span style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 8px; border: 1px solid var(--border);">${escapeHtml(data.emoji)}</span>`;
     }
 };
-
-// ==========================================
-// 9. NEW SOCIAL FEATURES (Badges, Mentions, Modals)
-// ==========================================
 
 function detectMentionsAndEmit(text) {
     if (!text) return;
@@ -2987,9 +2828,6 @@ function renderThreadedReplies(repliesArray, depthLevel, txHash, audioHash = nul
         </div>
     `).join('');
 }
-// ==========================================
-// ZINE ENGINE LOGIC
-// ==========================================
 
 function switchZineSubTab(tab) {
     document.querySelectorAll('.zine-sub-view').forEach(v => v.classList.add('hidden'));
@@ -3044,10 +2882,6 @@ function renderZine() {
         </div>
     `).join('') || '<div style="color:var(--text-muted);">Acquire rights in the marketplace to see articles here.</div>';
 }
-
-// ==========================================
-// STORIES ENGINE LOGIC
-// ==========================================
 
 window.currentStoryIndex = 0;
 window.currentStoryUser = '';
@@ -3109,10 +2943,8 @@ function toggleDMPane() {
     switchServer('@dms');
     resetInboxBadge();
     if (window.innerWidth <= 768) {
-        // On mobile, activate the dedicated fullscreen chat view
         document.body.classList.add('mobile-chat-active');
     } else {
-        // On desktop, enter the dedicated fullscreen chat mode.
         const container = document.querySelector('.container');
         if (container) {
             container.classList.add('chat-mode');
@@ -3230,7 +3062,7 @@ window.loadDiscoverFeed = async function() {
     try {
         const res = await fetch(`/api/feed/discover?publicKey=${window.CoreEngine.userKeys.publicKey || ''}`);
         const items = await res.json();
-        container.innerHTML = ''; // Clear loading
+        container.innerHTML = '';
         if (items.length === 0) {
             container.innerHTML = '<div class="card" style="text-align: center; padding: 40px; color: var(--text-muted);"><h4>Nothing here?</h4><p>Go upload some tracks to the swarm to get discovered!</p></div>';
             return;
@@ -3268,7 +3100,6 @@ window.loadCommissionsDashboard = async function() {
     container.innerHTML = '<div class="card"><div class="card-body">Loading commissions from the ledger...</div></div>';
 
     try {
-        // We need the latest profile data to get commissions
         const response = await fetch(`/api/social/profile?publicKey=${encodeURIComponent(window.CoreEngine.userKeys.publicKey)}`);
         const profile = await response.json();
         const myKey = window.CoreEngine.userKeys.publicKey;
@@ -3351,7 +3182,6 @@ function getAssetIcon(itemType) {
     }
 }
 
-
 if (!window.WalletEngine) window.WalletEngine = {};
 window.WalletEngine.renderWalletDashboard = async function() {
     const ownedContainer = document.getElementById('ui-wallet-owned-assets');
@@ -3397,10 +3227,6 @@ window.WalletEngine.renderWalletDashboard = async function() {
         console.error("Error loading owned assets for wallet:", err);
     }
 }
-
-// ==========================================
-// MARKETPLACE UI ENGINE
-// ==========================================
 
 window.switchMarketTab = function(tab) {
     document.getElementById('market-sec-commission').classList.add('hidden');
