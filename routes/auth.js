@@ -30,9 +30,22 @@ function deleteUserCredential(publicKey) {
 router.post('/keygen', (req, res) => {
     try {
         const keys = Wallet.generateKeyPair();
-        res.status(201).json(keys);
+        return res.status(201).json(keys);
     } catch (error) {
-        res.status(500).json({ error: 'Failed to generate keys: ' + error.message });
+        return res.status(500).json({ error: 'Failed to generate keys: ' + error.message });
+    }
+});
+
+router.post('/sign', (req, res) => {
+    try {
+        const { privateKeyHex, dataString } = req.body;
+        if (!privateKeyHex || !dataString) {
+            return res.status(400).json({ error: 'Private key and data string are required.' });
+        }
+        const signature = Wallet.signData(privateKeyHex, dataString);
+        return res.status(200).json({ signature });
+    } catch (error) {
+        return res.status(500).json({ error: 'Signing failed: ' + error.message });
     }
 });
 
@@ -49,35 +62,22 @@ router.post('/register', (req, res) => {
             return res.status(409).json({ error: 'Username is already taken.' });
         }
 
-        try {
-            const salt = crypto.randomBytes(16).toString('hex');
-            crypto.pbkdf2(password, salt, 100000, 32, 'sha512', (err, derivedKey) => {
-                if (err) return res.status(500).json({ error: 'Key derivation failed.' });
-                try {
-                    const privateKeyHex = derivedKey.toString('hex');
-                    const d_base64url = Buffer.from(privateKeyHex, 'hex').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-                    const privateKeyObj = crypto.createPrivateKey({
-                        key: {
-                            kty: 'EC',
-                            crv: 'secp256k1',
-                            d: d_base64url
-                        },
-                        format: 'jwk'
-                    });
-                    let publicKeyHex = crypto.createPublicKey(privateKeyObj).export({ type: 'spki', format: 'der' }).toString('hex');
+        const salt = crypto.randomBytes(16).toString('hex');
+        crypto.pbkdf2(password, salt, 100000, 32, 'sha512', (err, derivedKey) => {
+            if (err) return res.status(500).json({ error: 'Key derivation failed.' });
+            try {
+                const privateKeyHex = derivedKey.toString('hex');
+                const publicKeyHex = Wallet.getPublicKeyFromPrivate(privateKeyHex);
 
-                    userCredentials[username.toLowerCase()] = { salt, publicKey: publicKeyHex };
-                    saveUserCredentials();
-                    res.status(201).json({ privateKey: privateKeyHex, publicKey: publicKeyHex });
-                } catch (innerErr) {
-                    res.status(500).json({ error: 'Key processing failed: ' + innerErr.message });
-                }
-            });
-        } catch (e) {
-            res.status(500).json({ error: 'Key generation failed: ' + e.message });
-        }
+                userCredentials[username.toLowerCase()] = { salt, publicKey: publicKeyHex };
+                saveUserCredentials();
+                return res.status(201).json({ privateKey: privateKeyHex, publicKey: publicKeyHex });
+            } catch (innerErr) {
+                return res.status(500).json({ error: 'Key processing failed: ' + innerErr.message });
+            }
+        });
     } catch (e) {
-        res.status(500).json({ error: 'Registration failed: ' + e.message });
+        return res.status(500).json({ error: 'Registration failed: ' + e.message });
     }
 });
 
@@ -94,25 +94,16 @@ router.post('/login', (req, res) => {
             if (err) return res.status(500).json({ error: 'Authentication failed.' });
             try {
                 const privateKeyHex = derivedKey.toString('hex');
-                const d_base64url = Buffer.from(privateKeyHex, 'hex').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-                const privateKeyObj = crypto.createPrivateKey({
-                    key: {
-                        kty: 'EC',
-                        crv: 'secp256k1',
-                        d: d_base64url
-                    },
-                    format: 'jwk'
-                });
-                const publicKeyHex = crypto.createPublicKey(privateKeyObj).export({ type: 'spki', format: 'der' }).toString('hex');
+                const publicKeyHex = Wallet.getPublicKeyFromPrivate(privateKeyHex);
                 
-                if (publicKeyHex === userData.publicKey) res.json({ privateKey: privateKeyHex, publicKey: userData.publicKey });
-                else res.status(401).json({ error: 'Invalid credentials.' });
+                if (publicKeyHex === userData.publicKey) return res.json({ privateKey: privateKeyHex, publicKey: userData.publicKey });
+                else return res.status(401).json({ error: 'Invalid credentials.' });
             } catch (innerErr) {
-                res.status(500).json({ error: 'Login key processing failed: ' + innerErr.message });
+                return res.status(500).json({ error: 'Login key processing failed: ' + innerErr.message });
             }
         });
     } catch (e) {
-        res.status(500).json({ error: 'Login failed: ' + e.message });
+        return res.status(500).json({ error: 'Login failed: ' + e.message });
     }
 });
 

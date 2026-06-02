@@ -65,7 +65,7 @@ router.post('/upload-file', (req, res) => {
         }
         
         console.log("[SUCCESS] File saved as:", req.file.filename);
-        res.json({ fileHash: req.file.filename });
+        return res.json({ fileHash: req.file.filename });
     });
 });
 

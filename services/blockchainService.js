@@ -2,8 +2,6 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const EventEmitter = require('events');
-const { ec: EC } = require('elliptic');
-
 const Wallet = require('../core/wallet');
 const { BALANCE_EXEMPT_ACTIONS, ADMIN_ACTIONS } = require('./txTypes');
 
@@ -13,7 +11,6 @@ function normalizeAddress(address) {
 }
 
 // ==========================================
-// Elliptic Curve Setup
 // ADMIN CONFIGURATION
 // ==========================================
 // Set your admin public key here. If configured, this address will always be recognized as the network admin.
@@ -24,7 +21,6 @@ const LEDGER_DIR = path.join(__dirname, '..', 'ledger-data');
 if (!fs.existsSync(LEDGER_DIR)) {
     fs.mkdirSync(LEDGER_DIR, { recursive: true });
 }
-const ec = new EC('secp256k1');
 const CHAIN_FILE = path.join(LEDGER_DIR, 'chain.json');
 
 class BlockchainService extends EventEmitter {
@@ -114,13 +110,7 @@ class BlockchainService extends EventEmitter {
         try {
             // The data to verify is the stringified version of the transaction object.
             const dataStr = JSON.stringify(data);
-            // The message that was signed was the SHA-256 hash of the data string.
-            const hash = crypto.createHash('sha256').update(dataStr).digest();
-
-            const key = ec.keyFromPublic(publicKeyStr, 'hex');
-
-            // The signature is in DER format (hex string). The `verify` method of elliptic can take this directly.
-            return key.verify(hash, signatureHex);
+            return Wallet.verifySignature(publicKeyStr, dataStr, signatureHex);
         } catch (error) {
             console.error("Signature verification failed with error:", error);
             return false;
@@ -205,17 +195,6 @@ class BlockchainService extends EventEmitter {
                             totalShares: parseInt(tx.data.totalShares) || 100
                         };
                     }
-                }
-                if (tx.type === 'IMAGE_POST') {
-                    if (tx.sender === publicKey) balance -= 5000; // Cost to mint image (5k VOD)
-                }
-                if (tx.type === 'VIDEO_POST') {
-                    const baseCost = 5000000; // 100x standard 50k VOD cost
-                    const sizePenalty = tx.data.fileSize ? Math.floor(tx.data.fileSize / 1024) * 100 : 0; // 100 VOD per KB
-                    if (tx.sender === publicKey) balance -= (baseCost + sizePenalty);
-                }
-                if (tx.type === 'PROJECT_FILE_POST') {
-                    if (tx.sender === publicKey) balance -= 15000; // Cost to mint project file (15k VOD)
                 }
 
                 if (tx.type === 'LIST_SONG_STAKE') {

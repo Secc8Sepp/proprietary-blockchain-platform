@@ -48,7 +48,7 @@ class ToolsController {
             setTimeout(() => fs.unlink(tempPath, () => {}), 10 * 60 * 1000);
         }
 
-        res.status(200).json({ message: 'Splitting process simulated.', stems: stemPaths });
+        return res.status(200).json({ message: 'Splitting process simulated.', stems: stemPaths });
     }
 }
 
