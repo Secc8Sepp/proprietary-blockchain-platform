@@ -22,17 +22,21 @@ const storage = multer.diskStorage({
 
 // SECURITY UPGRADE: Only allow specific MIME types (Images & Audio)
 const fileFilter = (req, file, cb) => {
-    const allowedTypes = [
-        'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', // Audio
-        'image/jpeg', 'image/png', 'image/gif', 'image/webp', // Visual Art/Avatars
-        'video/mp4', 'video/webm', 'video/ogg', // Video
-        'application/zip', 'application/x-zip-compressed', 'application/octet-stream', 'application/x-rar-compressed' // Project Files & Stems
+    const allowedExactTypes = [
+        'application/zip', 'application/x-zip-compressed', 'application/octet-stream', 'application/x-rar-compressed'
     ];
     
-    if (allowedTypes.includes(file.mimetype)) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const isImage = ['.jpeg', '.jpg', '.png', '.gif', '.webp', '.heic', '.heif', '.bmp', '.svg'].includes(ext);
+    const isAudio = ['.mp3', '.wav', '.ogg', '.m4a', '.flac'].includes(ext);
+    const isVideo = ['.mp4', '.webm', '.ogg', '.mov'].includes(ext);
+    
+    if ((file.mimetype && (file.mimetype.startsWith('image/') || file.mimetype.startsWith('audio/') || file.mimetype.startsWith('video/'))) || 
+        allowedExactTypes.includes(file.mimetype) ||
+        isImage || isAudio || isVideo) {
         cb(null, true);
     } else {
-        cb(new Error('Invalid file type. Only Audio, Video, Archives, and Images are allowed.'), false);
+        cb(new Error(`Invalid file type (${file.mimetype || 'unknown'}). Only Audio, Video, Archives, and Images are allowed.`), false);
     }
 };
 
