@@ -203,11 +203,12 @@ function safeWriteFile(filePath, dataObj) {
             fs.writeFileSync(filePath, dataString, 'utf8');
         } catch (finalErr) {
             console.error(`[CRITICAL] Failed to write to ${filePath}:`, finalErr.message);
+            throw finalErr; // Do not swallow critical persistence errors
         }
     }
 }
 
-const handleAuthRegistration = (req, res) => {
+const handleAuthRegistration = async (req, res) => {
     try {
         const { username, password } = req.body;
         if (!username || !password) return res.status(400).json({ error: 'Username and password required.' });
@@ -217,7 +218,7 @@ const handleAuthRegistration = (req, res) => {
             return res.status(409).json({ error: 'Username is already taken.' });
         }
 
-        const wallet = Wallet.generateKeyPair();
+        const wallet = await Wallet.generateKeyPair();
         authMemory[normalizedUser] = {
             username,
             password, 
@@ -251,12 +252,12 @@ app.post('/api/auth/login', (req, res, next) => {
     }
 });
 
-app.post('/api/auth/sign', (req, res) => {
+app.post('/api/auth/sign', async (req, res) => {
     try {
         const { privateKeyHex, dataString } = req.body;
         if (!privateKeyHex || !dataString) return res.status(400).json({ error: 'Missing key or data.' });
         
-        const signature = Wallet.signData(privateKeyHex, dataString);
+        const signature = await Wallet.signData(privateKeyHex, dataString);
         res.json({ signature });
     } catch (e) {
         res.status(500).json({ error: e.message });

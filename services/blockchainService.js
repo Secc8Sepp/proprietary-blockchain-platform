@@ -109,6 +109,7 @@ class BlockchainService extends EventEmitter {
                 fs.writeFileSync(CHAIN_FILE, dataString, 'utf8');
             } catch (finalErr) {
                 console.error(`[CRITICAL] ledger-data/chain.json is locked and cannot be updated:`, finalErr.message);
+                throw finalErr; // Prevent the state machine from silently continuing if the ledger cannot be written
             }
         }
     }
@@ -142,11 +143,11 @@ class BlockchainService extends EventEmitter {
         return null;
     }
 
-    verifySignature(publicKeyStr, data, signatureHex) {
+    async verifySignature(publicKeyStr, data, signatureHex) {
         try {
             // The data to verify is the stringified version of the transaction object.
             const dataStr = JSON.stringify(data);
-            return Wallet.verifySignature(publicKeyStr, dataStr, signatureHex);
+            return await Wallet.verifySignature(publicKeyStr, dataStr, signatureHex);
         } catch (error) {
             console.error("Signature verification failed with error:", error);
             return false;
@@ -405,7 +406,7 @@ class BlockchainService extends EventEmitter {
         return Math.floor(balance);
     }
 
-    addTransaction(txData) {
+    async addTransaction(txData) {
         const { sender, receiver, type, data, timestamp, signature } = txData;
         const chain = this.getChain();
 
@@ -413,7 +414,7 @@ class BlockchainService extends EventEmitter {
         // The client uppercases the `type` before creating the object to sign.
         // Therefore, we use the `type` from the payload directly for verification.
         const verificationPayload = { sender, receiver, type, data, timestamp };
-        if (!this.verifySignature(sender, verificationPayload, signature)) {
+        if (!(await this.verifySignature(sender, verificationPayload, signature))) {
             console.error(`[BLOCKCHAIN] Transaction dropped: Invalid signature from ${sender}`);
             throw new Error("Invalid transaction signature.");
         }
