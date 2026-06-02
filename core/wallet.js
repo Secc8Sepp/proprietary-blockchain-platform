@@ -25,45 +25,45 @@ class Wallet {
 
     static getPrivateKeyObj(privateKeyHex) {
         try {
-            // Ensure the raw private key hex string is clean
+            // Clean up the private key input string
             const cleanHex = privateKeyHex.trim().replace(/^0x/i, '');
-            const rawKeyBuffer = Buffer.from(cleanHex, 'hex');
+            const dBuffer = Buffer.from(cleanHex, 'hex');
+            
+            // Reconstruct a standard, compliant JWK using base64url encoding parameters
+            const dBase64Url = dBuffer.toString('base64url');
 
-            // Pass the raw 32-byte scalar straight to the native parser.
-            // Node handles the internal ASN.1 sequence length constraints natively.
+            // 1. Temporarily stand up an ephemeral key object using Node's internal math
+            const ephemeralKeyObj = crypto.createPrivateKey({
+                key: {
+                    kty: 'EC',
+                    crv: 'secp256k1',
+                    d: dBase64Url
+                },
+                format: 'jwk'
+            });
+
+            // 2. Export the full mathematical parameters (this automatically computes public x and y coordinates!)
+            const fullJwk = ephemeralKeyObj.export({ format: 'jwk' });
+
+            // 3. Re-import the fully hydrated parameters so the native engine never encounters an undefined property error
             return crypto.createPrivateKey({
-                key: rawKeyBuffer,
-                format: 'der',
-                type: 'sec1',
-                derOptions: {
-                    namedCurve: 'secp256k1'
-                }
+                key: {
+                    kty: 'EC',
+                    crv: 'secp256k1',
+                    x: fullJwk.x,
+                    y: fullJwk.y,
+                    d: fullJwk.d
+                },
+                format: 'jwk'
             });
         } catch (e) {
-            // Fallback 1: Try PKCS#8 structural handling if environment variables differ
-            try {
-                return crypto.createPrivateKey({
-                    key: Buffer.from(privateKeyHex, 'hex'),
-                    format: 'der',
-                    type: 'pkcs8'
-                });
-            } catch (innerError) {
-                // Fallback 2: Construct a standard, uncompressed JWK if DER falls through
-                const d_base64url = Buffer.from(privateKeyHex, 'hex')
-                    .toString('base64')
-                    .replace(/\+/g, '-')
-                    .replace(/\//g, '_')
-                    .replace(/=/g, '');
-                
-                return crypto.createPrivateKey({
-                    key: {
-                        kty: 'EC',
-                        crv: 'secp256k1',
-                        d: d_base64url
-                    },
-                    format: 'jwk'
-                });
-            }
+            console.error('[Wallet.getPrivateKeyObj] Native parsing error:', e.message);
+            // Bulletproof raw PKCS8 structural processing layer fallback
+            return crypto.createPrivateKey({
+                key: Buffer.from(privateKeyHex, 'hex'),
+                format: 'der',
+                type: 'pkcs8'
+            });
         }
     }
 
