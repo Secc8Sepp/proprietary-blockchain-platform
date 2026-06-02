@@ -571,7 +571,7 @@ window.ActionEngine = {
 
             try {
                 const hash = await uploadMediaAssetFile(file);
-                await window.CoreEngine.sendSignedTransaction('FULFILL_COMMISSION', '0x00', { commissionId: commId, assetHash: hash, deliveryNote: note });
+                await window.CoreEngine.sendSignedTransaction('FULFILL_COMMISSION', '0x00', { commissionId: commissionId, assetHash: hash, deliveryNote: note });
                 
                 alert("Commission fulfilled! Escrow funds have been successfully released to your wallet.");
                 toggleModal('form-modal');

@@ -1,6 +1,6 @@
 const blockchainService = require('../services/blockchainService');
 const profileService = require('../services/profileService');
-const { ALL_SOCIAL_ACTIONS } = require('../config/txTypes');
+const { ALL_SOCIAL_ACTIONS } = require('../services/txTypes');
 
 class SocialController {
     getProfileData(req, res) {
@@ -16,7 +16,7 @@ class SocialController {
         catch (error) { return res.status(500).json({ error: error.message }); }
     }
 
-    handleAction(req, res) {
+    async handleAction(req, res) {
         try {
             let { sender, receiver, type, data, timestamp, signature } = req.body;
             type = (type || '').toString().trim().toUpperCase();
@@ -30,7 +30,7 @@ class SocialController {
                 return res.status(400).json({ error: `Invalid action type for social controller: ${type}` });
             }
 
-            const activeBlock = blockchainService.addTransaction({ sender, receiver, type, data, timestamp, signature });
+            const activeBlock = await blockchainService.addTransaction({ sender, receiver, type, data, timestamp, signature });
             console.log(`[SocialController] ✅ ${type} accepted. Block #${activeBlock.index}`);
 
             req.app.get('socketio').emit('blockchain_update', { type, transaction: activeBlock.transactions[0] });

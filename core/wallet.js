@@ -2,22 +2,22 @@ const crypto = require('crypto');
 
 class Wallet {
     static generateKeyPair() {
-        // Generate standard Web3 cryptographic keypair natively
-        const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { 
-            namedCurve: 'secp256k1' 
+        return new Promise((resolve, reject) => {
+            crypto.generateKeyPair('ec', { 
+                namedCurve: 'secp256k1' 
+            }, (err, publicKey, privateKey) => {
+                if (err) return reject(err);
+                
+                const publicKeyHex = publicKey.export({ type: 'spki', format: 'der' }).toString('hex');
+                const privateKeyHex = privateKey.export({ type: 'sec1', format: 'der' }).toString('hex');
+
+                resolve({
+                    privateKey: privateKeyHex,
+                    publicKey: publicKeyHex,
+                    address: publicKeyHex 
+                });
+            });
         });
-
-        // Export public key as standard SPKI DER hex mapping
-        const publicKeyHex = publicKey.export({ type: 'spki', format: 'der' }).toString('hex');
-        
-        // Export private key natively using a clean SEC1 key representation layout
-        const privateKeyHex = privateKey.export({ type: 'sec1', format: 'der' }).toString('hex');
-
-        return {
-            privateKey: privateKeyHex,
-            publicKey: publicKeyHex,
-            address: publicKeyHex 
-        };
     }
 
     static getPrivateKeyObj(privateKeyHex) {
@@ -37,42 +37,29 @@ class Wallet {
         const paddedHex = cleanHex.padStart(64, '0');
         const rawKeyBuffer = Buffer.from(paddedHex, 'hex');
 
-        // Pass the raw mathematical parameters directly to Node's constructor.
-        // This stops Node from searching for missing JWK coordinate keys or legacy file layouts.
+        // Use ECDH to securely derive the matching public key
+        const ecdh = crypto.createECDH('secp256k1');
+        ecdh.setPrivateKey(rawKeyBuffer);
+        const rawPublicKeyHex = ecdh.getPublicKey('hex');
+
+        // Construct standard SEC1 DER format natively compatible with Node crypto
+        const sec1Prefix = '30740201010420';
+        const sec1Middle = 'a00706052b8104000aa144034200';
+        const fullDerHex = sec1Prefix + paddedHex + sec1Middle + rawPublicKeyHex;
+
         return crypto.createPrivateKey({
-            key: {
-                kty: 'EC',
-                crv: 'secp256k1',
-                d: rawKeyBuffer.toString('base64url')
-            },
-            format: 'jwk'
+            key: Buffer.from(fullDerHex, 'hex'),
+            format: 'der',
+            type: 'sec1'
         });
     }
 
-    static getPublicKeyFromPrivate(privateKeyHex) {
-        try {
-            const cleanHex = privateKeyHex.trim().replace(/^0x/i, '').substring(0, 64);
-            const paddedHex = cleanHex.padStart(64, '0');
-            const privateKeyBuffer = Buffer.from(paddedHex, 'hex');
-
-            // Use native ECDH coordinate mapping to handle raw 32-byte password strings perfectly
-            const ecdh = crypto.createECDH('secp256k1');
-            ecdh.setPrivateKey(privateKeyBuffer);
-            const rawPublicKey = ecdh.getPublicKey();
-
-            return crypto.createPublicKey({
-                key: rawPublicKey,
-                format: 'der',
-                type: 'pkcs1'
-            }).export({ type: 'spki', format: 'der' }).toString('hex');
-        } catch (error) {
-            // High-compatibility configuration fallback gateway execution path
-            const privateKeyObj = this.getPrivateKeyObj(privateKeyHex);
-            return crypto.createPublicKey(privateKeyObj).export({ type: 'spki', format: 'der' }).toString('hex');
-        }
+    static async getPublicKeyFromPrivate(privateKeyHex) {
+        const privateKeyObj = this.getPrivateKeyObj(privateKeyHex);
+        return crypto.createPublicKey(privateKeyObj).export({ type: 'spki', format: 'der' }).toString('hex');
     }
 
-    static signData(privateKeyHex, dataString) {
+    static async signData(privateKeyHex, dataString) {
         const privateKeyObj = this.getPrivateKeyObj(privateKeyHex);
         return crypto.createSign('SHA256').update(dataString).sign(privateKeyObj, 'hex');
     }
@@ -105,7 +92,7 @@ class Wallet {
         return '30' + (totalLength).toString(16).padStart(2, '0') + combined;
     }
 
-    static verifySignature(publicKeyHex, dataString, signature) {
+    static async verifySignature(publicKeyHex, dataString, signature) {
         try {
             const normalizedKey = publicKeyHex.trim().replace(/^0x/i, '').toLowerCase();
             

@@ -28,22 +28,22 @@ function deleteUserCredential(publicKey) {
     }
 }
 
-router.post('/keygen', (req, res) => {
+router.post('/keygen', async (req, res) => {
     try {
-        const keys = Wallet.generateKeyPair();
+        const keys = await Wallet.generateKeyPair();
         return res.status(201).json(keys);
     } catch (error) {
         return res.status(500).json({ error: 'Failed to generate keys: ' + error.message });
     }
 });
 
-router.post('/sign', (req, res) => {
+router.post('/sign', async (req, res) => {
     try {
         const { privateKeyHex, dataString } = req.body;
         if (!privateKeyHex || !dataString) {
             return res.status(400).json({ error: 'Private key and data string are required.' });
         }
-        const signature = Wallet.signData(privateKeyHex, dataString);
+        const signature = await Wallet.signData(privateKeyHex, dataString);
         return res.status(200).json({ signature });
     } catch (error) {
         return res.status(500).json({ error: 'Signing failed: ' + error.message });
@@ -64,11 +64,11 @@ router.post('/register', (req, res) => {
         }
 
         const salt = crypto.randomBytes(16).toString('hex');
-        crypto.pbkdf2(password, salt, 100000, 32, 'sha512', (err, derivedKey) => {
+        crypto.pbkdf2(password, salt, 100000, 32, 'sha512', async (err, derivedKey) => {
             if (err) return res.status(500).json({ error: 'Key derivation failed.' });
             try {
                 const privateKeyHex = derivedKey.toString('hex');
-                const publicKeyHex = Wallet.getPublicKeyFromPrivate(privateKeyHex);
+                const publicKeyHex = await Wallet.getPublicKeyFromPrivate(privateKeyHex);
 
                 userCredentials[username.toLowerCase()] = { salt, publicKey: publicKeyHex };
                 saveUserCredentials();
@@ -91,11 +91,11 @@ router.post('/login', (req, res) => {
         }
         const userData = userCredentials[username.toLowerCase()];
         if (!userData) return res.status(401).json({ error: 'Invalid credentials.' });
-        crypto.pbkdf2(password, userData.salt, 100000, 32, 'sha512', (err, derivedKey) => {
+        crypto.pbkdf2(password, userData.salt, 100000, 32, 'sha512', async (err, derivedKey) => {
             if (err) return res.status(500).json({ error: 'Authentication failed.' });
             try {
                 const privateKeyHex = derivedKey.toString('hex');
-                const publicKeyHex = Wallet.getPublicKeyFromPrivate(privateKeyHex);
+                const publicKeyHex = await Wallet.getPublicKeyFromPrivate(privateKeyHex);
                 
                 if (publicKeyHex === userData.publicKey) return res.json({ privateKey: privateKeyHex, publicKey: userData.publicKey });
                 else return res.status(401).json({ error: 'Invalid credentials.' });
