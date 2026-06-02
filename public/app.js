@@ -1797,35 +1797,16 @@ function handleProfilePlaylistFilterChange() {
 
     if (!wrapper || !profile) return;
 
-    wrapper.innerHTML = '<div style="color:var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">Loading...</div>';
-
-    if (selectedValue === 'all_activity') {
-        const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-        
-        const allUserActivity = (profile.posts || [])
-            .filter(p => (p.type === 'SONG_UPLOAD' && p.sender === profile.publicKey) || (p.isRepost && p.reposter === profile.publicKey))
-            .sort((a, b) => b.timestamp - a.timestamp);
-
-        let recentActivity = allUserActivity.filter(p => p.timestamp >= thirtyDaysAgo);
-
-        const recentTracks = recentActivity.map(activity => {
-            if (activity.isRepost) {
-                return activity;
-            }
-            return activity;
-        }).filter(Boolean);
-
-        renderProfileTrackList(recentTracks, wrapper, 'all_activity');
-    } else if (selectedValue === 'liked_tracks' || selectedValue === 'reposts') {
-        const playlist = profile.playlists.find(p => p.id === `${selectedValue}-${profile.publicKey}`);
-        renderProfileTrackList(playlist ? playlist.tracks : [], wrapper, selectedValue);
-    } else {
-        const playlist = profile.playlists.find(p => p.id === selectedValue);
-        if (playlist) {
-            renderProfileTrackList(playlist.tracks, wrapper, playlist.id);
-        } else {
-            wrapper.innerHTML = '<div style="color:var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">Could not find the selected playlist.</div>';
+    const playlist = (profile.playlists || []).find(p => p.id === selectedValue);
+    if (playlist) {
+        const originalTitle = playlist.title;
+        if (playlist.id === `artist-playlist-${profile.publicKey}`) {
+            playlist.title = "Recent Uploads";
         }
+        wrapper.innerHTML = renderPlaylistCard(playlist, isOwner);
+        playlist.title = originalTitle;
+    } else {
+        wrapper.innerHTML = '<div style="color:var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">Could not find the selected playlist.</div>';
     }
 }
 
@@ -1844,7 +1825,7 @@ function renderPlaylistCard(playlist, isOwner) {
         ? `/tracks/${playlist.tracks[0].data.coverHash}` 
         : getAvatarUrl(playlist.user_id);
 
-    const deleteBtn = isOwner && playlist.type === 'listener' ? `<button class="secondary" style="padding: 4px 8px; font-size: 10px;" onclick="window.ActionEngine.deletePlaylist('${playlist.id}')">Delete</button>` : '';
+    const deleteBtn = isOwner && playlist.type === 'listener' && !playlist.isAutoPlaylist ? `<button class="secondary" style="padding: 4px 8px; font-size: 10px;" onclick="window.ActionEngine.deletePlaylist('${playlist.id}')">Delete</button>` : '';
 
     const tracksHtml = (playlist.tracks || []).map((t, i) => renderProfileTrackRow(t, i, playlist.id)).join('');
 
@@ -1859,11 +1840,10 @@ function renderPlaylistCard(playlist, isOwner) {
                 <div style="display: flex; gap: 10px; align-items: center;">
                     ${deleteBtn}
                     <button style="padding: 8px 15px;" onclick="window.AudioEngine.playQueue(window.profilePlaylistContext['${playlist.id}'], 0)">▶ Play</button>
-                    <button class="secondary" style="padding: 6px;" onclick="(function(btn, id){ const el=document.getElementById('playlist-contents-'+id); if(el){ el.style.display = el.style.display === 'none' ? 'block' : 'none'; btn.innerText = el.style.display === 'none' ? 'Show' : 'Hide'; }})(this, '${playlist.id}')">Show</button>
                 </div>
             </div>
-            <div id="playlist-contents-${playlist.id}" style="display:none; margin-top:6px;">
-                ${tracksHtml}
+            <div id="playlist-contents-${playlist.id}" style="margin-top:6px;">
+                ${tracksHtml || '<div style="color:var(--text-muted); font-size:12px;">No tracks in this playlist.</div>'}
             </div>
         </div>
     `;
@@ -2425,39 +2405,38 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             if (!isOwner) {
                 allPlaylists = allPlaylists.filter(p => p.is_public);
             }
- 
-            const userCreatedPlaylists = allPlaylists.filter(p => p.type === 'listener' && !p.isAutoPlaylist);
-
-            let html = '';
-
+            
+            // Sort so 'Recent Uploads' is explicitly hoisted to the very top
+            allPlaylists.sort((a, b) => {
+                if (a.id === `artist-playlist-${profile.publicKey}`) return -1;
+                if (b.id === `artist-playlist-${profile.publicKey}`) return 1;
+                return 0;
+            });
+            
+            let optionsHtml = '';
             allPlaylists.forEach(p => {
                 if (p && p.id && p.tracks) {
                     window.profilePlaylistContext[p.id] = p.tracks;
+                    const title = p.id === `artist-playlist-${profile.publicKey}` ? 'Recent Uploads' : p.title;
+                    optionsHtml += `<option value="${p.id}">${escapeHtml(title)}</option>`;
                 }
             });
-            if (userCreatedPlaylists.length > 0) {
-                html += allPlaylists.map(p => renderPlaylistCard(p, isOwner)).join('');
-            }
-
-            const uploadedTracks = profile.uploadedTracks || [];
-            if (uploadedTracks.length > 0) {
-                if (userCreatedPlaylists.length > 0) html += '<h4 style="margin-top: 15px; margin-bottom: 10px; color: var(--text-muted); font-size: 12px; text-transform: uppercase;">Recent Uploads</h4>';
-                const latestUploads = uploadedTracks.slice().sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
-                const formattedTracks = latestUploads.map(t => ({
-                    data: {
-                        audioHash: t.hash,
-                        trackTitle: t.title
-                    },
-                    playCount: t.playCount || 0,
-                    isRepost: false
-                }));
-                window.profilePlaylistContext['default-uploads'] = formattedTracks;
-                html += formattedTracks.map((track, index) => renderProfileTrackRow(track, index, 'default-uploads')).join('');
-            } else if (userCreatedPlaylists.length === 0) {
-                html = '<div style="color:var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">No tracks uploaded yet.</div>';
-            }
             
-            playlistSectionContainer.innerHTML = html;
+            if (allPlaylists.length === 0) {
+                playlistSectionContainer.innerHTML = '<div style="color:var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">No tracks or playlists available.</div>';
+            } else {
+                playlistSectionContainer.innerHTML = `
+                    <div style="margin-bottom: 15px;">
+                        <select id="profile-playlist-selector" onchange="handleProfilePlaylistFilterChange()" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.5); border: 1px solid var(--border); color: #fff; border-radius: 8px; cursor: pointer; outline: none;">
+                            ${optionsHtml}
+                        </select>
+                    </div>
+                    <div id="profile-playlist-content-wrapper"></div>
+                `;
+                if (document.getElementById('profile-playlist-selector')) {
+                    handleProfilePlaylistFilterChange();
+                }
+            }
         }
 
         const galleryContainer = document.getElementById('ui-profile-gallery');
