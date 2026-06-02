@@ -802,20 +802,9 @@ function renderPostContent(item) {
 
              let visualizerLoaded = false;
              const playButton = document.getElementById(`play-btn-${transactionHash}`);
-             if (playButton) {
-                 playButton.onclick = () => {
-                    window.AudioEngine.playTrack(item.data.trackTitle, audioHash, item.sender, displayArtist, item.data.coverHash);
-
-                     if (!visualizerLoaded) {
-                         visualizerLoaded = true;
-                         playButton.innerText = '⏳ Loading...';
-                         wavesurfer.load(`/tracks/${encodeURIComponent(audioHash)}`);
-                     }
-                 };
-             }
 
              wavesurfer.on('ready', () => {
-                if (playButton && playButton.innerText === '⏳ Loading...') playButton.innerText = '▶ Play';
+                if (playButton && playButton.innerText === '⏳ Loading...') playButton.innerText = '⏸️ Pause';
                 wavesurfer.setMute(true);
 
                 const globalPlayer = document.getElementById('global-audio-player');
@@ -832,16 +821,22 @@ function renderPostContent(item) {
 
             const handleGlobalPlay = (e) => {
                 if (e.detail.audioHash === audioHash) {
-                    if (playButton) playButton.innerText = '⏸️ Pause';
-                    if (wavesurfer.isReady) wavesurfer.play();
+                    if (playButton && playButton.innerText !== '⏳ Loading...') playButton.innerText = '⏸️ Pause';
+                    if (!visualizerLoaded) {
+                         visualizerLoaded = true;
+                         if (playButton) playButton.innerText = '⏳ Loading...';
+                         wavesurfer.load(`/tracks/${encodeURIComponent(audioHash)}`);
+                    } else if (wavesurfer.isReady) {
+                        wavesurfer.play();
+                    }
                 } else {
-                    if (playButton) playButton.innerText = '▶ Play';
+                    if (playButton && playButton.innerText !== '❌ Error') playButton.innerText = '▶ Play';
                     if (wavesurfer.isReady) wavesurfer.pause();
                 }
             };
 
             const handleGlobalPause = (e) => {
-                if (playButton) playButton.innerText = '▶ Play';
+                if (playButton && playButton.innerText !== '❌ Error') playButton.innerText = '▶ Play';
                 if (wavesurfer.isReady) wavesurfer.pause();
             };
             
@@ -928,7 +923,6 @@ function renderPostContent(item) {
                 console.error(`WaveSurfer error for ${transactionHash}:`, err);
                 if (playButton) {
                     playButton.innerText = '❌ Error';
-                    playButton.disabled = true;
                 }
              });
         };
@@ -983,7 +977,7 @@ function renderPostContent(item) {
                 </div>
 
                 <div style="display: flex; gap: 10px; margin-bottom: 10px; align-items: stretch;">
-                    <button id="play-btn-${transactionHash}" style="background:#66fcf1; color:#000; padding:8px 15px;">
+                    <button id="play-btn-${transactionHash}" style="background:#66fcf1; color:#000; padding:8px 15px;" onclick="window.AudioEngine.playTrack('${escapeJsArg(item.data.trackTitle)}', '${audioHash}', '${item.sender}', '${escapeJsArg(displayArtist)}', '${item.data.coverHash || ''}')">
                         ▶ Play
                     </button>
                     <button class="secondary" style="padding: 8px; aspect-ratio: 1 / 1; flex-shrink: 0; font-size: 16px; line-height: 1;" title="Add to Playlist" onclick="window.ActionEngine.promptAddToPlaylist('${item.data.audioHash}')">
@@ -3334,12 +3328,20 @@ window.renderMarketplace = function() {
                 if (i.bpm) metaHtml += `<span class="item-meta-tag">${i.bpm} BPM</span>`;
                 metaHtml += `</div>`;
             }
+            
+            let previewBtn = '';
+            if (i.itemType === 'beat' || i.itemType === 'stems') {
+                previewBtn = `<button class="secondary" style="width:100%; margin-bottom: 5px;" onclick="window.AudioEngine.playTrack('${escapeJsArg(i.title)}', '${i.assetHash}', '${i.seller}', 'Marketplace', null, true)">▶ Preview Audio</button>`;
+            } else if (i.itemType === 'art') {
+                previewBtn = `<button class="secondary" style="width:100%; margin-bottom: 5px;" onclick="window.open('/tracks/${i.assetHash}', '_blank')">👁️ Preview Image</button>`;
+            }
 
             return `<div class="card" style="margin-bottom:0;"><div class="card-body" style="text-align:center;">
                 <div style="font-size:30px; margin-bottom:10px;">${icon}</div>
                 <div style="font-weight:bold; color:#fff; margin-bottom:5px;">${escapeHtml(i.title)}</div>
                 ${metaHtml}
                 <div style="color:var(--primary); font-weight:bold; margin-bottom:15px;">${i.price} $VOD</div>
+                ${previewBtn}
                 <button style="width:100%;" onclick="window.ActionEngine.buyDigitalItem('${i.id}', ${i.price}, '${i.seller}')">Purchase Asset</button>
                 ${editBtn}
             </div></div>`;
