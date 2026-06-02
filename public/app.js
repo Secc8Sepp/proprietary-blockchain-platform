@@ -11,7 +11,19 @@ window.fetch = async function(...args) {
     if (typeof args[0] === 'string' && args[0].startsWith('/')) {
         args[0] = API_BASE + args[0];
     }
-    return originalFetch.apply(window, args);
+    const response = await originalFetch.apply(window, args);
+    
+    // Globally intercept json() to prevent unreadable crashes when the server returns HTML error pages
+    const originalJson = response.json.bind(response);
+    response.json = async function() {
+        const contentType = response.headers.get("content-type");
+        if (contentType && !contentType.includes("application/json") && contentType.includes("text/html")) {
+            throw new Error("Server returned an HTML error page instead of expected JSON data. Ensure the endpoint is accessible.");
+        }
+        return originalJson();
+    };
+    
+    return response;
 };
 
 const socket = io(API_BASE);

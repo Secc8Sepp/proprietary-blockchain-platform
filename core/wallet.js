@@ -101,7 +101,8 @@ class Wallet {
             const normalizedKey = publicKeyHex.trim().replace(/^0x/i, '').toLowerCase();
             
             let signatureToVerify = signature;
-            if (signature.length === 128 || signature.length < 140) {
+            // FIX: Only apply the DER conversion for raw 128-char signatures
+            if (signature.length === 128) {
                 signatureToVerify = this.convertRawToDER(signature);
             }
             

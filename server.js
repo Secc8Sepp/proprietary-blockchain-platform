@@ -231,6 +231,18 @@ app.post('/api/auth/login', (req, res, next) => {
     }
 });
 
+app.post('/api/auth/sign', (req, res) => {
+    try {
+        const { privateKeyHex, dataString } = req.body;
+        if (!privateKeyHex || !dataString) return res.status(400).json({ error: 'Missing key or data.' });
+        
+        const signature = Wallet.signData(privateKeyHex, dataString);
+        res.json({ signature });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 if (authModule) {
     const originalDelete = authModule.deleteUserCredential;
     authModule.deleteUserCredential = (address) => {

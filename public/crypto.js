@@ -9,6 +9,11 @@ async function generateClientSignature(privateKeyHex, messageObject) {
         body: JSON.stringify({ privateKeyHex, dataString: messageObject })
     });
     
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Server returned HTML instead of JSON for signature endpoint.");
+    }
+    
     const result = await response.json();
     if (!response.ok) {
         throw new Error(result.error || "Failed to generate signature via native engine.");

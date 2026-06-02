@@ -27,58 +27,41 @@ window.CoreEngine = {
         this.idleTimer = setTimeout(() => this.setPresence('idle'), 300000); // 5 minute idle limit
     },
 
-    // Native WebCrypto implementation to handle raw 32-byte hash inputs flawlessly
     async generateClientSignature(privateKeyHex, dataString) {
         try {
-            const cleanHex = privateKeyHex.trim().replace(/^0x/i, '');
-            const rawKeyBytes = new Uint8Array(cleanHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-            
-            // Format the scalar base64url string to satisfy browser constraints
-            const dBase64Url = btoa(String.fromCharCode(...rawKeyBytes))
-                .replace(/\+/g, '-')
-                .replace(/\//g, '_')
-                .replace(/=/g, '');
-
-            // Import raw string into a browser crypto module key object
-            const tempKey = await window.crypto.subtle.importKey(
-                "jwk",
-                {
-                    kty: "EC",
-                    crv: "P-256",
-                    d: dBase64Url
-                },
-                { name: "ECDSA", namedCurve: "P-256" },
-                true,
-                ["sign"]
-            );
-
-            // Export to let the browser compute the missing public key x/y spatial coordinates natively
-            const fullJwk = await window.crypto.subtle.exportKey("jwk", tempKey);
-
-            // Re-import the fully hydrated JWK mapping
-            const signingKey = await window.crypto.subtle.importKey(
-                "jwk",
-                fullJwk,
-                { name: "ECDSA", namedCurve: "P-256" },
-                false,
-                ["sign"]
-            );
-
-            const encoder = new TextEncoder();
-            const dataBytes = encoder.encode(dataString);
-
-            const signatureBuffer = await window.crypto.subtle.sign(
-                { name: "ECDSA", hash: { name: "SHA-256" } },
-                signingKey,
-                dataBytes
-            );
-
-            return Array.from(new Uint8Array(signatureBuffer))
-                .map(b => b.toString(16).padStart(2, '0'))
-                .join('');
+            if (window.elliptic) {
+                const ec = new window.elliptic.ec('secp256k1');
+                const cleanHex = privateKeyHex.trim().replace(/^0x/i, '');
+                const key = ec.keyFromPrivate(cleanHex, 'hex');
+                
+                const encoder = new TextEncoder();
+                const dataBytes = encoder.encode(dataString);
+                const hashBuffer = await window.crypto.subtle.digest('SHA-256', dataBytes);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                
+                const signature = key.sign(hashArray);
+                
+                const rHex = signature.r.toString(16).padStart(64, '0');
+                const sHex = signature.s.toString(16).padStart(64, '0');
+                return rHex + sHex;
+            }
+            throw new Error("Elliptic library not found, falling back to gateway...");
         } catch (error) {
-            console.error("[CoreEngine Crypto] Local signature generation failed:", error.message);
-            throw new Error("Local signature matrix processing failed: " + error.message);
+            console.warn("[CoreEngine Crypto] Local signature fallback:", error.message);
+            const res = await fetch('/api/auth/sign', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ privateKeyHex, dataString })
+            });
+            
+            const contentType = res.headers.get("content-type");
+            if (contentType && contentType.includes("application/json")) {
+                const body = await res.json();
+                if (body.signature) return body.signature;
+                throw new Error(body.error || "Server signature synchronization failed.");
+            } else {
+                throw new Error("Server returned HTML instead of JSON for signature endpoint.");
+            }
         }
     },
 
@@ -255,6 +238,11 @@ window.CoreEngine = {
         console.log(`[CoreEngine] Sending ${type} to ${endpoint}`, txFields);
         const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
         if (!res.ok) {
+            const contentType = res.headers.get("content-type");
+            if (contentType && contentType.includes("text/html")) {
+                throw new Error(`Server Error (${res.status}): Endpoint might be missing or broken.`);
+            }
+
             let body;
             try {
                 body = await res.json();
