@@ -3562,13 +3562,19 @@ window.renderMarketplace = function() {
 };
 
 window.loadCloutStatus = async function() {
-    if (!window.CoreEngine || !window.CoreEngine.userKeys.publicKey) return;
+    const container = document.getElementById('ui-clout-leaderboard');
+    if (!window.CoreEngine || !window.CoreEngine.userKeys.publicKey) {
+        if (container) container.innerHTML = '<div style="color:var(--text-muted); text-align:center;">Please log in to view the clout leaderboard.</div>';
+        return;
+    }
     try {
         const res = await fetch('/api/social/clout');
-        if (!res.ok) return;
+        if (!res.ok) {
+            if (container) container.innerHTML = '<div style="color:var(--danger); text-align:center;">Failed to load clout scores from the network.</div>';
+            return;
+        }
         const ranks = await res.json();
         
-        const container = document.getElementById('ui-clout-leaderboard');
         if (container) {
             if (ranks.length === 0) {
                 container.innerHTML = '<div style="color:var(--text-muted); text-align:center;">No clout data available.</div>';
@@ -3601,6 +3607,8 @@ window.loadCloutStatus = async function() {
         }
     } catch(e) {
         console.error('Failed to load clout status:', e);
+        const container = document.getElementById('ui-clout-leaderboard');
+        if (container) container.innerHTML = '<div style="color:var(--danger); text-align:center;">Error loading clout leaderboard.</div>';
     }
 };
 

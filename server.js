@@ -210,6 +210,7 @@ app.get('/api/social/clout', (req, res) => {
         }
         
         for (const block of chain) {
+            if (!block.transactions || !Array.isArray(block.transactions)) continue;
             for (const tx of block.transactions) {
                 const sender = tx.sender;
                 if (!userStatsMap[sender]) continue;
