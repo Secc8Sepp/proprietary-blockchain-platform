@@ -25,9 +25,9 @@ async function generateClientSignature(privateKeyHex, messageObject) {
 async function uploadMediaAssetFile(fileObject) {
     if (!fileObject) return null;
     const formData = new FormData();
-    formData.append('mediaAsset', fileObject);
+    formData.append('asset', fileObject);
     
-    const response = await fetch('/api/feed/upload-file', { method: 'POST', body: formData });
+    const response = await fetch('/api/upload', { method: 'POST', body: formData });
     const text = await response.text();
     let result;
     try { result = JSON.parse(text); } catch (e) { throw new Error(`Server returned invalid response. Response: ${text.substring(0, 80)}...`); }

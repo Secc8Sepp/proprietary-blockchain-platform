@@ -84,13 +84,32 @@ class BlockchainService extends EventEmitter {
         if (chain) {
             this.chain = chain;
         }
+        
+        let dataString;
+        try {
+            dataString = JSON.stringify(this.chain, null, 2);
+        } catch (err) {
+            console.error(`[BLOCKCHAIN ERROR] Failed to stringify chain:`, err.message);
+            return;
+        }
+
         const tmpFile = CHAIN_FILE + '.tmp';
         try {
-            fs.writeFileSync(tmpFile, JSON.stringify(this.chain, null, 2));
-            fs.renameSync(tmpFile, CHAIN_FILE);
+            fs.writeFileSync(tmpFile, dataString, 'utf8');
+            try {
+                fs.renameSync(tmpFile, CHAIN_FILE);
+            } catch (renameErr) {
+                // Windows lock fallback: overwrite the file directly if renameSync fails
+                fs.writeFileSync(CHAIN_FILE, dataString, 'utf8');
+                try { fs.unlinkSync(tmpFile); } catch (e) {}
+            }
         } catch (error) {
-            console.error(`[BLOCKCHAIN ERROR] Failed to write ${CHAIN_FILE}:`, error.message);
-            fs.writeFileSync(CHAIN_FILE, JSON.stringify(this.chain, null, 2));
+            console.error(`[BLOCKCHAIN WARNING] Write failed, trying direct override...`);
+            try {
+                fs.writeFileSync(CHAIN_FILE, dataString, 'utf8');
+            } catch (finalErr) {
+                console.error(`[CRITICAL] ledger-data/chain.json is locked and cannot be updated:`, finalErr.message);
+            }
         }
     }
 

@@ -187,6 +187,26 @@ if (fs.existsSync(AUTH_DB_FILE)) {
     try { authMemory = JSON.parse(fs.readFileSync(AUTH_DB_FILE, 'utf8')); } catch(e) {}
 }
 
+function safeWriteFile(filePath, dataObj) {
+    const dataString = JSON.stringify(dataObj, null, 2);
+    const tmpFile = filePath + '.tmp';
+    try {
+        fs.writeFileSync(tmpFile, dataString, 'utf8');
+        try {
+            fs.renameSync(tmpFile, filePath);
+        } catch (e) {
+            fs.writeFileSync(filePath, dataString, 'utf8');
+            try { fs.unlinkSync(tmpFile); } catch (err) {}
+        }
+    } catch (err) {
+        try {
+            fs.writeFileSync(filePath, dataString, 'utf8');
+        } catch (finalErr) {
+            console.error(`[CRITICAL] Failed to write to ${filePath}:`, finalErr.message);
+        }
+    }
+}
+
 const handleAuthRegistration = (req, res) => {
     try {
         const { username, password } = req.body;
@@ -204,9 +224,7 @@ const handleAuthRegistration = (req, res) => {
             publicKey: wallet.publicKey,
             privateKey: wallet.privateKey
         };
-        const tmpFile = AUTH_DB_FILE + '.tmp';
-        fs.writeFileSync(tmpFile, JSON.stringify(authMemory, null, 2));
-        fs.renameSync(tmpFile, AUTH_DB_FILE);
+        safeWriteFile(AUTH_DB_FILE, authMemory);
 
         res.json({ publicKey: wallet.publicKey, privateKey: wallet.privateKey });
     } catch (e) {
@@ -252,9 +270,7 @@ if (authModule) {
         const userKey = Object.keys(authMemory).find(k => authMemory[k].publicKey === address);
         if (userKey) {
             delete authMemory[userKey];
-            const tmpFile = AUTH_DB_FILE + '.tmp';
-            fs.writeFileSync(tmpFile, JSON.stringify(authMemory, null, 2));
-            fs.renameSync(tmpFile, AUTH_DB_FILE);
+            safeWriteFile(AUTH_DB_FILE, authMemory);
         }
     };
 }
@@ -588,16 +604,12 @@ function purgeDeletedUserData(deletedUserAddress) {
 // ==========================================
 
 function saveDBMemory() {
-    try {
-        const tmpFile = CHAT_DB_FILE + '.tmp';
-        fs.writeFileSync(tmpFile, JSON.stringify({
-            servers: dbMemory.servers,
-            directMessages: dbMemory.directMessages,
-            zineArticles: dbMemory.zineArticles,
-            dailyStreamNotifs: dbMemory.dailyStreamNotifs
-        }, null, 2));
-        fs.renameSync(tmpFile, CHAT_DB_FILE);
-    } catch (e) { console.error('Error saving DB file:', e); }
+    safeWriteFile(CHAT_DB_FILE, {
+        servers: dbMemory.servers,
+        directMessages: dbMemory.directMessages,
+        zineArticles: dbMemory.zineArticles,
+        dailyStreamNotifs: dbMemory.dailyStreamNotifs
+    });
 }
 
 function broadcastSwarmUpdate() {
