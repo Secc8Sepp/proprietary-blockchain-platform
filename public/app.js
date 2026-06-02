@@ -153,7 +153,6 @@ function toggleAdvancedLogin() {
     standardView.classList.toggle('hidden', isHidden);
     advancedView.classList.toggle('hidden', !isHidden);
 }
-window.toggleAdvancedLogin = toggleAdvancedLogin;
 
 /**
  * Attaches a 'tap' event listener that works for both mobile and desktop.
@@ -203,7 +202,7 @@ function initializeApplicationListeners() {
         if (installBtn) {
             installBtn.classList.add('hidden');
         }
-    };
+    });
     
     // PWA Install Prompt Handler for iOS
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
@@ -225,6 +224,16 @@ function initializeApplicationListeners() {
     }
 
     // Identity & Auth Flow
+
+    // Auth Tabs
+    const signupTabBtn = document.getElementById('tab-btn-signup');
+    if (signupTabBtn) addTapListener(signupTabBtn, () => switchAuthTab('signup'));
+    const loginTabBtn = document.getElementById('tab-btn-login');
+    if (loginTabBtn) addTapListener(loginTabBtn, () => switchAuthTab('login'));
+    const toggleAdvancedBtn = document.getElementById('btn-toggle-advanced-login');
+    if (toggleAdvancedBtn) addTapListener(toggleAdvancedBtn, toggleAdvancedLogin);
+    const toggleStandardBtn = document.getElementById('btn-toggle-standard-login');
+    if (toggleStandardBtn) addTapListener(toggleStandardBtn, toggleAdvancedLogin);
 
     const loginFileInput = document.getElementById('login-key-file-input');
     if (loginFileInput) {

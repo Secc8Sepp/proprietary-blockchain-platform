@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-title" content="VOD Social">
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
     
-    <link rel="stylesheet" href="/styles.css?v=1.0.1">
+    <link rel="stylesheet" href="/styles.css?v=1.0.2">
 
     <!-- User's dynamic CSS injected here (Sanitized) AFTER main styles to ensure override -->
     <style id="ui-dynamic-user-theme"></style>
@@ -75,7 +75,7 @@
                     <input id="input-login-password" type="password" placeholder="Your password..." style="margin-bottom: 12px;" />
                 </div>
                 <button class="wallet-btn" id="btn-login-submit" onclick="window.CoreEngine.handlePasswordLogin()">Log In</button>
-                <p style="font-size: 12px; color: var(--text-muted); margin-top: 20px; cursor: pointer;" onclick="toggleAdvancedLogin()">
+                <p id="btn-toggle-advanced-login" style="font-size: 12px; color: var(--text-muted); margin-top: 20px; cursor: pointer;">
                     Advanced / High Security Login &raquo;
                 </p>
             </div>
@@ -92,7 +92,7 @@
                     <input id="login-key-file-input" type="file" accept=".json" style="margin-bottom: 12px;" />
                     <button class="wallet-btn" id="btn-key-login-submit" style="margin-top: 12px; width: 100%;" onclick="window.CoreEngine.handleKeyLogin()">Unlock Profile with Key</button>
                 </div>
-                 <p style="font-size: 12px; color: var(--text-muted); margin-top: 20px; cursor: pointer;" onclick="toggleAdvancedLogin()">
+                 <p id="btn-toggle-standard-login" style="font-size: 12px; color: var(--text-muted); margin-top: 20px; cursor: pointer;">
                     &laquo; Back to Standard Login
                 </p>
             </div>
@@ -730,24 +730,24 @@
          ========================================== -->
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/elliptic@6.5.4/dist/elliptic.min.js"></script>
-    <script src="/utils.js?v=1.0.1"></script>
-    <script src="/crypto.js?v=1.0.1"></script>
-    <script src="/CoreEngine.js?v=1.0.1"></script>
-    <script src="/MeshEngine.js?v=1.0.1"></script>
-    <script src="/WalletEngine.js?v=1.0.1"></script>
-    <script src="/AudioEngine.js?v=1.0.1"></script>
-    <script src="/LayoutEngine.js?v=1.0.1"></script>
-    <script src="/ActionEngine.js?v=1.0.1"></script>
-    <script src="/NotificationEngine.js?v=1.0.1"></script>
-    <script src="/GlobalTagEngine.js?v=1.0.1"></script>
-    <script src="/BattleEngines.js?v=1.0.1"></script>
-    <script src="/StemSplitterEngine.js?v=1.0.1"></script>
-    <script src="/app.js?v=1.0.1"></script>
+    <script src="/utils.js?v=1.0.2"></script>
+    <script src="/crypto.js?v=1.0.2"></script>
+    <script src="/CoreEngine.js?v=1.0.2"></script>
+    <script src="/MeshEngine.js?v=1.0.2"></script>
+    <script src="/WalletEngine.js?v=1.0.2"></script>
+    <script src="/AudioEngine.js?v=1.0.2"></script>
+    <script src="/LayoutEngine.js?v=1.0.2"></script>
+    <script src="/ActionEngine.js?v=1.0.2"></script>
+    <script src="/NotificationEngine.js?v=1.0.2"></script>
+    <script src="/GlobalTagEngine.js?v=1.0.2"></script>
+    <script src="/BattleEngines.js?v=1.0.2"></script>
+    <script src="/StemSplitterEngine.js?v=1.0.2"></script>
+    <script src="/app.js?v=1.0.2"></script>
 
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js?v=1.0.1')
+          navigator.serviceWorker.register('/sw.js?v=1.0.2')
             .then(reg => { window.swRegistration = reg; console.log('[PWA] Service Worker registered successfully.'); })
             .catch(err => console.error('[PWA] Service Worker registration failed:', err));
         });
