@@ -31,7 +31,17 @@ window.CoreEngine = {
         try {
             if (window.elliptic) {
                 const ec = new window.elliptic.ec('secp256k1');
-                const cleanHex = privateKeyHex.trim().replace(/^0x/i, '');
+                let cleanHex = privateKeyHex.trim().replace(/^0x/i, '');
+                
+                // Extract 32-byte raw private key from DER encoding if present
+                if (cleanHex.length > 64) {
+                    const match = cleanHex.match(/0420([a-fA-F0-9]{64})/);
+                    if (match) {
+                        cleanHex = match[1];
+                    } else if (cleanHex.startsWith('30740201010420')) {
+                        cleanHex = cleanHex.substring(14, 14 + 64);
+                    }
+                }
                 const key = ec.keyFromPrivate(cleanHex, 'hex');
                 
                 const encoder = new TextEncoder();

@@ -24,6 +24,15 @@ class Wallet {
         // Clean the incoming hex string
         const cleanHex = privateKeyHex.trim().replace(/^0x/i, '');
         
+        // If the key is already a DER encoded sequence, parse it natively
+        if (cleanHex.length > 64) {
+            return crypto.createPrivateKey({
+                key: Buffer.from(cleanHex, 'hex'),
+                format: 'der',
+                type: 'sec1'
+            });
+        }
+        
         // Ensure the private scalar string is correctly padded to exactly 32 bytes (64 hex characters)
         const paddedHex = cleanHex.padStart(64, '0');
         const rawKeyBuffer = Buffer.from(paddedHex, 'hex');
