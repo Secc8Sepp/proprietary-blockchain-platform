@@ -10,6 +10,7 @@ const multer = require('multer');
 
 const socialRoutes = require('./routes/social');
 const feedRoutes = require('./routes/feed');
+const authModule = require('./routes/auth');
 const blockchainService = require('./services/blockchainService');
 const profileService = require('./services/profileService');
 const goalsService = require('./services/goalsService');
@@ -22,16 +23,6 @@ const server = http.createServer(app);
 const cors = require('cors');
 const io = new Server(server, { cors: { origin: '*' } });
 
-const USER_DB_FILE = path.join(__dirname, 'user_credentials.json');
-let userCredentials = {};
-if (fs.existsSync(USER_DB_FILE)) {
-    try {
-        userCredentials = JSON.parse(fs.readFileSync(USER_DB_FILE, 'utf8'));
-    } catch (e) { console.error('Error loading user credentials DB:', e); }
-}
-function saveUserCredentials() {
-    fs.writeFileSync(USER_DB_FILE, JSON.stringify(userCredentials, null, 2));
-}
 const CHAT_DB_FILE = path.join(__dirname, 'chat_db.json');
 
 // Temporary Memory for Chat & Mining Sessions
@@ -190,6 +181,7 @@ app.get('/api/debug/system', (req, res) => {
 // 1. API ROUTES
 app.use('/api/social', socialRoutes);
 app.use('/api/feed', feedRoutes);
+app.use('/api/auth', authModule.router);
 try {
     app.use('/api/tools', require('./routes/tools'));
 } catch (e) {
@@ -362,77 +354,6 @@ app.get('/tracks/:filename', (req, res, next) => {
 // 3. STATIC ASSETS
 app.use('/tmp', express.static(path.join(__dirname, 'tmp')));
 
-// ==========================================
-// AUTHENTICATION ENDPOINTS
-// ==========================================
-app.post('/api/auth/keygen', (req, res) => {
-    try {
-        const keys = Wallet.generateKeyPair();
-        res.status(201).json(keys);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to generate keys: ' + error.message });
-    }
-});
-
-// ==========================================
-// AUTHENTICATION ENDPOINTS (NEW: USER/PASS)
-// ==========================================
-app.post('/api/auth/register', (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) {
-        return res.status(400).json({ error: 'Username and password are required.' });
-    }
-    if (userCredentials[username.toLowerCase()]) {
-        return res.status(409).json({ error: 'Username is already taken.' });
-    }
-
-    try {
-        const salt = crypto.randomBytes(16).toString('hex');
-        // Use pbkdf2 to derive a deterministic private key from password and salt
-        crypto.pbkdf2(password, salt, 100000, 32, 'sha512', (err, derivedKey) => {
-            if (err) {
-                console.error("Key derivation failed during registration:", err);
-                return res.status(500).json({ error: 'Key derivation failed.' });
-            }
-            
-            const privateKeyHex = derivedKey.toString('hex');
-            const keyPair = blockchainService.ec.keyFromPrivate(privateKeyHex);
-            const publicKeyHex = keyPair.getPublic('hex');
-
-            // Store the mapping
-            userCredentials[username.toLowerCase()] = { salt, publicKey: publicKeyHex };
-            saveUserCredentials();
-
-            // Return the full keypair so the client can function
-            res.status(201).json({ privateKey: privateKeyHex, publicKey: publicKeyHex });
-        });
-    } catch (e) {
-        res.status(500).json({ error: 'Key generation failed: ' + e.message });
-    }
-});
-
-app.post('/api/auth/login', (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ error: 'Username and password are required.' });
-
-    const userData = userCredentials[username.toLowerCase()];
-    if (!userData) return res.status(401).json({ error: 'Invalid credentials.' });
-
-    crypto.pbkdf2(password, userData.salt, 100000, 32, 'sha512', (err, derivedKey) => {
-        if (err) return res.status(500).json({ error: 'Authentication failed.' });
-
-        const privateKeyHex = derivedKey.toString('hex');
-        const keyPair = blockchainService.ec.keyFromPrivate(privateKeyHex);
-        const derivedPublicKeyHex = keyPair.getPublic('hex');
-
-        if (derivedPublicKeyHex === userData.publicKey) {
-            res.json({ privateKey: privateKeyHex, publicKey: userData.publicKey });
-        } else {
-            res.status(401).json({ error: 'Invalid credentials.' });
-        }
-    });
-});
-
 // 4. FALLBACK
 app.get('*', (req, res) => {
     // Set headers to prevent caching of the main index.html file.
@@ -554,12 +475,7 @@ function purgeDeletedUserData(deletedUserAddress) {
     dbMemory.zineArticles.forEach(art => { art.ownersList = art.ownersList.filter(owner => owner !== deletedUserAddress); });
 
     // 4. Purge from password-based auth system
-    for (const username in userCredentials) {
-        if (userCredentials[username].publicKey === deletedUserAddress) {
-            delete userCredentials[username];
-            console.log(`[PURGE] Removed username '${username}' from credentials DB.`);
-        }
-    }
+    authModule.deleteUserCredential(deletedUserAddress);
 
     saveDBMemory(); // Persist the cleanup
     profileService.getProfileDirectory(); // Invalidate and rebuild profile cache to reflect deletion

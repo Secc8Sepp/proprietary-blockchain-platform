@@ -68,12 +68,21 @@ window.CoreEngine = {
                 body: JSON.stringify({ username, password })
             });
             
+            const contentType = res.headers.get("content-type");
             if (!res.ok) {
-                const errBody = await this.parseResponseJsonOrText(res);
-                throw new Error(errBody.error || `Server responded with status ${res.status}`);
+                if (contentType && contentType.includes("application/json")) {
+                    const errBody = await res.json();
+                    throw new Error(errBody.error || `Server responded with status ${res.status}`);
+                } else {
+                    throw new Error(`Server Error (${res.status}): Registration endpoint failed or is missing.`);
+                }
             }
 
-            this.userKeys = await this.parseResponseJsonOrText(res);
+            if (contentType && contentType.includes("application/json")) {
+                this.userKeys = await res.json();
+            } else {
+                throw new Error("Invalid server response. Expected JSON but received HTML/Text.");
+            }
             
             // The profile is now created *after* the user confirms they saved their key.
             const onKeySavedCallback = async () => {
@@ -145,11 +154,22 @@ window.CoreEngine = {
 
         try {
             const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+            const contentType = res.headers.get("content-type");
+            
             if (!res.ok) {
-                const errBody = await this.parseResponseJsonOrText(res);
-                throw new Error(errBody.error || "Login failed.");
+                if (contentType && contentType.includes("application/json")) {
+                    const errBody = await res.json();
+                    throw new Error(errBody.error || "Login failed.");
+                } else {
+                    throw new Error(`Server Error (${res.status}): Login endpoint failed or is missing.`);
+                }
             }
-            this.userKeys = await this.parseResponseJsonOrText(res);
+            
+            if (contentType && contentType.includes("application/json")) {
+                this.userKeys = await res.json();
+            } else {
+                throw new Error("Invalid server response. Expected JSON but received HTML/Text.");
+            }
             this.unlockApplication(this.userKeys.publicKey);
         } catch (err) { alert("Login failed: " + err.message); }
     },
