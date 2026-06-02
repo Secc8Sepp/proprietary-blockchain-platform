@@ -58,7 +58,22 @@ const dbMemory = {
 if (fs.existsSync(CHAT_DB_FILE)) {
     try {
         const data = JSON.parse(fs.readFileSync(CHAT_DB_FILE, 'utf8'));
-        if (data.servers) dbMemory.servers = data.servers;
+        if (data.servers) {
+            dbMemory.servers = data.servers;
+            // Re-inject default server if it was accidentally deleted/corrupted
+            if (!dbMemory.servers['vod-main']) {
+                dbMemory.servers['vod-main'] = {
+                    id: 'vod-main',
+                    name: 'VOD Main Swarm',
+                    owner: 'SYSTEM',
+                    channels: {
+                        'general': { id: 'general', name: 'general-scene', locked: false, messages: [] },
+                        'beats': { id: 'beats', name: 'beat-ciphers', locked: false, messages: [] },
+                        'whale': { id: 'whale', name: 'whale-lounge', locked: true, messages: [] }
+                    }
+                };
+            }
+        }
         if (data.directMessages) dbMemory.directMessages = data.directMessages;
         if (data.zineArticles) dbMemory.zineArticles = data.zineArticles;
         if (data.dailyStreamNotifs) dbMemory.dailyStreamNotifs = data.dailyStreamNotifs;
@@ -586,13 +601,13 @@ io.on('connection', (socket) => {
         const address = senderNode ? senderNode.address : null;
 
         const serverList = Object.values(dbMemory.servers)
-            .filter(srv => !srv.isPrivate || srv.owner === address || (srv.allowedUsers && srv.allowedUsers.includes(address)))
+            .filter(srv => srv && (!srv.isPrivate || srv.owner === address || (srv.allowedUsers && srv.allowedUsers.includes(address))))
             .map(srv => ({
                 id: srv.id,
                 name: srv.name,
                 owner: srv.owner,
                 isPrivate: srv.isPrivate,
-                channels: Object.values(srv.channels).map(ch => ({ id: ch.id, name: ch.name, locked: ch.locked }))
+                channels: Object.values(srv.channels || {}).map(ch => ({ id: ch.id, name: ch.name, locked: ch.locked }))
             }));
         socket.emit('server_list', serverList);
         socket.emit('profile_directory', profileService.getProfileDirectory());
@@ -763,6 +778,7 @@ io.on('connection', (socket) => {
         const { serverId, channelName, address, locked } = data;
         if (dbMemory.servers[serverId]) {
             const channelId = 'ch_' + Date.now() + Math.floor(Math.random()*1000);
+            if (!dbMemory.servers[serverId].channels) dbMemory.servers[serverId].channels = {};
             dbMemory.servers[serverId].channels[channelId] = { id: channelId, name: channelName, locked: !!locked, messages: [] };
             saveDBMemory();
             io.emit('channel_created', { serverId, channel: { id: channelId, name: channelName, locked: !!locked } });
@@ -777,7 +793,7 @@ io.on('connection', (socket) => {
         const { serverId, channelId } = data;
         
         const server = dbMemory.servers[serverId];
-        if (server && server.channels[channelId]) {
+        if (server && server.channels && server.channels[channelId]) {
             if (server.isPrivate && server.owner !== address && !(server.allowedUsers && server.allowedUsers.includes(address))) {
                 return socket.emit('chat_error', { message: 'Access Denied: You are not invited to this private server.' });
             }
@@ -810,7 +826,7 @@ io.on('connection', (socket) => {
         const roomName = `${serverId}_${channelId}`;
         socket.join(roomName);
 
-        socket.emit('chat_history', channel.messages.slice(-50));
+        socket.emit('chat_history', (channel.messages || []).slice(-50));
         }
     });
 
@@ -821,7 +837,7 @@ io.on('connection', (socket) => {
         if (!data || !data.serverId || !data.channelId || typeof data.text === 'undefined') return;
         const { serverId, channelId, text } = data;
         const server = dbMemory.servers[serverId];
-        if (server && server.channels[channelId]) {
+        if (server && server.channels && server.channels[channelId]) {
             if (server.isPrivate && server.owner !== senderNode.address && !(server.allowedUsers && server.allowedUsers.includes(senderNode.address))) {
                 return;
             }
@@ -833,6 +849,7 @@ io.on('connection', (socket) => {
             if (senderNode.address === adminAddress) roles.push('admin');
             if (balance >= 10000) roles.push('whale');
             const msg = { sender: senderNode.address, text, time: Date.now(), roles };
+            if (!server.channels[channelId].messages) server.channels[channelId].messages = [];
             server.channels[channelId].messages.push(msg);
             saveDBMemory();
             io.to(`${serverId}_${channelId}`).emit('new_message', msg);

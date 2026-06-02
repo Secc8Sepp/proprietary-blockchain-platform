@@ -61,8 +61,12 @@ window.MeshEngine = {
 
             // Render other components that depend on the initial data.
             if (typeof window.loadCloutStatus === 'function') window.loadCloutStatus();
-            if (!this.currentChatServer && this.serversData && this.serversData.length > 0) {
-                window.switchServer(this.serversData[0].id);
+            if (!this.currentChatServer) {
+                if (this.serversData && this.serversData.length > 0) {
+                    window.switchServer(this.serversData[0].id);
+                } else {
+                    window.switchServer('@dms');
+                }
             }
         });
 
