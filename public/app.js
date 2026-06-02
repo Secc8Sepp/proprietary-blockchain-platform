@@ -138,6 +138,13 @@ function switchAuthTab(tabName) {
     document.querySelectorAll('.auth-tab-btn').forEach(btn => btn.classList.remove('active'));
 
     const view = document.getElementById(`auth-view-${tabName}`);
+    if (!view) {
+        console.warn(`[Auth] Tab view not found: auth-view-${tabName}. Defaulting to signup.`);
+        document.getElementById('auth-view-signup').classList.remove('hidden');
+        const defaultTab = document.getElementById('tab-btn-signup');
+        if (defaultTab) defaultTab.classList.add('active');
+        return;
+    }
     if (view) view.classList.remove('hidden');
 
     const tab = document.getElementById(`tab-btn-${tabName}`);

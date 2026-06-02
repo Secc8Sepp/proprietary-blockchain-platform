@@ -3,6 +3,15 @@ window.CoreEngine = {
     currentPresence: { status: 'online', activity: null },
     idleTimer: null,
 
+    async parseResponseJsonOrText(response) {
+        const text = await response.text();
+        try {
+            return JSON.parse(text);
+        } catch (err) {
+            return { error: text.trim() || `Server responded with status ${response.status}` };
+        }
+    },
+
     setPresence(status, activity, trackDetails) {
         let changed = false;
         if (status !== undefined && this.currentPresence.status !== status) { this.currentPresence.status = status; changed = true; }
@@ -60,11 +69,11 @@ window.CoreEngine = {
             });
             
             if (!res.ok) {
-                const errBody = await res.json();
+                const errBody = await this.parseResponseJsonOrText(res);
                 throw new Error(errBody.error || `Server responded with status ${res.status}`);
             }
 
-            this.userKeys = await res.json(); 
+            this.userKeys = await this.parseResponseJsonOrText(res);
             
             // The profile is now created *after* the user confirms they saved their key.
             const onKeySavedCallback = async () => {
@@ -137,10 +146,10 @@ window.CoreEngine = {
         try {
             const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
             if (!res.ok) {
-                const errBody = await res.json();
+                const errBody = await this.parseResponseJsonOrText(res);
                 throw new Error(errBody.error || "Login failed.");
             }
-            this.userKeys = await res.json();
+            this.userKeys = await this.parseResponseJsonOrText(res);
             this.unlockApplication(this.userKeys.publicKey);
         } catch (err) { alert("Login failed: " + err.message); }
     },
