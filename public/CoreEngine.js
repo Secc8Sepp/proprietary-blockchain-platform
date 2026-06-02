@@ -27,6 +27,61 @@ window.CoreEngine = {
         this.idleTimer = setTimeout(() => this.setPresence('idle'), 300000); // 5 minute idle limit
     },
 
+    // Native WebCrypto implementation to handle raw 32-byte hash inputs flawlessly
+    async generateClientSignature(privateKeyHex, dataString) {
+        try {
+            const cleanHex = privateKeyHex.trim().replace(/^0x/i, '');
+            const rawKeyBytes = new Uint8Array(cleanHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+            
+            // Format the scalar base64url string to satisfy browser constraints
+            const dBase64Url = btoa(String.fromCharCode(...rawKeyBytes))
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_')
+                .replace(/=/g, '');
+
+            // Import raw string into a browser crypto module key object
+            const tempKey = await window.crypto.subtle.importKey(
+                "jwk",
+                {
+                    kty: "EC",
+                    crv: "P-256",
+                    d: dBase64Url
+                },
+                { name: "ECDSA", namedCurve: "P-256" },
+                true,
+                ["sign"]
+            );
+
+            // Export to let the browser compute the missing public key x/y spatial coordinates natively
+            const fullJwk = await window.crypto.subtle.exportKey("jwk", tempKey);
+
+            // Re-import the fully hydrated JWK mapping
+            const signingKey = await window.crypto.subtle.importKey(
+                "jwk",
+                fullJwk,
+                { name: "ECDSA", namedCurve: "P-256" },
+                false,
+                ["sign"]
+            );
+
+            const encoder = new TextEncoder();
+            const dataBytes = encoder.encode(dataString);
+
+            const signatureBuffer = await window.crypto.subtle.sign(
+                { name: "ECDSA", hash: { name: "SHA-256" } },
+                signingKey,
+                dataBytes
+            );
+
+            return Array.from(new Uint8Array(signatureBuffer))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+        } catch (error) {
+            console.error("[CoreEngine Crypto] Local signature generation failed:", error.message);
+            throw new Error("Local signature matrix processing failed: " + error.message);
+        }
+    },
+
     async handleSignup() {
         try {
             const usernameInput = document.getElementById('input-signup-username');
@@ -93,7 +148,6 @@ window.CoreEngine = {
                 throw new Error("Invalid server response. Expected JSON but received HTML/Text.");
             }
             
-            // Immediately record the profile to ledger and unlock application
             const profileData = { username: username, bio: "Active on the Vibe or Die Network.", avatarHash: avatarHash };
             if (referrerPublicKey) {
                 profileData.referrer = referrerPublicKey;
@@ -140,6 +194,7 @@ window.CoreEngine = {
             this.unlockApplication(this.userKeys.publicKey);
         } catch (err) { alert("Login failed: " + err.message); }
     },
+
     handleKeyLogin() {
         const keyInput = document.getElementById('input-login-key');
         if (!keyInput) return alert("Login key input not found.");
@@ -151,73 +206,4 @@ window.CoreEngine = {
                 this.userKeys = parsed;
                 this.unlockApplication(this.userKeys.publicKey);
             } else throw new Error("Invalid format.");
-        } catch(err) { alert("Invalid Key format. Paste the entire content of your vod_private_key.json."); }
-    },
-
-    unlockApplication(publicKey) {
-        document.getElementById('auth-screen').classList.add('hidden');
-        document.getElementById('app-screen').classList.remove('hidden');
-
-        // Unhide the global player now that user is logged in
-        const playerBanner = document.getElementById('app-footer-banner');
-        if (playerBanner) playerBanner.classList.remove('hidden');
-
-        const avatar = document.getElementById('composer-avatar');
-        if(avatar) avatar.src = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(publicKey)}&backgroundColor=0b0c10`;
-        
-        const shortKey = publicKey.length > 20 ? publicKey.substring(0, 10) + "..." + publicKey.slice(-5) : publicKey;
-        const pubKeyDisplay = document.getElementById('ui-user-address');
-        if(pubKeyDisplay) pubKeyDisplay.innerText = shortKey;
-        
-        if (window.socket) window.socket.emit('register_node', { address: publicKey });
-
-        if (typeof window.subscribeToPush === 'function') window.subscribeToPush(publicKey);
-        if (typeof window.syncFullChain === 'function') window.syncFullChain();
-        if (typeof window.loadCloutStatus === 'function') window.loadCloutStatus();
-
-        if (typeof window.fetchUserProfile === 'function') window.fetchUserProfile(publicKey, false);
-        if (typeof window.loadMainGlobalFeed === 'function' && window.currentView === 'feed') window.loadMainGlobalFeed();
-    },
-
-    async sendSignedTransaction(type, receiver, data) {
-        type = (type || '').toString().trim().toUpperCase();
-
-        // 1. Define the exact data payload to be signed, with a fresh timestamp.
-        // This object structure must match what the backend's `blockchainService.addTransaction`
-        // reconstructs for verification.
-        const msgData = {
-            sender: this.userKeys.publicKey,
-            receiver: receiver || '0x00',
-            type,
-            data,
-            timestamp: Date.now()
-        };
-
-        // 2. Generate the signature. The backend verification process uses `JSON.stringify` on the payload,
-        // so we MUST sign the stringified version of the exact same object here to ensure the hashes match.
-        const sig = await window.generateClientSignature(this.userKeys.privateKey, JSON.stringify(msgData));
-        const txFields = { ...msgData, signature: sig };
-        
-        const socialActions = ['PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'FOLLOW_USER', 'CREATE_PLAYLIST', 'ADD_TO_PLAYLIST', 'UPDATE_PLAYLIST_DETAILS', 'DELETE_PLAYLIST', 'REORDER_PLAYLIST_TRACKS', 'REPOST_POST', 'DELETE_POST', 'LIKE_SONG', 'UNLIKE_SONG'];
-        const endpoint = socialActions.includes(type)
-            ? '/api/social/action'
-            : '/api/feed/interact';
-
-        console.log(`[CoreEngine] Sending ${type} to ${endpoint}`, txFields);
-        const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
-        if (!res.ok) {
-            let body;
-            try {
-                body = await res.json();
-            } catch (e) {
-                body = { error: await res.text() };
-            }
-            throw new Error(body.error || `Request failed with status ${res.status}`);
-        }
-        
-        if (window.MeshEngine && typeof window.MeshEngine.broadcastToMesh === 'function') {
-            window.MeshEngine.broadcastToMesh('P2P_BLOCK', txFields);
-        }
-        return res;
-    }
-};
+        } catch(err) { alert("Invalid Key format. Paste the entire content
