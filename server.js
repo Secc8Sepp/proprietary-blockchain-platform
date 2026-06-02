@@ -333,41 +333,6 @@ app.get('/api/feed/discover', (req, res) => {
 });
 
 
-// 2. THE STORAGE ROUTE 
-app.get('/tracks/:filename', (req, res, next) => {
-    const filename = req.params.filename;
-    if (!filename || filename.includes('..') || filename.includes('/')) {
-        return res.status(400).send('Invalid filename');
-    }
-    const filePath = path.join(IPFS_DIR, filename);
-    if (fs.existsSync(filePath)) {
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Accept-Ranges', 'bytes');
-        return res.sendFile(filePath);
-    }
-    const peers = req.app.get('peers') || [];
-    if (peers.length > 0) {
-        return res.redirect(`${peers[0]}/tracks/${filename}`);
-    }
-    res.status(404).send('Asset missing from swarm');
-});
-
-// 3. STATIC ASSETS
-app.use('/tmp', express.static(path.join(__dirname, 'tmp')));
-
-// 4. FALLBACK
-app.get('*', (req, res) => {
-    // Set headers to prevent caching of the main index.html file.
-    // This ensures the browser always fetches the latest version, which will have updated
-    // links to versioned assets like JS and CSS files.
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-app.set('socketio', io);
-
 // ==========================================
 // P2P FULL NODE SYNC (Backend Mesh)
 // ==========================================
@@ -411,6 +376,60 @@ app.post('/api/network/block', (req, res) => {
     }
     res.send('ok');
 });
+
+// ==========================================
+// API 404 CATCH-ALL
+// ==========================================
+app.all('/api/*', (req, res) => {
+    res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.originalUrl}` });
+});
+
+// ==========================================
+// GLOBAL API ERROR HANDLER
+// ==========================================
+app.use('/api', (err, req, res, next) => {
+    console.error(`[API Error] ${req.method} ${req.path}:`, err);
+    // Ensure we always return JSON for API routes, preventing HTML error pages
+    if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+        return res.status(400).json({ error: 'Malformed JSON payload.' });
+    }
+    res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
+});
+
+// 2. THE STORAGE ROUTE 
+app.get('/tracks/:filename', (req, res, next) => {
+    const filename = req.params.filename;
+    if (!filename || filename.includes('..') || filename.includes('/')) {
+        return res.status(400).send('Invalid filename');
+    }
+    const filePath = path.join(IPFS_DIR, filename);
+    if (fs.existsSync(filePath)) {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Accept-Ranges', 'bytes');
+        return res.sendFile(filePath);
+    }
+    const peers = req.app.get('peers') || [];
+    if (peers.length > 0) {
+        return res.redirect(`${peers[0]}/tracks/${filename}`);
+    }
+    res.status(404).send('Asset missing from swarm');
+});
+
+// 3. STATIC ASSETS
+app.use('/tmp', express.static(path.join(__dirname, 'tmp')));
+
+// 4. FALLBACK
+app.get('*', (req, res) => {
+    // Set headers to prevent caching of the main index.html file.
+    // This ensures the browser always fetches the latest version, which will have updated
+    // links to versioned assets like JS and CSS files.
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.set('socketio', io);
 
 // ==========================================
 // ATOMIC STATE MUTATORS
