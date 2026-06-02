@@ -536,60 +536,6 @@ async function syncFullChain() {
 // 2. MEDIA & CRYPTO ENGINE
 // ==========================================
 
-function showKeyModal(keys, callback) {
-    const modalTitle = document.getElementById('form-modal-title');
-    const modalBody = document.getElementById('form-modal-body');
-    
-    modalTitle.innerText = '✅ Identity Minted! Save Your Key';
-    
-    const keyJSON = JSON.stringify(keys, null, 2);
-
-    modalBody.innerHTML = `
-        <p style="font-size: 13px; color: var(--text-muted);">
-            <b>CRITICAL:</b> This is your new identity. It's like a password.
-            You MUST save it to log back in. We cannot recover it for you.
-        </p>
-        <p style="font-size: 13px; color: var(--text-muted);">
-            Copy the text below and save it in a secure place, or download the key file.
-        </p>
-        <textarea id="key-display-textarea" readonly style="width: 100%; height: 120px; font-family: monospace; font-size: 12px; resize: none; margin-bottom: 10px; background: #0b0c10; border-color: var(--border); color: #fff;">${escapeHtml(keyJSON)}</textarea>
-        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-            <button id="form-modal-copy-key" style="flex: 1;">Copy Key</button>
-            <button id="form-modal-download-key" class="secondary" style="flex: 1;">Download File</button>
-        </div>
-        <button id="form-modal-submit" style="width: 100%;">I Have Saved My Key. Continue →</button>
-    `;
-
-    document.getElementById('form-modal-copy-key').onclick = () => {
-        const textarea = document.getElementById('key-display-textarea');
-        textarea.select();
-        navigator.clipboard.writeText(textarea.value).then(() => {
-            alert('Key copied to clipboard!');
-        }).catch(err => {
-            alert('Failed to copy key. Please copy it manually.');
-        });
-    };
-
-    document.getElementById('form-modal-download-key').onclick = () => {
-        if (window.CoreEngine && typeof window.CoreEngine.promptKeyDownload === 'function') {
-            window.CoreEngine.promptKeyDownload(keys);
-        }
-    };
-
-    const submitBtn = document.getElementById('form-modal-submit');
-    submitBtn.onclick = () => {
-        if (callback && typeof callback === 'function') {
-            callback(); // The callback is now responsible for closing the modal and handling next steps.
-        } else {
-            // Default behavior if no callback is provided
-            toggleModal('form-modal');
-        }
-    };
-
-    toggleModal('form-modal');
-}
-window.showKeyModal = showKeyModal;
-
 // ==========================================
 // 3. MINING & AUDIO ENGINE
 // ==========================================

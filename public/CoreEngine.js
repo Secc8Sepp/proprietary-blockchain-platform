@@ -84,64 +84,19 @@ window.CoreEngine = {
                 throw new Error("Invalid server response. Expected JSON but received HTML/Text.");
             }
             
-            // The profile is now created *after* the user confirms they saved their key.
-            const onKeySavedCallback = async () => {
-                const modalSubmitBtn = document.getElementById('form-modal-submit');
-                try {
-                    if (modalSubmitBtn) {
-                        modalSubmitBtn.innerText = 'RECORDING TO LEDGER...';
-                        modalSubmitBtn.disabled = true;
-                    }
-
-                    const profileData = { username: username, bio: "Active on the Vibe or Die Network.", avatarHash: avatarHash };
-                    if (referrerPublicKey) {
-                        profileData.referrer = referrerPublicKey;
-                    }
-
-                    await this.sendSignedTransaction('PROFILE_UPDATE', this.userKeys.publicKey, profileData);
-                    
-                    if (window.toggleModal) window.toggleModal('form-modal');
-                    this.unlockApplication(this.userKeys.publicKey);
-
-                } catch (e) {
-                    alert('Failed to record profile to ledger: ' + e.message);
-                    if (modalSubmitBtn) {
-                        modalSubmitBtn.innerText = 'I Have Saved My Key. Continue →';
-                        modalSubmitBtn.disabled = false;
-                    }
-                }
-            };
-
-            if (typeof window.showKeyModal === 'function') {
-                // Reset button before showing modal, in case user closes it by clicking the overlay.
-                btn.innerText = "Create Account";
-                btn.disabled = false;
-                window.showKeyModal(this.userKeys, onKeySavedCallback);
-            } else {
-                this.promptKeyDownload(this.userKeys);
-                const profileData = { username: username, bio: "Active on the Vibe or Die Network.", avatarHash: avatarHash };
-                if (referrerPublicKey) {
-                    profileData.referrer = referrerPublicKey;
-                }
-                await this.sendSignedTransaction('PROFILE_UPDATE', this.userKeys.publicKey, profileData);
-                this.unlockApplication(this.userKeys.publicKey);
+            // Immediately record the profile to ledger and unlock application
+            const profileData = { username: username, bio: "Active on the Vibe or Die Network.", avatarHash: avatarHash };
+            if (referrerPublicKey) {
+                profileData.referrer = referrerPublicKey;
             }
+
+            await this.sendSignedTransaction('PROFILE_UPDATE', this.userKeys.publicKey, profileData);
+            this.unlockApplication(this.userKeys.publicKey);
         } catch (err) { 
             console.error(err); alert("Signup Error: " + err.message); 
             const btn = document.getElementById('btn-signup');
             if (btn) { btn.innerText = "Create Account"; btn.disabled = false; }
         }
-    },
-
-    promptKeyDownload(keys) {
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(keys));
-        const downloadAnchorNode = document.createElement('a');
-        downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", "vod_private_key.json");
-        document.body.appendChild(downloadAnchorNode);
-        downloadAnchorNode.click();
-        downloadAnchorNode.remove();
-        alert("CRITICAL: Your VOD Credentials have been downloaded. Keep this file safe.");
     },
 
     async handlePasswordLogin() {
