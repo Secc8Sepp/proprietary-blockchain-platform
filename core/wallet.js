@@ -2,15 +2,16 @@ const crypto = require('crypto');
 
 class Wallet {
     static generateKeyPair() {
+        // Generate standard Web3 cryptographic keypair natively
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { 
             namedCurve: 'secp256k1' 
         });
 
+        // Export public key as standard SPKI DER hex mapping
         const publicKeyHex = publicKey.export({ type: 'spki', format: 'der' }).toString('hex');
         
-        const jwk = privateKey.export({ format: 'jwk' });
-        const d_base64 = jwk.d.replace(/-/g, '+').replace(/_/g, '/');
-        const privateKeyHex = Buffer.from(d_base64, 'base64').toString('hex');
+        // Export private key natively using a clean SEC1 key representation layout
+        const privateKeyHex = privateKey.export({ type: 'sec1', format: 'der' }).toString('hex');
 
         return {
             privateKey: privateKeyHex,
@@ -20,26 +21,20 @@ class Wallet {
     }
 
     static getPrivateKeyObj(privateKeyHex) {
-        // Clean the string inputs seamlessly
+        // Clean the incoming hex string
         const cleanHex = privateKeyHex.trim().replace(/^0x/i, '');
         
-        // Ensure the private scalar string is exactly 64 characters (32 bytes) long
+        // Ensure the private scalar string is correctly padded to exactly 32 bytes (64 hex characters)
         const paddedHex = cleanHex.padStart(64, '0');
-        
-        // Convert straight to safe base64url padding layout
-        const dBase64Url = Buffer.from(paddedHex, 'hex')
-            .toString('base64')
-            .replace(/\+/g, '-')
-            .replace(/\//g, '_')
-            .replace(/=/g, '');
+        const rawKeyBuffer = Buffer.from(paddedHex, 'hex');
 
-        // Use standard JWK mapping format. This satisfies both password hash lines 
-        // and asymmetric ledger validations without tripping ASN.1 sequence parsers.
+        // Pass the raw mathematical parameters directly to Node's constructor.
+        // This stops Node from searching for missing JWK coordinate keys or legacy file layouts.
         return crypto.createPrivateKey({
             key: {
                 kty: 'EC',
                 crv: 'secp256k1',
-                d: dBase64Url
+                d: rawKeyBuffer.toString('base64url')
             },
             format: 'jwk'
         });
@@ -47,11 +42,11 @@ class Wallet {
 
     static getPublicKeyFromPrivate(privateKeyHex) {
         try {
-            const cleanHex = privateKeyHex.trim().replace(/^0x/i, '');
+            const cleanHex = privateKeyHex.trim().replace(/^0x/i, '').substring(0, 64);
             const paddedHex = cleanHex.padStart(64, '0');
             const privateKeyBuffer = Buffer.from(paddedHex, 'hex');
 
-            // Handle the raw password key bytes directly using native ECDH structures
+            // Use native ECDH coordinate mapping to handle raw 32-byte password strings perfectly
             const ecdh = crypto.createECDH('secp256k1');
             ecdh.setPrivateKey(privateKeyBuffer);
             const rawPublicKey = ecdh.getPublicKey();
@@ -62,7 +57,7 @@ class Wallet {
                 type: 'pkcs1'
             }).export({ type: 'spki', format: 'der' }).toString('hex');
         } catch (error) {
-            // High-compatibility safe extraction backup gate
+            // High-compatibility configuration fallback gateway execution path
             const privateKeyObj = this.getPrivateKeyObj(privateKeyHex);
             return crypto.createPublicKey(privateKeyObj).export({ type: 'spki', format: 'der' }).toString('hex');
         }
