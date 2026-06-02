@@ -7,7 +7,7 @@ class Wallet {
             namedCurve: 'secp256k1' 
         });
 
-        // Export public key as SPKI DER
+        // Export public key as standard SPKI DER hex
         const publicKeyHex = publicKey.export({ type: 'spki', format: 'der' }).toString('hex');
         
         // Export private key natively to extract the raw 32-byte scalar hex
@@ -18,67 +18,60 @@ class Wallet {
         return {
             privateKey: privateKeyHex,
             publicKey: publicKeyHex,
-            // In our platform, the raw public key hex serves as the wallet address
             address: publicKeyHex 
         };
     }
 
     static getPrivateKeyObj(privateKeyHex) {
-        try {
-            // Clean up the private key input string
-            const cleanHex = privateKeyHex.trim().replace(/^0x/i, '');
-            const dBuffer = Buffer.from(cleanHex, 'hex');
-            
-            // Reconstruct a standard, compliant JWK using base64url encoding parameters
-            const dBase64Url = dBuffer.toString('base64url');
+        // Build a compliant JWK structure directly from the raw hex string
+        const cleanHex = privateKeyHex.trim().replace(/^0x/i, '');
+        const dBase64Url = Buffer.from(cleanHex, 'hex').toString('base64url');
 
-            // 1. Temporarily stand up an ephemeral key object using Node's internal math
-            const ephemeralKeyObj = crypto.createPrivateKey({
-                key: {
-                    kty: 'EC',
-                    crv: 'secp256k1',
-                    d: dBase64Url
-                },
-                format: 'jwk'
-            });
-
-            // 2. Export the full mathematical parameters (this automatically computes public x and y coordinates!)
-            const fullJwk = ephemeralKeyObj.export({ format: 'jwk' });
-
-            // 3. Re-import the fully hydrated parameters so the native engine never encounters an undefined property error
-            return crypto.createPrivateKey({
-                key: {
-                    kty: 'EC',
-                    crv: 'secp256k1',
-                    x: fullJwk.x,
-                    y: fullJwk.y,
-                    d: fullJwk.d
-                },
-                format: 'jwk'
-            });
-        } catch (e) {
-            console.error('[Wallet.getPrivateKeyObj] Native parsing error:', e.message);
-            // Bulletproof raw PKCS8 structural processing layer fallback
-            return crypto.createPrivateKey({
-                key: Buffer.from(privateKeyHex, 'hex'),
-                format: 'der',
-                type: 'pkcs8'
-            });
-        }
+        return crypto.createPrivateKey({
+            key: {
+                kty: 'EC',
+                crv: 'secp256k1',
+                d: dBase64Url
+            },
+            format: 'jwk'
+        });
     }
 
     static getPublicKeyFromPrivate(privateKeyHex) {
-        const privateKeyObj = this.getPrivateKeyObj(privateKeyHex);
-        return crypto.createPublicKey(privateKeyObj).export({ type: 'spki', format: 'der' }).toString('hex');
+        try {
+            const cleanHex = privateKeyHex.trim().replace(/^0x/i, '');
+            const privateKeyBuffer = Buffer.from(cleanHex, 'hex');
+
+            // Use native ECDH to handle raw 32-byte password hashes directly.
+            // This safely computes the key parameters without throwing ASN.1 header fits.
+            const ecdh = crypto.createECDH('secp256k1');
+            ecdh.setPrivateKey(privateKeyBuffer);
+            const rawPublicKey = ecdh.getPublicKey();
+
+            // Convert the raw public coordinates into our platform's standard SPKI DER structure
+            return crypto.createPublicKey({
+                key: rawPublicKey,
+                format: 'der',
+                type: 'pkcs1'
+            }).export({ type: 'spki', format: 'der' }).toString('hex');
+        } catch (error) {
+            // High-compatibility parsing fallback step
+            const cleanHex = privateKeyHex.trim().replace(/^0x/i, '');
+            const dBase64Url = Buffer.from(cleanHex, 'hex').toString('base64url');
+            const privateKeyObj = crypto.createPrivateKey({
+                key: { kty: 'EC', crv: 'secp256k1', d: dBase64Url },
+                format: 'jwk'
+            });
+            return crypto.createPublicKey(privateKeyObj).export({ type: 'spki', format: 'der' }).toString('hex');
+        }
     }
 
     static signData(privateKeyHex, dataString) {
-        const privateKey = this.getPrivateKeyObj(privateKeyHex);
-        return crypto.createSign('SHA256').update(dataString).sign(privateKey, 'hex');
+        const privateKeyObj = this.getPrivateKeyObj(privateKeyHex);
+        return crypto.createSign('SHA256').update(dataString).sign(privateKeyObj, 'hex');
     }
 
     static convertRawToDER(rawSignatureHex) {
-        // Convert raw ECDSA signature (r || s) to standard DER format
         if (rawSignatureHex.length < 128) {
             rawSignatureHex = rawSignatureHex.padStart(128, '0');
         }
@@ -110,7 +103,6 @@ class Wallet {
         try {
             const normalizedKey = publicKeyHex.trim().replace(/^0x/i, '').toLowerCase();
             
-            // Normalize incoming signatures if passed in raw 64-byte format
             let signatureToVerify = signature;
             if (signature.length === 128 || signature.length < 140) {
                 signatureToVerify = this.convertRawToDER(signature);

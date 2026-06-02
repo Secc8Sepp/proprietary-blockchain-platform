@@ -12,11 +12,11 @@ if (fs.existsSync(USER_DB_FILE)) {
         userCredentials = JSON.parse(fs.readFileSync(USER_DB_FILE, 'utf8'));
     } catch (e) { console.error('Error loading user credentials DB:', e); }
 }
+
 function saveUserCredentials() {
     fs.writeFileSync(USER_DB_FILE, JSON.stringify(userCredentials, null, 2));
 }
 
-// Expose this so the main server can still purge users if they are deleted by admins
 function deleteUserCredential(publicKey) {
     for (const username in userCredentials) {
         if (userCredentials[username].publicKey === publicKey) {
