@@ -178,6 +178,71 @@ app.get('/api/debug/system', (req, res) => {
     res.json({ appRoot: __dirname, expectedChainPath: ledgerPath, chainStatus, chainLength });
 });
 
+// ==========================================
+// EMERGENCY AUTHENTICATION GATEWAY
+// ==========================================
+const AUTH_DB_FILE = path.join(__dirname, 'auth_db.json');
+let authMemory = {};
+if (fs.existsSync(AUTH_DB_FILE)) {
+    try { authMemory = JSON.parse(fs.readFileSync(AUTH_DB_FILE, 'utf8')); } catch(e) {}
+}
+
+const handleAuthRegistration = (req, res) => {
+    try {
+        const { username, password } = req.body;
+        if (!username || !password) return res.status(400).json({ error: 'Username and password required.' });
+        
+        const normalizedUser = username.toLowerCase();
+        if (authMemory[normalizedUser]) {
+            return res.status(409).json({ error: 'Username is already taken.' });
+        }
+
+        const wallet = new Wallet();
+        authMemory[normalizedUser] = {
+            username,
+            password, 
+            publicKey: wallet.publicKey,
+            privateKey: wallet.privateKey
+        };
+        fs.writeFileSync(AUTH_DB_FILE, JSON.stringify(authMemory, null, 2));
+
+        res.json({ publicKey: wallet.publicKey, privateKey: wallet.privateKey });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+};
+
+app.post('/api/auth/register', handleAuthRegistration);
+app.post('/api/auth/signup', handleAuthRegistration);
+
+app.post('/api/auth/login', (req, res, next) => {
+    try {
+        const { username, password } = req.body;
+        const normalizedUser = (username || '').toLowerCase();
+        const user = authMemory[normalizedUser];
+        
+        if (user) {
+            if (user.password !== password) return res.status(401).json({ error: 'Invalid password.' });
+            return res.json({ publicKey: user.publicKey, privateKey: user.privateKey });
+        }
+        next(); // Fallback to authModule if user not in emergency DB
+    } catch (e) {
+        next(e);
+    }
+});
+
+if (authModule) {
+    const originalDelete = authModule.deleteUserCredential;
+    authModule.deleteUserCredential = (address) => {
+        if (typeof originalDelete === 'function') originalDelete(address);
+        const userKey = Object.keys(authMemory).find(k => authMemory[k].publicKey === address);
+        if (userKey) {
+            delete authMemory[userKey];
+            fs.writeFileSync(AUTH_DB_FILE, JSON.stringify(authMemory, null, 2));
+        }
+    };
+}
+
 // 1. API ROUTES
 app.use('/api/social', socialRoutes);
 app.use('/api/feed', feedRoutes);
