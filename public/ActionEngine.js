@@ -8,11 +8,17 @@ window.ActionEngine = {
         if (typeof isStory !== 'boolean') isStory = false;
         try {
             console.log('[PUBLISH] Starting post publish...');
-            const textIn = document.getElementById('composer-text').value.trim();
-            const audFile = document.getElementById('composer-audio-upload').files[0];
-            const imgFile = document.getElementById('composer-image-upload').files[0];
-            const vidFile = document.getElementById('composer-video-upload') ? document.getElementById('composer-video-upload').files[0] : null;
-            const zipFile = document.getElementById('composer-zip-upload') ? document.getElementById('composer-zip-upload').files[0] : null;
+            
+            const textInEl = document.getElementById('composer-text');
+            const textIn = textInEl ? textInEl.value.trim() : '';
+            const audUploadEl = document.getElementById('composer-audio-upload');
+            const audFile = audUploadEl ? audUploadEl.files[0] : null;
+            const imgUploadEl = document.getElementById('composer-image-upload');
+            const imgFile = imgUploadEl ? imgUploadEl.files[0] : null;
+            const vidUploadEl = document.getElementById('composer-video-upload');
+            const vidFile = vidUploadEl ? vidUploadEl.files[0] : null;
+            const zipUploadEl = document.getElementById('composer-zip-upload');
+            const zipFile = zipUploadEl ? zipUploadEl.files[0] : null;
             const btn = document.getElementById(isStory ? 'btn-publish-story' : 'btn-publish-post');
 
             if (isStory && !imgFile && !vidFile) return alert("Stories must include an image or short video.");
@@ -35,16 +41,20 @@ window.ActionEngine = {
                     data = { caption: textIn, videoHash: hash };
                 }
             } else if (audFile) {
-                const titleIn = document.getElementById('audio-meta-title').value.trim();
+                const titleInEl = document.getElementById('audio-meta-title');
+                const titleIn = titleInEl ? titleInEl.value.trim() : '';
                 if (!titleIn) throw new Error("Please provide a Track Title for the audio upload.");
                 const hash = await uploadMediaAssetFile(audFile);
                 
                 let coverHash = null;
-                const coverFile = document.getElementById('audio-cover-upload').files[0];
+                const coverUploadEl = document.getElementById('audio-cover-upload');
+                const coverFile = coverUploadEl ? coverUploadEl.files[0] : null;
                 if (coverFile) coverHash = await uploadMediaAssetFile(coverFile);
                 
-                const artist = document.getElementById('audio-meta-artist').value.trim();
-                const offCollab = document.getElementById('audio-meta-off-collab').value.trim();
+                const artistEl = document.getElementById('audio-meta-artist');
+                const artist = artistEl ? artistEl.value.trim() : '';
+                const offCollabEl = document.getElementById('audio-meta-off-collab');
+                const offCollab = offCollabEl ? offCollabEl.value.trim() : '';
                 const collabs = [];
                 document.querySelectorAll('.collab-row').forEach(row => {
                     const addr = row.querySelector('.collab-address').value.trim();
@@ -52,8 +62,10 @@ window.ActionEngine = {
                     if (addr && pct > 0) collabs.push({ address: addr, percentage: pct });
                 });
 
-                const tags = document.getElementById('audio-meta-genre').value.trim();
-                const forStake = document.getElementById('audio-stake-checkbox').checked;
+                const tagsEl = document.getElementById('audio-meta-genre');
+                const tags = tagsEl ? tagsEl.value.trim() : '';
+                const stakeCheckEl = document.getElementById('audio-stake-checkbox');
+                const forStake = stakeCheckEl ? stakeCheckEl.checked : false;
                 let sellPercentage = 0; let pricePerShare = 0; let totalShares = 100;
                 if (forStake) {
                     const equityPercent = parseInt(document.getElementById('audio-stake-percent').value) || 0;
