@@ -3,6 +3,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const blockchainService = require('../services/blockchainService');
 const Wallet = require('../core/wallet');
 
 const USER_DB_FILE = path.join(__dirname, '../user_credentials.json');

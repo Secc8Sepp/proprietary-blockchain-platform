@@ -12,7 +12,7 @@ class FeedController {
         catch (error) { return res.status(500).json({ error: error.message }); }
     }
 
-    submitInteraction(req, res) {
+    async submitInteraction(req, res) {
         try {
             let { sender, receiver, type, data, timestamp, signature } = req.body;
             type = (type || '').toString().trim().toUpperCase();
@@ -23,7 +23,7 @@ class FeedController {
                 console.error(`[FeedController] Invalid feed operation type: ${type} (typeof ${typeof type})`);
                 return res.status(400).json({ error: `Invalid feed operation profile: ${type}` });
             }
-            const activeBlock = blockchainService.addTransaction({ sender, receiver, type, data, timestamp, signature });
+            const activeBlock = await blockchainService.addTransaction({ sender, receiver, type, data, timestamp, signature });
             const io = req.app.get('socketio');
             io.emit('blockchain_update', { type, transaction: activeBlock.transactions[0] });
 
