@@ -25,36 +25,45 @@ class Wallet {
 
     static getPrivateKeyObj(privateKeyHex) {
         try {
-            // Build a raw SEC1 EC private key structure natively using byte headers
-            // This bypasses Node's strict JWK x/y parameter validation completely
-            const privateKeyBuffer = Buffer.from(privateKeyHex, 'hex');
-            
-            // SEC1 standard wrapping sequence header for an uncompressed secp256k1 key
-            const sec1Header = Buffer.from([
-                0x30, 0x30,       // SEQUENCE length 48
-                0x02, 0x01, 0x01, // INTEGER version 1
-                0x04, 0x20        // OCTET STRING length 32 (our raw private key scalar bytes)
-            ]);
-            
-            // Explicit secp256k1 Object Identifier (OID) metadata parameters
-            const oidHeader = Buffer.from([
-                0xa0, 0x07, 0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x0a
-            ]);
-            
-            const totalKeyBuffer = Buffer.concat([sec1Header, privateKeyBuffer, oidHeader]);
-            
+            // Ensure the raw private key hex string is clean
+            const cleanHex = privateKeyHex.trim().replace(/^0x/i, '');
+            const rawKeyBuffer = Buffer.from(cleanHex, 'hex');
+
+            // Pass the raw 32-byte scalar straight to the native parser.
+            // Node handles the internal ASN.1 sequence length constraints natively.
             return crypto.createPrivateKey({
-                key: totalKeyBuffer,
+                key: rawKeyBuffer,
                 format: 'der',
-                type: 'sec1'
+                type: 'sec1',
+                derOptions: {
+                    namedCurve: 'secp256k1'
+                }
             });
         } catch (e) {
-            // Internal fallback profile processing rule
-            return crypto.createPrivateKey({
-                key: Buffer.from(privateKeyHex, 'hex'),
-                format: 'der',
-                type: 'pkcs8'
-            });
+            // Fallback 1: Try PKCS#8 structural handling if environment variables differ
+            try {
+                return crypto.createPrivateKey({
+                    key: Buffer.from(privateKeyHex, 'hex'),
+                    format: 'der',
+                    type: 'pkcs8'
+                });
+            } catch (innerError) {
+                // Fallback 2: Construct a standard, uncompressed JWK if DER falls through
+                const d_base64url = Buffer.from(privateKeyHex, 'hex')
+                    .toString('base64')
+                    .replace(/\+/g, '-')
+                    .replace(/\//g, '_')
+                    .replace(/=/g, '');
+                
+                return crypto.createPrivateKey({
+                    key: {
+                        kty: 'EC',
+                        crv: 'secp256k1',
+                        d: d_base64url
+                    },
+                    format: 'jwk'
+                });
+            }
         }
     }
 
