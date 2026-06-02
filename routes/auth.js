@@ -3,8 +3,6 @@ const router = express.Router();
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const EC = require('elliptic').ec;
-const ec = new EC('secp256k1');
 const Wallet = require('../core/wallet');
 
 const USER_DB_FILE = path.join(__dirname, '../user_credentials.json');
@@ -57,8 +55,16 @@ router.post('/register', (req, res) => {
                 if (err) return res.status(500).json({ error: 'Key derivation failed.' });
                 try {
                     const privateKeyHex = derivedKey.toString('hex');
-                    const keyPair = ec.keyFromPrivate(privateKeyHex);
-                    const publicKeyHex = keyPair.getPublic('hex');
+                    const d_base64url = Buffer.from(privateKeyHex, 'hex').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+                    const privateKeyObj = crypto.createPrivateKey({
+                        key: {
+                            kty: 'EC',
+                            crv: 'secp256k1',
+                            d: d_base64url
+                        },
+                        format: 'jwk'
+                    });
+                    let publicKeyHex = crypto.createPublicKey(privateKeyObj).export({ type: 'spki', format: 'der' }).toString('hex');
 
                     userCredentials[username.toLowerCase()] = { salt, publicKey: publicKeyHex };
                     saveUserCredentials();
@@ -87,8 +93,19 @@ router.post('/login', (req, res) => {
         crypto.pbkdf2(password, userData.salt, 100000, 32, 'sha512', (err, derivedKey) => {
             if (err) return res.status(500).json({ error: 'Authentication failed.' });
             try {
-                const keyPair = ec.keyFromPrivate(derivedKey.toString('hex'));
-                if (keyPair.getPublic('hex') === userData.publicKey) res.json({ privateKey: derivedKey.toString('hex'), publicKey: userData.publicKey });
+                const privateKeyHex = derivedKey.toString('hex');
+                const d_base64url = Buffer.from(privateKeyHex, 'hex').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+                const privateKeyObj = crypto.createPrivateKey({
+                    key: {
+                        kty: 'EC',
+                        crv: 'secp256k1',
+                        d: d_base64url
+                    },
+                    format: 'jwk'
+                });
+                const publicKeyHex = crypto.createPublicKey(privateKeyObj).export({ type: 'spki', format: 'der' }).toString('hex');
+                
+                if (publicKeyHex === userData.publicKey) res.json({ privateKey: privateKeyHex, publicKey: userData.publicKey });
                 else res.status(401).json({ error: 'Invalid credentials.' });
             } catch (innerErr) {
                 res.status(500).json({ error: 'Login key processing failed: ' + innerErr.message });
