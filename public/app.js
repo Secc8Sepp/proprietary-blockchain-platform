@@ -1881,7 +1881,7 @@ function renderProfileTrackRow(track, index, contextId) {
 
     return `
         <div class="playlist-item" data-hash="${trackData.audioHash}" style="background: rgba(0,0,0,0.8); border: 1px solid var(--border); padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 15px; margin-bottom: 5px;">
-            <div class="anthem-play-btn" style="width:30px; height:30px; font-size:14px;" onclick="window.AudioEngine.playQueue(window.profilePlaylistContext['${contextId}'], ${index})">▶</div>
+            <div class="anthem-play-btn" style="width:30px; height:30px; font-size:14px;" onclick="handleProfilePlay('${contextId}', ${index})">▶</div>
             <div style="flex: 1; min-width: 0;">
                 <div style="font-size: 14px; font-weight: bold; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(trackData.trackTitle)}</div>
                 <div style="font-size: 11px; color: var(--text-muted);">${playCount.toLocaleString()} Streams</div>
@@ -1891,6 +1891,19 @@ function renderProfileTrackRow(track, index, contextId) {
             ${isOwner ? `<button class="secondary" style="padding: 4px 8px; font-size: 10px; flex-shrink: 0;" onclick="window.ActionEngine.promptEditSong('${trackData.audioHash}')">Edit</button>` : ''}
         </div>
     `;
+}
+
+// Helper to safely play a profile playlist track by context id and index.
+window.handleProfilePlay = function(contextId, index) {
+    try {
+        const tracks = window.profilePlaylistContext && window.profilePlaylistContext[contextId];
+        if (!tracks || tracks.length === 0) {
+            return alert('No tracks available for this playlist.');
+        }
+        window.AudioEngine.playQueue(tracks, index || 0);
+    } catch (e) {
+        console.error('handleProfilePlay error:', e);
+    }
 }
 
 function renderProfileTrackList(tracks, container, contextId) {
@@ -1968,18 +1981,25 @@ function renderPlaylistCard(playlist, isOwner) {
 
     const deleteBtn = isOwner && playlist.type === 'listener' ? `<button class="secondary" style="padding: 4px 8px; font-size: 10px;" onclick="window.ActionEngine.deletePlaylist('${playlist.id}')">Delete</button>` : '';
 
+    // Build nested tracks HTML so the playlist displays its songs grouped.
+    const tracksHtml = (playlist.tracks || []).map((t, i) => renderProfileTrackRow(t, i, playlist.id)).join('');
+
     return `
-        <div class="playlist-card" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); padding: 15px; border-radius: 8px; display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
-            <img src="${coverArt}" style="width: 60px; height: 60px; border-radius: 6px; object-fit: cover;">
-            <div style="flex: 1;">
-                <div style="font-size: 16px; font-weight: bold; color: #fff;">${escapeHtml(playlist.title)}</div>
-                <div style="font-size: 12px; color: var(--text-muted);">${trackCount} tracks</div>
+        <div class="playlist-card" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); padding: 15px; border-radius: 8px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px;">
+            <div style="display:flex; align-items:center; gap:15px;">
+                <img src="${coverArt}" style="width: 60px; height: 60px; border-radius: 6px; object-fit: cover;">
+                <div style="flex: 1;">
+                    <div style="font-size: 16px; font-weight: bold; color: #fff;">${escapeHtml(playlist.title)}</div>
+                    <div style="font-size: 12px; color: var(--text-muted);">${trackCount} tracks</div>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    ${deleteBtn}
+                    <button style="padding: 8px 15px;" onclick="window.AudioEngine.playQueue(window.profilePlaylistContext['${playlist.id}'], 0)">▶ Play</button>
+                    <button class="secondary" style="padding: 6px;" onclick="(function(btn, id){ const el=document.getElementById('playlist-contents-'+id); if(el){ el.style.display = el.style.display === 'none' ? 'block' : 'none'; btn.innerText = el.style.display === 'none' ? 'Show' : 'Hide'; }})(this, '${playlist.id}')">Show</button>
+                </div>
             </div>
-            <div style="display: flex; gap: 10px; align-items: center;">
-                ${deleteBtn}
-                <button style="padding: 8px 15px;" onclick="window.AudioEngine.playQueue(window.profilePlaylistContext['${playlist.id}'], 0)">
-                    ▶ Play
-                </button>
+            <div id="playlist-contents-${playlist.id}" style="display:none; margin-top:6px;">
+                ${tracksHtml}
             </div>
         </div>
     `;
@@ -2554,13 +2574,13 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
 
             let html = '';
 
+            // Always register all playlists into the profilePlaylistContext so playback helpers can find them
+            allPlaylists.forEach(p => {
+                if (p && p.id && p.tracks) {
+                    window.profilePlaylistContext[p.id] = p.tracks;
+                }
+            });
             if (userCreatedPlaylists.length > 0) {
-                // If user has custom playlists, show all available playlist cards
-                allPlaylists.forEach(p => {
-                    if (p && p.id && p.tracks) {
-                        window.profilePlaylistContext[p.id] = p.tracks;
-                    }
-                });
                 html += allPlaylists.map(p => renderPlaylistCard(p, isOwner)).join('');
             }
 
