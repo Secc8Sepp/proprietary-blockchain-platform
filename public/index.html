@@ -744,14 +744,50 @@
     <script src="/StemSplitterEngine.js?v=1.0.2"></script>
     <script src="/app.js?v=1.0.2"></script>
 
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js?v=1.0.2')
-            .then(reg => { window.swRegistration = reg; console.log('[PWA] Service Worker registered successfully.'); })
-            .catch(err => console.error('[PWA] Service Worker registration failed:', err));
-        });
-      }
-    </script>
+        <script>
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', async () => {
+                    try {
+                        const reg = await navigator.serviceWorker.register('/sw.js?v=1.0.2');
+                        window.swRegistration = reg;
+                        console.log('[PWA] Service Worker registered successfully.');
+
+                        // If there's a waiting SW, request it to skipWaiting and take control.
+                        if (reg.waiting) {
+                            console.log('[PWA] New service worker waiting - activating.');
+                            reg.waiting.postMessage('SKIP_WAITING');
+                        }
+
+                        // Listen for updatefound (new SW installing)
+                        reg.addEventListener('updatefound', () => {
+                            const installing = reg.installing;
+                            if (!installing) return;
+                            installing.addEventListener('statechange', () => {
+                                if (installing.state === 'installed') {
+                                    if (navigator.serviceWorker.controller) {
+                                        // New update available: tell it to activate
+                                        console.log('[PWA] Update installed; activating.');
+                                        reg.waiting && reg.waiting.postMessage('SKIP_WAITING');
+                                    } else {
+                                        console.log('[PWA] Service worker installed for the first time.');
+                                    }
+                                }
+                            });
+                        });
+
+                        // When a new service worker takes control, reload to use updated assets.
+                        navigator.serviceWorker.addEventListener('controllerchange', () => {
+                            console.log('[PWA] Controller changed - reloading to apply new service worker.');
+                            try { window.location.reload(); } catch (e) { /* ignore */ }
+                        });
+
+                        // Force a check for updates on load
+                        try { reg.update(); } catch (e) { /* ignore */ }
+                    } catch (err) {
+                        console.error('[PWA] Service Worker registration failed:', err);
+                    }
+                });
+            }
+        </script>
 </body>
 </html>

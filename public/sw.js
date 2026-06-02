@@ -29,6 +29,8 @@ self.addEventListener('install', event => {
         return cache.addAll(ASSETS_TO_CACHE);
       })
   );
+  // Activate new service worker as soon as it's finished installing.
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
@@ -44,6 +46,19 @@ self.addEventListener('activate', event => {
       );
     })
   );
+  // Take control of uncontrolled clients as soon as the SW activates
+  try { self.clients.claim(); } catch (e) { /* ignore on older browsers */ }
+});
+
+// Allow the page to trigger skipWaiting or clear caches via postMessage
+self.addEventListener('message', (event) => {
+  if (!event.data) return;
+  if (event.data === 'SKIP_WAITING' || (event.data && event.data.type === 'SKIP_WAITING')) {
+    self.skipWaiting();
+  }
+  if (event.data === 'CLEAR_CACHES' || (event.data && event.data.type === 'CLEAR_CACHES')) {
+    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))));
+  }
 });
 
 self.addEventListener('fetch', event => {
