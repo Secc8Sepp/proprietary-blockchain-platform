@@ -17,19 +17,19 @@ window.fetch = async function(...args) {
 const socket = io(API_BASE);
 
 // Core Application State
-let currentView = 'feed';
-let viewingUserPublicKey = ''; let eventsMap = null;
+var currentView = 'feed';
+var viewingUserPublicKey = ''; var eventsMap = null;
 
-let feedTracks = [];
-let eventsState = { isPlacing: false, currentFile: null, hashes: new Set(), mapMarkers: [] };
-let marketDataCache = { items: [], bounties: [] };
-let myCustomTheme = '';
-let myFollowing = [];
-let feedFilterMode = 'global';
-let currentViewedProfile = null;
-let localDB = null;
-let editedTop8 = [];
-let pendingCrewRequests = [];
+var feedTracks = [];
+var eventsState = { isPlacing: false, currentFile: null, hashes: new Set(), mapMarkers: [] };
+var marketDataCache = { items: [], bounties: [] };
+var myCustomTheme = '';
+var myFollowing = [];
+var feedFilterMode = 'global';
+var currentViewedProfile = null;
+var localDB = null;
+var editedTop8 = [];
+var pendingCrewRequests = [];
 window.activeWaveform = null;
 window.myPlaylists = [];
 window.waveformInstances = {};

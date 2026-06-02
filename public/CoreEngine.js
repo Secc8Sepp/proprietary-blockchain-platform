@@ -50,6 +50,7 @@ window.CoreEngine = {
             btn.disabled = true;
 
             const avatarHash = await window.uploadMediaAssetFile(avatarFile);
+            const avatarHash = await uploadMediaAssetFile(avatarFile);
             if (!avatarHash) throw new Error("Avatar upload failed. Please try again.");
             
             btn.innerText = "Creating Account...";
@@ -176,6 +177,9 @@ window.CoreEngine = {
         if (typeof window.subscribeToPush === 'function') window.subscribeToPush(publicKey);
         if (typeof window.syncFullChain === 'function') window.syncFullChain();
         if (typeof window.loadCloutStatus === 'function') window.loadCloutStatus();
+
+        if (typeof window.fetchUserProfile === 'function') window.fetchUserProfile(publicKey, false);
+        if (typeof window.loadMainGlobalFeed === 'function' && window.currentView === 'feed') window.loadMainGlobalFeed();
     },
 
     async sendSignedTransaction(type, receiver, data) {
