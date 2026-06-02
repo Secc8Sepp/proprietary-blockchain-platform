@@ -33,8 +33,13 @@ window.CoreEngine = {
             const passwordInput = document.getElementById('input-signup-password');
             const confirmPasswordInput = document.getElementById('input-signup-password-confirm');
             const referrerInput = document.getElementById('input-signup-referrer');
-            const avatarFile = document.getElementById('input-signup-avatar').files[0];
+            const avatarInput = document.getElementById('input-signup-avatar');
 
+            if (!usernameInput || !passwordInput || !confirmPasswordInput) {
+                return alert("Signup form is not properly initialized.");
+            }
+
+            const avatarFile = avatarInput ? avatarInput.files[0] : null;
             const username = usernameInput.value.trim();
             const password = passwordInput.value;
             const confirmPassword = confirmPasswordInput.value;
@@ -55,13 +60,17 @@ window.CoreEngine = {
             }
 
             const btn = document.getElementById('btn-signup');
-            btn.innerText = "Uploading Avatar...";
-            btn.disabled = true;
+            if (btn) {
+                btn.innerText = "Uploading Avatar...";
+                btn.disabled = true;
+            }
 
             const avatarHash = await uploadMediaAssetFile(avatarFile);
             if (!avatarHash) throw new Error("Avatar upload failed. Please try again.");
             
-            btn.innerText = "Creating Account...";
+            if (btn) {
+                btn.innerText = "Creating Account...";
+            }
             const res = await fetch('/api/auth/register', { 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -102,6 +111,9 @@ window.CoreEngine = {
     async handlePasswordLogin() {
         const usernameInput = document.getElementById('input-login-username');
         const passwordInput = document.getElementById('input-login-password');
+
+        if (!usernameInput || !passwordInput) return alert("Login form not found.");
+
         const username = usernameInput.value.trim();
         const password = passwordInput.value;
 
@@ -129,7 +141,9 @@ window.CoreEngine = {
         } catch (err) { alert("Login failed: " + err.message); }
     },
     handleKeyLogin() {
-        const keyStr = document.getElementById('input-login-key').value.trim();
+        const keyInput = document.getElementById('input-login-key');
+        if (!keyInput) return alert("Login key input not found.");
+        const keyStr = keyInput.value.trim();
         if (!keyStr) return alert("Please paste your key JSON string.");
         try {
             const parsed = JSON.parse(keyStr);
