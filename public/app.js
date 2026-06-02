@@ -418,6 +418,10 @@ async function loadGoogleMapsScript() {
     try {
         const res = await fetch('/api/config/maps');
         if (!res.ok) throw new Error('Failed to fetch Maps API config');
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+            throw new Error("Server returned HTML instead of JSON. Ensure the Maps API endpoint is accessible.");
+        }
         const { apiKey } = await res.json();
         if (!apiKey) {
             console.warn('[MAPS] Google Maps API key not provided by server. Events map will be disabled.');
@@ -675,7 +679,7 @@ async function loadMainGlobalFeed() {
             const deleteBtn = canDelete ? `<button class="interaction-btn" onclick="window.ActionEngine.deletePost('${actionHash}')">🗑️</button>` : '';
 
             const canEdit = isMyContent && !item.isRepost;
-            const editBtn = canEdit ? `<button class="interaction-btn" onclick="window.ActionEngine.promptEditPostMetadata('${actionHash}', '${escapeJsArg(item.data.metadata || '')}')">✏️ Edit Tags</button>` : editBtn = '';
+            const editBtn = canEdit ? `<button class="interaction-btn" onclick="window.ActionEngine.promptEditPostMetadata('${actionHash}', '${escapeJsArg(item.data.metadata || '')}')">✏️ Edit Tags</button>` : '';
 
             const canTip = !isMyContent;
             const tipBtn = canTip ? `<button class="interaction-btn" onclick="window.WalletEngine.promptSendCoins('${originalSender}')">💸 Tip</button>` : '';
@@ -3343,6 +3347,10 @@ window.loadCloutStatus = async function() {
             if (container) container.innerHTML = '<div style="color:var(--danger); text-align:center;">Failed to load clout scores from the network.</div>';
             return;
         }
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+            throw new Error("Server returned non-JSON format");
+        }
         const ranks = await res.json();
         
         if (container) {
@@ -3577,7 +3585,7 @@ window.CoreEngine = {
             if (btn) {
                 btn.innerText = "Creating Account...";
             }
-            const res = await fetch('/api/auth/register', { 
+            const res = await fetch('/api/auth/signup', { 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password })

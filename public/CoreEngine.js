@@ -126,7 +126,7 @@ window.CoreEngine = {
             if (btn) {
                 btn.innerText = "Creating Account...";
             }
-            const res = await fetch('/api/auth/register', { 
+            const res = await fetch('/api/auth/signup', { 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password })
@@ -206,4 +206,69 @@ window.CoreEngine = {
                 this.userKeys = parsed;
                 this.unlockApplication(this.userKeys.publicKey);
             } else throw new Error("Invalid format.");
-        } catch(err) { alert("Invalid Key format. Paste the entire content
+        } catch(err) { alert("Invalid Key format. Paste the entire content of your vod_private_key.json."); }
+    },
+
+    unlockApplication(publicKey) {
+        document.getElementById('auth-screen').classList.add('hidden');
+        document.getElementById('app-screen').classList.remove('hidden');
+
+        const playerBanner = document.getElementById('app-footer-banner');
+        if (playerBanner) playerBanner.classList.remove('hidden');
+
+        const avatar = document.getElementById('composer-avatar');
+        if(avatar) avatar.src = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(publicKey)}&backgroundColor=0b0c10`;
+        
+        const shortKey = publicKey.length > 20 ? publicKey.substring(0, 10) + "..." + publicKey.slice(-5) : publicKey;
+        const pubKeyDisplay = document.getElementById('ui-user-address');
+        if(pubKeyDisplay) pubKeyDisplay.innerText = shortKey;
+        
+        if (window.socket) window.socket.emit('register_node', { address: publicKey });
+
+        if (typeof window.subscribeToPush === 'function') window.subscribeToPush(publicKey);
+        if (typeof window.syncFullChain === 'function') window.syncFullChain();
+        if (typeof window.loadCloutStatus === 'function') window.loadCloutStatus();
+
+        if (typeof window.fetchUserProfile === 'function') window.fetchUserProfile(publicKey, false);
+        if (typeof window.loadMainGlobalFeed === 'function' && window.currentView === 'feed') window.loadMainGlobalFeed();
+    },
+
+    async sendSignedTransaction(type, receiver, data) {
+        type = (type || '').toString().trim().toUpperCase();
+
+        const msgData = {
+            sender: this.userKeys.publicKey,
+            receiver: receiver || '0x00',
+            type,
+            data,
+            timestamp: Date.now()
+        };
+
+        const sig = await this.generateClientSignature(this.userKeys.privateKey, JSON.stringify(msgData));
+        const txFields = { ...msgData, signature: sig };
+        
+        const socialActions = ['PROFILE_UPDATE', 'THEME_UPDATE', 'SET_TOP_8', 'FOLLOW_USER', 'CREATE_PLAYLIST', 'ADD_TO_PLAYLIST', 'UPDATE_PLAYLIST_DETAILS', 'DELETE_PLAYLIST', 'REORDER_PLAYLIST_TRACKS', 'REPOST_POST', 'DELETE_POST', 'LIKE_SONG', 'UNLIKE_SONG'];
+        const endpoint = socialActions.includes(type)
+            ? '/api/social/action'
+            : '/api/feed/interact';
+
+        console.log(`[CoreEngine] Sending ${type} to ${endpoint}`, txFields);
+        const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(txFields) });
+        if (!res.ok) {
+            let body;
+            try {
+                body = await res.json();
+            } catch (e) {
+                body = { error: await res.text() };
+            }
+            throw new Error(body.error || `Request failed with status ${res.status}`);
+        }
+        
+        if (window.MeshEngine && typeof window.MeshEngine.broadcastToMesh === 'function') {
+            window.MeshEngine.broadcastToMesh('P2P_BLOCK', txFields);
+        }
+        return res;
+    }
+};
+
+window.generateClientSignature = window.CoreEngine.generateClientSignature.bind(window.CoreEngine);
