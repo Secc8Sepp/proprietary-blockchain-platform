@@ -899,11 +899,10 @@ window.VODstudioEngine = {
             }
             #vodstudio-modal .console {
                 background-color: var(--vodcam-blue); width: 1080px; height: 780px;
-                border-radius: 20px; padding: 25px;
+                border-radius: 20px; padding: 15px 25px;
                 box-shadow: 0 35px 80px rgba(0,0,0,0.9), inset 0 3px 10px rgba(255,255,255,0.2);
                 border: 6px solid #1a252f; display: flex; flex-direction: column;
                 box-sizing: border-box; position: relative;
-                transform: scale(min(1, calc(100vw / 1120), calc(100vh / 850)));
                 transform-origin: center center;
             }
             #vodstudio-modal .console-top-bar {
@@ -953,9 +952,9 @@ window.VODstudioEngine = {
                 width: 40px; height: 16px; background: #000; border: 1px solid #fff; margin: 2px 0 6px 0; border-radius: 2px; cursor: pointer;
             }
             #vodstudio-modal .fader-track {
-                width: 10px; height: 250px; background: #050505; border: 1px solid rgba(255,255,255,0.2);
+                width: 10px; flex-grow: 1; min-height: 80px; background: #050505; border: 1px solid rgba(255,255,255,0.2);
                 box-shadow: inset 0 2px 5px rgba(0,0,0,0.8);
-                position: relative; margin-top: 25px; margin-bottom: 10px; border-radius: 4px;
+                position: relative; margin-top: 15px; margin-bottom: 10px; border-radius: 4px;
             }
             #vodstudio-modal .fader-cap {
                 width: 38px; height: 50px; background: linear-gradient(180deg, #dcdcdc, #fff 10%, #ccc 45%, #777);
@@ -1109,7 +1108,7 @@ window.VODstudioEngine = {
                         <button class="m-key solo-btn ${this.tracks[trackName].isSoloed ? 'active' : ''}" data-track="${trackName}" style="flex:1; height: 20px; font-size: 9px; padding: 0;" title="Solo Track">SOLO</button>
                     </div>
                 </div>
-                <div class="fader-track" style="margin-top: 25px; margin-bottom: 10px;">
+                <div class="fader-track" style="margin-top: 15px; margin-bottom: 10px;">
                     <div id="vu-meter-${trackName}" style="position: absolute; bottom: 0; left: 0; width: 100%; height: 0%; background: var(--knob-green); opacity: 0.6; pointer-events: none; transition: height 0.05s ease-out; box-shadow: 0 0 10px var(--knob-green); border-radius: 3px;"></div>
                     <div class="fader-cap volume-fader" style="z-index: 2;"></div>
                 </div>
@@ -1143,13 +1142,13 @@ window.VODstudioEngine = {
                         <span class="chalk-text" style="color:var(--danger); margin-bottom: 2px;">LIMIT</span>
                         <div class="toggle-switch-3way limiter-switch" style="border-color:var(--danger); margin-bottom: 10px; width: 30px; height: 14px; transition: 0.2s;"></div>
                         <span class="chalk-text" style="color:var(--warning); margin-bottom: 5px;">MASTER</span>
-                        <div class="fader-track" style="height: 315px; border-color: rgba(255,170,0,0.5); margin-top: 0; margin-bottom: 10px;">
+                        <div class="fader-track" style="flex-grow: 1; min-height: 80px; border-color: rgba(255,170,0,0.5); margin-top: 0; margin-bottom: 10px;">
                             <div id="master-vu-meter" style="position: absolute; bottom: 0; left: 0; width: 100%; height: 0%; background: var(--warning); opacity: 0.6; pointer-events: none; transition: height 0.05s ease-out; box-shadow: 0 0 10px var(--warning); border-radius: 3px;"></div>
                                 <div class="fader-cap monitor-fader" style="top: 55px; background: linear-gradient(180deg, #444, #777 10%, #333 45%, #111); border-color: var(--warning); z-index: 2;"></div>
                         </div>
                         </div>
                     <div style="display: flex; flex-direction: column; justify-content: space-between; flex: 1; align-items: center;">
-                        <div style="width: 100%; max-width: 250px; display: flex; flex-direction: column; height: 100%; justify-content: space-between;">
+                        <div style="width: 100%; max-width: 250px; display: flex; flex-direction: column; flex-grow: 1; justify-content: space-evenly;">
                             <div>
                                 <label style="background: rgba(102, 252, 241, 0.1); border: 1px dashed var(--primary); padding: 6px; border-radius: 4px; text-align: center; cursor: pointer; display: block; margin-bottom: 10px; transition: 0.2s;" onmouseover="this.style.background='rgba(102, 252, 241, 0.2)'" onmouseout="this.style.background='rgba(102, 252, 241, 0.1)'">
                                     <span style="font-size: 12px; font-weight: bold; color: var(--primary);">🪄 AI STEM SPLIT TRACK</span>
@@ -1289,6 +1288,31 @@ window.VODstudioEngine = {
         if (!this.vuMeterAnimation) {
             this.drawVUMeter();
         }
+
+        if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
+        this._resizeHandler = () => {
+            const consoleEl = modal.querySelector('.console');
+            if (!consoleEl) return;
+            const availableWidth = window.innerWidth;
+            const availableHeight = window.innerHeight;
+            const padding = 20;
+
+            const scaleWidth = Math.min(1, (availableWidth - padding) / 1080);
+            let targetHeight = (availableHeight - padding) / scaleWidth;
+            const finalHeight = Math.max(580, Math.min(780, targetHeight));
+            
+            let finalScale = scaleWidth;
+            if (finalHeight * finalScale > availableHeight - padding) {
+                finalScale = (availableHeight - padding) / finalHeight;
+            }
+            
+            consoleEl.style.transform = `scale(${finalScale})`;
+            consoleEl.style.height = `${finalHeight}px`;
+            this.syncUI();
+        };
+        window.addEventListener('resize', this._resizeHandler);
+        this._resizeHandler();
+
         this.bindEvents(modal);
     },
 
@@ -1646,6 +1670,7 @@ window.VODstudioEngine = {
             document.removeEventListener('pointermove', pointerMoveHandler);
             document.removeEventListener('pointerup', pointerUpHandler);
             document.removeEventListener('pointercancel', pointerUpHandler);
+            window.removeEventListener('resize', this._resizeHandler);
             this.stop();
             if (this.micStream) {
                 this.micStream.getTracks().forEach(t => t.stop());

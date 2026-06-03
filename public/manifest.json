@@ -5,12 +5,6 @@
   "id": "/",
   "start_url": "/",
   "display": "standalone",
-  "display_override": [
-    "standalone",
-    "minimal-ui",
-    "window-controls-overlay",
-    "tabbed"
-  ],
   "note_handling": {
     "action": "/new-post"
   },
