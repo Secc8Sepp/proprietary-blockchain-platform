@@ -14,7 +14,7 @@
   "iarc_rating_id": "",
   "background_color": "#0b0c10",
   "theme_color": "#66fcf1",
-  "orientation": "portrait",
+  "orientation": "any",
   "categories": ["music", "social", "entertainment"],
   "icons": [
     {

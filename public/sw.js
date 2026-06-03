@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vod-network-v33';
+const CACHE_NAME = 'vod-network-v34';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
