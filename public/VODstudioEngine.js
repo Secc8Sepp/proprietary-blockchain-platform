@@ -863,12 +863,6 @@ window.VODstudioEngine = {
     renderUI() {
         if (document.getElementById('vodstudio-modal')) return;
         
-        try {
-            if (screen.orientation && screen.orientation.lock) {
-                screen.orientation.lock('landscape').catch(e => console.warn('Orientation lock ignored:', e));
-            }
-        } catch (e) {}
-
         const modal = document.createElement('div');
         modal.id = 'vodstudio-modal';
         
@@ -886,16 +880,7 @@ window.VODstudioEngine = {
                 position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
                 background-color: rgba(17, 17, 17, 0.95); z-index: 9999;
                 display: flex; justify-content: center; align-items: center;
-                font-family: 'Courier New', Courier, monospace; color: #fff; user-select: none;
-            }
-            @media (orientation: portrait) and (max-width: 768px) {
-                #vodstudio-modal::before {
-                    content: "📱 Rotate your device sideways for the best 4-Track experience.";
-                    position: absolute; top: 5%; left: 50%; transform: translateX(-50%);
-                    color: var(--warning); font-size: 14px; font-weight: bold; text-align: center;
-                    z-index: 10000; width: 90%; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; border: 1px solid var(--warning);
-                    pointer-events: none;
-                }
+                font-family: 'Courier New', Courier, monospace; color: #fff; user-select: none; overflow: hidden;
             }
             #vodstudio-modal .console {
                 background-color: var(--vodcam-blue); width: 1080px; height: 780px;
@@ -1658,11 +1643,6 @@ window.VODstudioEngine = {
         }
 
         document.getElementById('btn-close-vodcam').onclick = () => {
-            try {
-                if (screen.orientation && screen.orientation.unlock) {
-                    screen.orientation.unlock();
-                }
-            } catch (e) {}
             if (this.vuMeterAnimation) {
                 cancelAnimationFrame(this.vuMeterAnimation);
                 this.vuMeterAnimation = null;
