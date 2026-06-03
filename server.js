@@ -282,13 +282,9 @@ if (authModule) {
 app.use('/api/social', socialRoutes);
 app.use('/api/feed', feedRoutes);
 app.use('/api/auth', authModule.router);
-try {
-    app.use('/api/tools', require('./routes/tools'));
-} catch (e) {
-    if (e.code === 'MODULE_NOT_FOUND') {
-        console.warn("⚠️  './routes/tools.js' not found, skipping. AI Stem Splitter will be disabled.");
-    } else { throw e; }
-}
+
+const toolsRoutes = require('./routes/tools');
+app.use('/api/tools', toolsRoutes);
 
 app.get('/api/social/clout', (req, res) => {
     try {
@@ -516,10 +512,7 @@ app.get('/tracks/:filename', (req, res, next) => {
     res.status(404).send('Asset missing from swarm');
 });
 
-// 3. STATIC ASSETS
-app.use('/tmp', express.static(path.join(__dirname, 'tmp')));
-
-// 4. FALLBACK
+// 3. FALLBACK
 app.get('*', (req, res) => {
     // Set headers to prevent caching of the main index.html file.
     // This ensures the browser always fetches the latest version, which will have updated
@@ -886,6 +879,7 @@ io.on('connection', (socket) => {
             const msg = { sender: senderNode.address, text, time: Date.now(), roles };
             if (!server.channels[channelId].messages) server.channels[channelId].messages = [];
             server.channels[channelId].messages.push(msg);
+        if (server.channels[channelId].messages.length > 500) server.channels[channelId].messages.shift();
             saveDBMemory();
             io.to(`${serverId}_${channelId}`).emit('new_message', msg);
         }
@@ -942,6 +936,7 @@ io.on('connection', (socket) => {
         // Store securely on backend to prevent message loss on refresh
         if (!dbMemory.directMessages) dbMemory.directMessages = [];
         dbMemory.directMessages.push(msgPayload);
+        if (dbMemory.directMessages.length > 2000) dbMemory.directMessages.shift(); // Cap DM history size
         saveDBMemory();
 
         sendPushNotification(data.to, { title: 'New Secure DM 💬', body: `Message from Node_${senderNode.address.substring(0,6)}` });

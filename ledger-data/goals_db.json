@@ -1,0 +1,102 @@
+{
+  "lastDailyRotation": 1780498123178,
+  "lastWeeklyRotation": 1780498123178,
+  "users": {
+    "3056301006072a8648ce3d020106052b8104000a034200049b412e497874ec237606ac926aaf1e70654e3155fa5d6421b1eb8f018c0c68c6ec17b5c94a9bd7ab6fc34c38760e9f02686dafe2163712416c51cf5ef6826d43": {
+      "daily": [
+        {
+          "id": "d_listen_5",
+          "type": "LISTEN_SONGS",
+          "target": 5,
+          "reward": 1000,
+          "desc": "Listen to 5 songs",
+          "progress": 2,
+          "completed": false
+        },
+        {
+          "id": "d_listen_15",
+          "type": "LISTEN_SONGS",
+          "target": 15,
+          "reward": 3000,
+          "desc": "Listen to 15 songs",
+          "progress": 2,
+          "completed": false
+        },
+        {
+          "id": "d_comment_3",
+          "type": "LEAVE_COMMENTS",
+          "target": 3,
+          "reward": 500,
+          "desc": "Leave 3 comments on the feed",
+          "progress": 0,
+          "completed": false
+        },
+        {
+          "id": "d_friend_2",
+          "type": "ADD_FRIENDS",
+          "target": 2,
+          "reward": 1500,
+          "desc": "Lock in 2 new crew members",
+          "progress": 1,
+          "completed": false
+        },
+        {
+          "id": "d_like_5",
+          "type": "LIKE_POSTS",
+          "target": 5,
+          "reward": 500,
+          "desc": "Like 5 posts or images",
+          "progress": 0,
+          "completed": false
+        }
+      ],
+      "weekly": [
+        {
+          "id": "w_listen_50",
+          "type": "LISTEN_SONGS",
+          "target": 50,
+          "reward": 10000,
+          "desc": "Listen to 50 songs",
+          "progress": 2,
+          "completed": false
+        },
+        {
+          "id": "w_refer_1",
+          "type": "REFER_USERS",
+          "target": 1,
+          "reward": 25000,
+          "desc": "Refer 1 new user to VOD",
+          "progress": 0,
+          "completed": false
+        },
+        {
+          "id": "w_upload_1",
+          "type": "UPLOAD_TRACK",
+          "target": 1,
+          "reward": 10000,
+          "desc": "Upload a new track",
+          "progress": 0,
+          "completed": false
+        },
+        {
+          "id": "w_stake_1",
+          "type": "STAKE_SONG",
+          "target": 1,
+          "reward": 15000,
+          "desc": "Put a song up for stake",
+          "progress": 0,
+          "completed": false
+        },
+        {
+          "id": "w_post_5",
+          "type": "PUBLISH_POSTS",
+          "target": 5,
+          "reward": 5000,
+          "desc": "Publish 5 new posts",
+          "progress": 0,
+          "completed": false
+        }
+      ]
+    }
+  }
+}

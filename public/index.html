@@ -266,6 +266,11 @@
                                     </div>
                                     
                                     <label style="font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                                        <input type="checkbox" id="audio-allow-remix-checkbox" style="width:auto; margin:0;" checked> 
+                                        Allow Network to Remix (AI Stem Split)
+                                    </label>
+
+                                    <label style="font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:8px; margin-bottom:10px;">
                                         <input type="checkbox" id="audio-stake-checkbox" style="width:auto; margin:0;" onchange="document.getElementById('audio-stake-options').style.display = this.checked ? 'block' : 'none'"> 
                                         Put shares up for stake
                                     </label>
@@ -745,6 +750,7 @@
     <script src="/GlobalTagEngine.js?v=1.0.2"></script>
     <script src="/BattleEngines.js?v=1.0.2"></script>
     <script src="/StemSplitterEngine.js?v=1.0.2"></script>
+    <script src="/VODstudioEngine.js?v=1.0.2"></script>
     <script src="/app.js?v=1.0.2"></script>
 
         <script>

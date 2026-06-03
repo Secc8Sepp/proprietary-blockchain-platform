@@ -66,6 +66,8 @@ window.ActionEngine = {
                 const tags = tagsEl ? tagsEl.value.trim() : '';
                 const stakeCheckEl = document.getElementById('audio-stake-checkbox');
                 const forStake = stakeCheckEl ? stakeCheckEl.checked : false;
+                const allowRemixEl = document.getElementById('audio-allow-remix-checkbox');
+                const allowRemix = allowRemixEl ? allowRemixEl.checked : false;
                 let sellPercentage = 0; let pricePerShare = 0; let totalShares = 100;
                 if (forStake) {
                     const equityPercent = parseInt(document.getElementById('audio-stake-percent').value) || 0;
@@ -93,6 +95,7 @@ window.ActionEngine = {
                     audioHash: hash, 
                     coverHash: coverHash, 
                     metadata: tags, 
+                    allowRemix: allowRemix,
                     forStake: forStake, 
                     sellPercentage: sellPercentage, 
                     pricePerShare: pricePerShare, 

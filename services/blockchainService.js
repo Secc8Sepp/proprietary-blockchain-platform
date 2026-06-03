@@ -155,19 +155,9 @@ class BlockchainService extends EventEmitter {
     }
 
     calculateStemSplitCost(publicKey) {
-        const now = Date.now();
-        if (now - this.stemSplitUsage.lastReset > 24 * 60 * 60 * 1000) {
-            this.stemSplitUsage = { lastReset: now, globalCount: 0, userCounts: {} };
-        }
-
-        const baseCost = 100000;
-        const userUsageToday = this.stemSplitUsage.userCounts[publicKey] || 0;
-        const globalUsageToday = this.stemSplitUsage.globalCount || 0;
-
-        const personalEscalation = Math.pow(userUsageToday, 2) * 10000; 
-        const networkCongestion = globalUsageToday * 500; 
-
-        return baseCost + personalEscalation + networkCongestion;
+        // Temporarily flattened to 10k $VOD to prevent transaction mismatch errors
+        // and make it highly accessible for early adopters.
+        return 10000;
     }
 
     // THE ATTENTION ECONOMY CALCULATOR

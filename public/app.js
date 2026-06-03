@@ -969,6 +969,12 @@ function renderPostContent(item) {
             `;
         }
 
+        const remixHtml = item.data.allowRemix ? `
+            <button class="secondary" style="padding:8px 15px; font-size: 12px;" onclick="window.StemSplitterEngine.splitFromHash('${item.data.audioHash}', '${escapeJsArg(item.data.trackTitle)}', this)">
+                🎛️ Remix
+            </button>
+        ` : '';
+
         return `
             <div class="audio-post-v2">
                 ${item.data.caption ? `<div style="margin-bottom: 10px; color: #fff;">${parseMentions(item.data.caption)}</div>` : ''}
@@ -999,6 +1005,7 @@ function renderPostContent(item) {
                     <button class="secondary" style="padding:8px 15px; font-size: 12px;" onclick="window.ActionEngine.requestSongShare('${item.data.audioHash}', '${item.sender}')">
                         📈 Request Stake
                     </button>
+                    ${remixHtml}
                     ${(window.CoreEngine && item.sender !== window.CoreEngine.userKeys.publicKey) ? `<button class="interaction-btn" style="padding:8px 15px; font-size: 12px;" onclick="window.WalletEngine.promptSendCoins('${item.sender}')">💸 Tip Artist</button>` : ''}
                 </div>
                 ${sharesHtml}
