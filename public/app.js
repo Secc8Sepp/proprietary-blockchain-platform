@@ -817,14 +817,8 @@ function renderPostContent(item) {
                 if (playButton && playButton.innerText === '⏳ Loading...') playButton.innerText = '⏸️ Pause';
                 wavesurfer.setMute(true);
 
-                const globalPlayer = document.getElementById('global-audio-player');
-                if (window.AudioEngine.activeTrackHash === audioHash && !globalPlayer.paused) {
-                    wavesurfer.play();
-                    const progress = globalPlayer.currentTime / globalPlayer.duration;
-                    if (isFinite(progress)) {
-                        wavesurfer.seekTo(progress);
-                    }
-                }
+                // Fix for mobile audio glitching: Do not call wavesurfer.play(). 
+                // Dual concurrent media elements severely degrade mobile hardware decoding.
 
                 console.log(`[Waveform] Ready: ${transactionHash}`);
              });
@@ -836,28 +830,54 @@ function renderPostContent(item) {
                          visualizerLoaded = true;
                          if (playButton) playButton.innerText = '⏳ Loading...';
                          wavesurfer.load(`/tracks/${encodeURIComponent(audioHash)}`);
-                    } else if (wavesurfer.isReady) {
-                        wavesurfer.play();
                     }
                 } else {
                     if (playButton && playButton.innerText !== '❌ Error') playButton.innerText = '▶ Play';
-                    if (wavesurfer.isReady) wavesurfer.pause();
                 }
             };
 
             const handleGlobalPause = (e) => {
                 if (playButton && playButton.innerText !== '❌ Error') playButton.innerText = '▶ Play';
-                if (wavesurfer.isReady) wavesurfer.pause();
             };
             
+            const handleGlobalTimeUpdate = (e) => {
+                if (e.detail.audioHash === audioHash && wavesurfer.isReady) {
+                    const ct = e.detail.currentTime;
+                    const dur = e.detail.duration;
+                    const progress = ct / dur;
+                    if (isFinite(progress)) {
+                        if (wavesurfer.drawer) wavesurfer.drawer.progress(progress);
+                        
+                        if (wavesurfer.regions && wavesurfer.regions.list) {
+                            for (const id in wavesurfer.regions.list) {
+                                const region = wavesurfer.regions.list[id];
+                                if (ct >= region.start && ct <= region.end + 2.0) {
+                                    if (!region._isShowing) {
+                                        region._isShowing = true;
+                                        wavesurfer.fireEvent('region-in', region);
+                                    }
+                                } else {
+                                    if (region._isShowing) {
+                                        region._isShowing = false;
+                                        wavesurfer.fireEvent('region-out', region);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
             document.addEventListener('vod-global-play', handleGlobalPlay);
             document.addEventListener('vod-global-pause', handleGlobalPause);
             document.addEventListener('vod-global-ended', handleGlobalPause);
+            document.addEventListener('vod-global-timeupdate', handleGlobalTimeUpdate);
 
             wavesurfer.on('destroy', () => {
                 document.removeEventListener('vod-global-play', handleGlobalPlay);
                 document.removeEventListener('vod-global-pause', handleGlobalPause);
                 document.removeEventListener('vod-global-ended', handleGlobalPause);
+                document.removeEventListener('vod-global-timeupdate', handleGlobalTimeUpdate);
             });
 
              wavesurfer.on('seek', (progress) => {

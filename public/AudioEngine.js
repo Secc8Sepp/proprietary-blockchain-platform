@@ -10,6 +10,9 @@ window.AudioEngine = {
     lastClientPing: 0,
     isPreviewMode: false,
     socket: null,
+    audioCtx: null,
+    mediaSource: null,
+    limiter: null,
 
     init(socket) {
         this.socket = socket;
@@ -56,7 +59,11 @@ window.AudioEngine = {
 
         if (volSlider) {
             const savedVol = localStorage.getItem('vod_volume');
-            if (savedVol !== null) { player.volume = savedVol; volSlider.value = savedVol; }
+            if (savedVol !== null) { 
+                player.volume = savedVol; volSlider.value = savedVol; 
+            } else {
+                player.volume = 0.7; volSlider.value = 0.7; // Tame default volume
+            }
             volSlider.addEventListener('input', (e) => {
                 player.volume = e.target.value;
                 localStorage.setItem('vod_volume', e.target.value);
@@ -146,6 +153,41 @@ window.AudioEngine = {
         if (window.CoreEngine) window.CoreEngine.setPresence(undefined, null, null);
     },
 
+    setupWebAudio(player) {
+        if (this.audioCtx) {
+            if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+            return;
+        }
+        try {
+            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Allow CORS audio processing if tracks are hosted externally
+            player.crossOrigin = "anonymous";
+            
+            this.mediaSource = this.audioCtx.createMediaElementSource(player);
+            
+            // Dynamics Compressor to act as a Brickwall Limiter for hot tracks
+            this.limiter = this.audioCtx.createDynamicsCompressor();
+            this.limiter.threshold.value = -3.0; // Clamp peaks slightly below 0dBFS
+            this.limiter.knee.value = 0.0;
+            this.limiter.ratio.value = 20.0; // Aggressive limiting to squash clipping
+            this.limiter.attack.value = 0.002;
+            this.limiter.release.value = 0.100;
+            
+            // Final safety gain reduction
+            const outGain = this.audioCtx.createGain();
+            outGain.gain.value = 0.9;
+            
+            this.mediaSource.connect(this.limiter);
+            this.limiter.connect(outGain);
+            outGain.connect(this.audioCtx.destination);
+            
+            console.log("[AUDIO ENGINE] Web Audio Limiter initialized to tame hot uploads.");
+        } catch (err) {
+            console.warn("[AUDIO ENGINE] Web Audio routing failed:", err);
+        }
+    },
+
     async triggerProofOfListenMint(trackHash, trackArtist) {
         if (!trackHash || !trackArtist) return;
         try {
@@ -156,6 +198,9 @@ window.AudioEngine = {
 
     playTrack(title, audioHash, artistPublicKey, artistName, coverHash, isPreview = false) {
         const player = document.getElementById('global-audio-player');
+        
+        // Initialize Web Audio Limiter on first user interaction
+        this.setupWebAudio(player);
 
         // If this track is already the active one, just toggle play/pause.
         if (this.activeTrackHash === audioHash && player.src.includes(audioHash)) {

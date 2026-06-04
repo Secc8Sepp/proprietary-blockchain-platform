@@ -883,7 +883,7 @@ window.VODstudioEngine = {
                 font-family: 'Courier New', Courier, monospace; color: #fff; user-select: none; overflow: hidden;
             }
             #vodstudio-modal .console {
-                background-color: var(--vodcam-blue); width: 1080px; height: 780px;
+                background-color: var(--vodcam-blue); min-width: 1080px; width: max-content; height: 780px;
                 border-radius: 20px; padding: 15px 25px;
                 box-shadow: 0 35px 80px rgba(0,0,0,0.9), inset 0 3px 10px rgba(255,255,255,0.2);
                 border: 6px solid #1a252f; display: flex; flex-direction: column;
@@ -1107,7 +1107,7 @@ window.VODstudioEngine = {
             <div style="max-width: 800px; color: #ccc; font-size: 16px; line-height: 1.6; text-align: left; background: #1a252f; padding: 30px; border-radius: 12px; border: 2px solid var(--border);">
                 <p><strong style="color: var(--warning);">Welcome to the VODstudio 4-Track.</strong> This is a fully functional digital audio workstation built entirely in your browser.</p>
                 <ul style="padding-left: 20px; margin-top: 15px;">
-                    <li style="margin-bottom: 10px;"><strong>Load & Split:</strong> Use the "AI STEM SPLIT" to upload a full track and automatically extract 4 stems, or click "LOAD" on each channel for individual files.</li>
+                    <li style="margin-bottom: 10px;"><strong>Load & Split:</strong> Use the "STEM SPLIT" to upload a full track and automatically extract 4 stems, or click "LOAD" on each channel for individual files.</li>
                     <li style="margin-bottom: 10px;"><strong>Record:</strong> Click "REC FUNC" on a channel to arm it, then hit the red record button to lay down vocals or instruments.</li>
                     <li style="margin-bottom: 10px;"><strong>Mix:</strong> Use the channel strips to adjust EQ, Pan, Stereo Width, and FX Sends. The Master bay includes global FX chains, Autotune, and Limiter settings.</li>
                     <li style="margin-bottom: 10px;"><strong>Export:</strong> Click "EXPORT STEMS & MINT" to bounce your final mixdown to the global feed.</li>
@@ -1136,7 +1136,7 @@ window.VODstudioEngine = {
                         <div style="width: 100%; max-width: 250px; display: flex; flex-direction: column; flex-grow: 1; justify-content: space-evenly;">
                             <div>
                                 <label style="background: rgba(102, 252, 241, 0.1); border: 1px dashed var(--primary); padding: 6px; border-radius: 4px; text-align: center; cursor: pointer; display: block; margin-bottom: 10px; transition: 0.2s;" onmouseover="this.style.background='rgba(102, 252, 241, 0.2)'" onmouseout="this.style.background='rgba(102, 252, 241, 0.1)'">
-                                    <span style="font-size: 12px; font-weight: bold; color: var(--primary);">🪄 AI STEM SPLIT TRACK</span>
+                                    <span style="font-size: 12px; font-weight: bold; color: var(--primary);">🪄 STEM SPLIT TRACK</span>
                                     <input type="file" id="vodstudio-ai-split-input" accept="audio/*" style="display:none;" />
                                     <div id="vodstudio-ai-split-status" style="font-size: 9px; color: var(--text-muted); margin-top: 2px;">Upload full track to auto-extract stems to Ch 1-4</div>
                                 </label>
@@ -1278,11 +1278,15 @@ window.VODstudioEngine = {
         this._resizeHandler = () => {
             const consoleEl = modal.querySelector('.console');
             if (!consoleEl) return;
+            
+            consoleEl.style.transform = 'none';
+            const actualWidth = consoleEl.offsetWidth || 1080;
+
             const availableWidth = window.innerWidth;
             const availableHeight = window.innerHeight;
             const padding = 20;
 
-            const scaleWidth = Math.min(1, (availableWidth - padding) / 1080);
+            const scaleWidth = Math.min(1, (availableWidth - padding) / actualWidth);
             let targetHeight = (availableHeight - padding) / scaleWidth;
             const finalHeight = Math.max(580, Math.min(780, targetHeight));
             
