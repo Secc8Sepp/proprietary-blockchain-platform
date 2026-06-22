@@ -64,7 +64,7 @@ window.VODstudioEngine = {
 
         // Create "VODCAM 414" analog tape warmth effect
         this.tapeSaturation = this.audioCtx.createWaveShaper();
-        this.tapeSaturation.curve = this.makeDistortionCurve(50); // Add analog drive
+        this.tapeSaturation.curve = window.FXEngine.makeDistortionCurve(50); // Add analog drive
         
         // Create Analyser for VU Meter
         this.masterAnalyser = this.audioCtx.createAnalyser();
@@ -136,7 +136,7 @@ window.VODstudioEngine = {
         this.tracks[trackName].vocalMakeup.connect(this.tracks[trackName].vocalMix);
 
         this.tracks[trackName].tapeSaturation = this.audioCtx.createWaveShaper();
-        this.tracks[trackName].tapeSaturation.curve = this.makeDistortionCurve(10);
+        this.tracks[trackName].tapeSaturation.curve = window.FXEngine.makeDistortionCurve(10);
         this.tracks[trackName].vocalBypass.connect(this.tracks[trackName].tapeSaturation);
         this.tracks[trackName].vocalMix.connect(this.tracks[trackName].tapeSaturation);
 
@@ -612,7 +612,7 @@ window.VODstudioEngine = {
                 trim.gain.value = track.trim ? track.trim.gain.value : 0.5;
                 
                 const trackTape = offlineCtx.createWaveShaper();
-                trackTape.curve = this.makeDistortionCurve(10);
+                trackTape.curve = window.FXEngine.makeDistortionCurve(10);
                 trim.connect(trackTape);
 
                 const autotuneBypass = offlineCtx.createGain();
@@ -841,22 +841,6 @@ window.VODstudioEngine = {
         if (this.tracks[trackName].panner) {
             this.tracks[trackName].panner.pan.value = panLevel;
         }
-    },
-
-    // Math formula to simulate analog tape saturation
-    makeDistortionCurve(amount) {
-        let k = typeof amount === 'number' ? amount : 50;
-        const n_samples = 44100;
-        const curve = new Float32Array(n_samples);
-        const deg = Math.PI / 180;
-        // Calculate max value at x = 1 for mathematical amplitude normalization
-        const maxVal = ((3 + k) * 20 * deg) / (Math.PI + k);
-        for (let i = 0; i < n_samples; ++i) {
-            let x = i * 2 / n_samples - 1;
-            let val = (3 + k) * x * 20 * deg / (Math.PI + k * Math.abs(x));
-            curve[i] = val / maxVal; // Normalize so it peaks back at -1.0 to 1.0
-        }
-        return curve;
     },
 
     // --- HARDWARE UI INJECTION ---
@@ -1261,6 +1245,7 @@ window.VODstudioEngine = {
                                     <button id="btn-load-tape" class="secondary" style="flex: 1; padding: 6px; font-size: 11px;">📂 LOAD TAPE</button>
                                 </div>
                                 <div class="web3-mint-bar chalk-text" id="btn-mint" style="margin-top: 5px;">🚀 EXPORT STEMS & MINT</div>
+                                <button id="btn-open-po33" class="secondary" style="margin-top: 5px; width: 100%; font-size: 12px; font-weight: bold; padding: 8px; border-color: var(--knob-orange); color: var(--knob-orange); background: rgba(0,0,0,0.5);">📟 OPEN VO-88</button>
                             </div>
                         </div>
                     </div>
@@ -1716,6 +1701,20 @@ window.VODstudioEngine = {
             setTimeout(() => this.bounceMixdown(), 100);
         };
         
+        const po33Btn = modal.querySelector('#btn-open-po33');
+        if (po33Btn) {
+            po33Btn.onclick = () => {
+                if (!window.PO33Engine) {
+                    const script = document.createElement('script');
+                    script.src = '/PO33Engine.js';
+                    script.onload = () => window.PO33Engine.init(this);
+                    document.head.appendChild(script);
+                } else {
+                    window.PO33Engine.init(this);
+                }
+            };
+        }
+
         setTimeout(() => {
             const rotATSpeed = (this.autotuneSpeedVal * 300) - 150;
             const rotATAmt = (this.autotuneAmountVal * 300) - 150;
@@ -1895,15 +1894,15 @@ window.VODstudioEngine = {
         offlineLimiter.release.value = 0.050;
 
         const offlineTape = offlineCtx.createWaveShaper();
-        offlineTape.curve = this.makeDistortionCurve(50);
+        offlineTape.curve = window.FXEngine.makeDistortionCurve(50);
         offlineMaster.connect(offlineLimiter);
         offlineLimiter.connect(offlineTape);
         offlineTape.connect(offlineCtx.destination);
         
         const offlineFx1Input = offlineCtx.createGain();
         const offlineFx2Input = offlineCtx.createGain();
-        this.buildFxChain(offlineCtx, this.fx1Type, offlineFx1Input, offlineMaster, this.fx1Param1Val, this.fx1Param2Val);
-        this.buildFxChain(offlineCtx, this.fx2Type, offlineFx2Input, offlineMaster, this.fx2Param1Val, this.fx2Param2Val);
+        window.FXEngine.buildNativeFxChain(offlineCtx, this.wasmModule, this.fx1Type, offlineFx1Input, offlineMaster, this.fx1Param1Val, this.fx1Param2Val);
+        window.FXEngine.buildNativeFxChain(offlineCtx, this.wasmModule, this.fx2Type, offlineFx2Input, offlineMaster, this.fx2Param1Val, this.fx2Param2Val);
 
         for (const trackName in this.tracks) {
             const track = this.tracks[trackName];
@@ -2223,7 +2222,7 @@ window.VODstudioEngine = {
         const p1 = this[`fx${fxNum}Param1Val`];
         const p2 = this[`fx${fxNum}Param2Val`];
         
-        const chain = this.buildFxChain(this.audioCtx, type, input, this.masterGain, p1, p2);
+        const chain = window.FXEngine.buildNativeFxChain(this.audioCtx, this.wasmModule, type, input, this.masterGain, p1, p2);
         this[`fx${fxNum}Nodes`] = chain.nodes;
         this[`fx${fxNum}Param1`] = chain.param1;
         this[`fx${fxNum}Param2`] = chain.param2;

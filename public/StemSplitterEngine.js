@@ -9,22 +9,15 @@ window.StemSplitterEngine = {
     },
 
     async render() {
-        const container = document.getElementById('view-tools');
+        let container = document.getElementById('stem-splitter-container');
+        if (!container) {
+            // Fallback for standalone electron app
+            container = document.getElementById('view-tools');
+        }
         if (!container) return;
 
         container.innerHTML = `
-            <div class="card" style="margin-bottom: 20px; border: 2px solid var(--warning); box-shadow: 0 0 15px rgba(255, 170, 0, 0.2);">
-                <div class="card-header" style="background: rgba(255, 170, 0, 0.1);">
-                    <h2 style="margin:0; color: var(--warning);">🎛️ VODstudio 4-Track</h2>
-                </div>
-                <div class="card-body">
-                    <p style="color: var(--text-muted); font-size: 14px;">
-                        Open the VODCAM analog 4-track mixer to record over stems, mix your tracks, apply AutoTune, and deploy them to the swarm.
-                    </p>
-                    <button id="btn-launch-vodstudio" style="width: 100%; margin-top: 10px; padding: 15px; font-size: 18px; font-weight: bold; background: var(--warning); color: #000; border: none; border-radius: 8px; box-shadow: 0 4px 0 #b37700; cursor: pointer; transition: 0.1s;">Launch VODstudio</button>
-                </div>
-            </div>
-            <div class="card">
+            <div class="card" style="margin-top: 20px;">
                 <div class="card-header">
                     <h2 style="margin:0; color: var(--primary);">Stem Splitter</h2>
                 </div>

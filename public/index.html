@@ -165,6 +165,7 @@
                 <div class="side-card" id="card-main-nav" style="padding: 0; background: transparent; border: none;">
                     <div class="side-nav-item active" onclick="switchTab('feed', this)">🏠 The Global Feed</div>
                     <div class="side-nav-item" id="nav-discover-tab" onclick="switchTab('discover', this)">🌊 Discover Feed</div>
+                    <div class="side-nav-item" onclick="window.AudioEngine.playRadio()">📻 Listen to Radio</div>
                     <div class="side-nav-item" onclick="switchTab('profile', this)">👤 My Spot</div>
                     <div class="side-nav-item" onclick="switchTab('clout', this)">👑 Clout Leaderboard</div>
                 <div class="side-nav-item" onclick="switchTab('events', this)">📅 Events</div>
@@ -567,7 +568,23 @@
 
                 <!-- VIEW 9: TOOLS -->
                 <div id="view-tools" class="hidden">
-                    <!-- StemSplitterEngine.js will render its content here -->
+                    <div class="card" style="margin-bottom: 20px; border: 2px solid var(--warning); box-shadow: 0 0 15px rgba(255, 170, 0, 0.2);">
+                        <div class="card-header" style="background: rgba(255, 170, 0, 0.1);">
+                            <h2 style="margin:0; color: var(--warning);">🎛️ VODstudio 4-Track</h2>
+                        </div>
+                        <div class="card-body">
+                            <p style="color: var(--text-muted); font-size: 14px;">
+                                Open the VODCAM analog 4-track mixer to record over stems, mix your tracks, apply AutoTune, and deploy them to the swarm.
+                            </p>
+                            <button id="btn-launch-vodstudio" style="width: 100%; margin-top: 10px; padding: 15px; font-size: 18px; font-weight: bold; background: var(--warning); color: #000; border: none; border-radius: 8px; box-shadow: 0 4px 0 #b37700; cursor: pointer; transition: 0.1s;">Launch VODstudio</button>
+                        </div>
+                    </div>
+                    <div class="card" style="margin-bottom: 20px; border-color: var(--warning);">
+                        <h3 style="color: var(--warning); margin-top: 0; display: flex; align-items: center; gap: 10px;">📟 VO-88 Calculator</h3>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">A 40-second micro-sampler with a 16-step sequencer and punch-in FX. Sequence beats, route audio into VOD Studio, and mint your sample packs to the ledger!</p>
+                        <button onclick="window.launchPO33()" style="width: 100%; padding: 12px; font-size: 14px; background: var(--warning); color: #000; border: none; cursor: pointer; border-radius: 8px; font-weight: bold; box-shadow: 0 4px 0 #b35600;">Launch VO-88 Hardware</button>
+                    </div>
+                    <div id="stem-splitter-container"></div>
                 </div>
 
                 <!-- VIEW 10: CLOUT LEADERBOARD -->
@@ -751,6 +768,7 @@
     <script src="/BattleEngines.js?v=1.0.2"></script>
     <script src="/StemSplitterEngine.js?v=1.0.2"></script>
     <script src="/VODstudioEngine.js?v=1.0.2"></script>
+    <script src="/PO33Engine.js?v=1.0.2"></script>
     <script src="/app.js?v=1.0.2"></script>
 
         <script>

@@ -1,5 +1,5 @@
 {
-  "lastDailyRotation": 1780498123178,
+  "lastDailyRotation": 1780640260650,
   "lastWeeklyRotation": 1780498123178,
   "users": {
     "3056301006072a8648ce3d020106052b8104000a034200049b412e497874ec237606ac926aaf1e70654e3155fa5d6421b1eb8f018c0c68c6ec17b5c94a9bd7ab6fc34c38760e9f02686dafe2163712416c51cf5ef6826d43": {
@@ -10,7 +10,7 @@
           "target": 5,
           "reward": 1000,
           "desc": "Listen to 5 songs",
-          "progress": 2,
+          "progress": 0,
           "completed": false
         },
         {
@@ -19,7 +19,16 @@
           "target": 15,
           "reward": 3000,
           "desc": "Listen to 15 songs",
-          "progress": 2,
+          "progress": 0,
+          "completed": false
+        },
+        {
+          "id": "d_like_5",
+          "type": "LIKE_POSTS",
+          "target": 5,
+          "reward": 500,
+          "desc": "Like 5 posts or images",
+          "progress": 0,
           "completed": false
         },
         {
@@ -37,15 +46,6 @@
           "target": 2,
           "reward": 1500,
           "desc": "Lock in 2 new crew members",
-          "progress": 1,
-          "completed": false
-        },
-        {
-          "id": "d_like_5",
-          "type": "LIKE_POSTS",
-          "target": 5,
-          "reward": 500,
-          "desc": "Like 5 posts or images",
           "progress": 0,
           "completed": false
         }

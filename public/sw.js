@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vod-network-v34';
+const CACHE_NAME = 'vod-network-v35';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -17,6 +17,7 @@ const ASSETS_TO_CACHE = [
   '/GlobalTagEngine.js',
   '/NotificationEngine.js',
   '/BattleEngines.js',
+  '/AutoMasterEngine.js',
   '/StemSplitterEngine.js',
   '/VODstudioEngine.js',
   '/AutoTuneProcessor.js',

@@ -269,6 +269,62 @@ window.AudioEngine = {
         }
     },
 
+    playRadio() {
+        const player = document.getElementById('global-audio-player');
+        if (!player) return;
+
+        this.setupWebAudio(player);
+
+        const radioUrl = 'https://radio.vibeordie.social/stream.mp3';
+
+        // If radio is already playing, just toggle pause/play
+        if (player.src === radioUrl) {
+            if (player.paused) player.play();
+            else player.pause();
+            return;
+        }
+
+        this.stopPlaybackTrackingLoop(true);
+        this.activeTrackHash = 'VOD_RADIO'; // Special hash for the radio
+        this.activeTrackArtist = 'VOD';
+        this.isPreviewMode = false;
+
+        player.src = radioUrl;
+        player.play().catch(error => console.error("Radio playback error:", error));
+
+        document.getElementById('global-track-title').innerText = 'VIBE OR DIE RADIO';
+        const artistLink = document.getElementById('global-track-artist-link');
+        artistLink.innerText = '24/7 Live Stream';
+        artistLink.onclick = null; // No profile to link to
+
+        // You can set a default artwork for the radio
+        document.getElementById('global-track-art').src = getAvatarUrl(window.CoreEngine.userKeys.publicKey);
+    },
+    
+    _radioMetadataInterval: null,
+
+    _fetchRadioMetadata() {
+        fetch('https://radio.vibeordie.social/status-json.xsl')
+            .then(response => response.json())
+            .then(data => {
+                if (this.activeTrackHash !== 'VOD_RADIO') return; // Stop if not on radio
+
+                let currentTrack = 'VIBE OR DIE RADIO';
+                if (data.icestats && data.icestats.source) {
+                    const source = Array.isArray(data.icestats.source) ? data.icestats.source[0] : data.icestats.source;
+                    if (source.title) {
+                        currentTrack = source.title;
+                    }
+                }
+                document.getElementById('global-track-title').innerText = currentTrack;
+            })
+            .catch(error => {
+                if (this.activeTrackHash === 'VOD_RADIO') {
+                    document.getElementById('global-track-title').innerText = 'VIBE OR DIE RADIO';
+                }
+            });
+    },
+
     playNextTrackAdvanced() {
         // Priority 1: Service the custom queue if it's active
         if (this.currentPlaylistMode === 'queue' && this.currentQueue.length > 0) {
