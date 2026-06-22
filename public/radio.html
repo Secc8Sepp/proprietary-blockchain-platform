@@ -187,14 +187,12 @@
 
         // Fetch the currently playing track info on page load and then every 10 seconds.
         document.addEventListener('DOMContentLoaded', () => {
-            getNowPlaying();
-            setInterval(getNowPlaying, 10000);
-        });
-
-        // Minimal setup for signup
-        document.addEventListener('DOMContentLoaded', () => {
+            // Setup for signup form
             const socket = io({ transports: ['websocket'] });
             window.CoreEngine.init(socket);
+            // Setup for radio metadata
+            getNowPlaying();
+            setInterval(getNowPlaying, 10000);
         });
     </script>
 

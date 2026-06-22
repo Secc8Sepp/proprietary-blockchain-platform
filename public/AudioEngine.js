@@ -273,6 +273,10 @@ window.AudioEngine = {
         const player = document.getElementById('global-audio-player');
         if (!player) return;
 
+        // Clear any existing radio metadata polling
+        if (this._radioMetadataInterval) clearInterval(this._radioMetadataInterval);
+        this._fetchRadioMetadata(); // Initial fetch
+        this._radioMetadataInterval = setInterval(() => this._fetchRadioMetadata(), 10000);
         this.setupWebAudio(player);
 
         const radioUrl = 'https://radio.vibeordie.social/stream.mp3';
@@ -284,6 +288,7 @@ window.AudioEngine = {
             return;
         }
 
+        // If we are playing a normal track, stop the metadata polling
         this.stopPlaybackTrackingLoop(true);
         this.activeTrackHash = 'VOD_RADIO'; // Special hash for the radio
         this.activeTrackArtist = 'VOD';
@@ -327,6 +332,9 @@ window.AudioEngine = {
 
     playNextTrackAdvanced() {
         // Priority 1: Service the custom queue if it's active
+        // Clear radio polling if we are moving to a new track
+        if (this._radioMetadataInterval) clearInterval(this._radioMetadataInterval);
+
         if (this.currentPlaylistMode === 'queue' && this.currentQueue.length > 0) {
             this.currentQueueIndex++;
             if (this.currentQueueIndex < this.currentQueue.length) {
