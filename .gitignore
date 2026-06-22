@@ -4,3 +4,5 @@ chain.json
 .env
 .DS_Store
 *.exe
+chat_db.json
+ledger-data/goals_db.json.bak
