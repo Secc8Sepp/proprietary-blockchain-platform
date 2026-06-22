@@ -176,6 +176,31 @@
                     <div class="side-nav-item" onclick="switchTab('tools', this)">🛠️ Tools</div>
                     <div class="side-nav-item hidden" id="btn-install-pwa" onclick="promptPwaInstall()">⬇️ Install App</div>
                 </div>
+
+                <div class="side-card" id="card-radio-widget" style="text-align: center; border-color: var(--danger); background: linear-gradient(145deg, rgba(255, 0, 85, 0.1), rgba(11, 12, 16, 0.2));">
+                    <h3 style="margin: 0 0 5px 0; letter-spacing: 3px; color: var(--danger); font-size: 18px; font-weight: 900;">VIBE OR DIE RADIO</h3>
+                    <p id="widget-streamStatus" style="font-size: 10px; color: var(--success); letter-spacing: 1.5px; margin: 0 0 15px 0; font-weight: bold; font-family: monospace;">● 24/7 LIVE STREAM</p>
+                    
+                    <div id="widget-nowPlaying" style="background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid var(--border); text-align: left;">
+                        <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">NOW PLAYING</div>
+                        <div id="widget-currentTrack" style="font-weight: bold; color: var(--primary); min-height: 16px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Loading...</div>
+                    </div>
+
+                    <audio id="widget-radioBrain" src="https://radio.vibeordie.social/stream.mp3" preload="none"></audio>
+                    
+                    <div style="margin-bottom: 5px;">
+                        <button onclick="toggleVODRadioWidget()" id="widget-playBtn" style="background: var(--danger); border: none; color: #fff; width: 50px; height: 50px; border-radius: 50%; font-size: 20px; cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(255, 0, 85, 0.4);">
+                            ▶
+                        </button>
+                    </div>
+                    
+                    <p id="widget-btnLabel" style="font-size: 11px; color: var(--text-muted); margin-top: 5px; font-weight: 500;">CLICK TO TUNE IN</p>
+
+                    <div style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                        <p style="font-size: 11px; color: var(--text-muted); margin: 0;">Prefer the global player?</p>
+                        <a onclick="window.AudioEngine.playRadio()" style="font-size: 12px; font-weight: bold; cursor: pointer;">Launch in Banner</a>
+                    </div>
+                </div>
                 
                 <div class="side-card" id="card-chat-module">
                     <h3 class="side-card-header" draggable="true">Chat &amp; Servers</h3>
@@ -770,6 +795,52 @@
     <script src="/VODstudioEngine.js?v=1.0.2"></script>
     <script src="/PO33Engine.js?v=1.0.2"></script>
     <script src="/app.js?v=1.0.2"></script>
+
+    <script>
+        function toggleVODRadioWidget() {
+            var stream = document.getElementById('widget-radioBrain');
+            var button = document.getElementById('widget-playBtn');
+            var label = document.getElementById('widget-btnLabel');
+            
+            if (stream.paused) {
+                stream.play();
+                button.innerText = "■";
+                button.style.background = "var(--bg-darker)";
+                button.style.border = "2px solid var(--danger)";
+                label.innerText = "NOW STREAMING";
+                label.style.color = "var(--success)";
+            } else {
+                stream.pause();
+                stream.src = "https://radio.vibeordie.social/stream.mp3"; 
+                button.innerText = "▶";
+                button.style.background = "var(--danger)";
+                button.style.border = "none";
+                label.innerText = "CLICK TO TUNE IN";
+                label.style.color = "var(--text-muted)";
+            }
+        }
+
+        function getWidgetNowPlaying() {
+            fetch('https://radio.vibeordie.social/status-json.xsl')
+                .then(response => response.json())
+                .then(data => {
+                    let currentTrack = '...';
+                    if (data.icestats && data.icestats.source) {
+                        const source = Array.isArray(data.icestats.source) ? data.icestats.source[0] : data.icestats.source;
+                        if (source.title) {
+                            currentTrack = source.title;
+                        }
+                    }
+                    document.getElementById('widget-currentTrack').innerText = currentTrack;
+                })
+                .catch(error => {
+                    document.getElementById('widget-currentTrack').innerText = 'Metadata unavailable';
+                });
+        }
+
+        getWidgetNowPlaying();
+        setInterval(getWidgetNowPlaying, 10000);
+    </script>
 
         <script>
             if ('serviceWorker' in navigator) {
