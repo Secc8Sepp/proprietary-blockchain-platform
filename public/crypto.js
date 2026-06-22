@@ -26,8 +26,13 @@ async function uploadMediaAssetFile(fileObject) {
     if (!fileObject) return null;
     const formData = new FormData();
     formData.append('asset', fileObject);
+
+    const headers = {};
+    if (window.CoreEngine && window.CoreEngine.userKeys && window.CoreEngine.userKeys.publicKey) {
+        headers['x-user-public-key'] = window.CoreEngine.userKeys.publicKey;
+    }
     
-    const response = await fetch('/api/upload', { method: 'POST', body: formData });
+    const response = await fetch('/api/upload', { method: 'POST', body: formData, headers: headers });
     const text = await response.text();
     let result;
     try { result = JSON.parse(text); } catch (e) { throw new Error(`Server returned invalid response. Response: ${text.substring(0, 80)}...`); }

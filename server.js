@@ -102,6 +102,12 @@ app.post('/api/upload', upload.single('asset'), (req, res) => {
         return res.status(400).json({ error: 'No file uploaded.' });
     }
 
+    // For mobile stability, ensure uploads are associated with a logged-in user.
+    const userPublicKey = req.headers['x-user-public-key'];
+    if (!userPublicKey) {
+        return res.status(401).json({ error: 'Authentication required for upload. Please log in again.' });
+    }
+
     try {
         const fileBuffer = fs.readFileSync(req.file.path);
         const hash = crypto.createHash('sha256').update(fileBuffer).digest('hex');

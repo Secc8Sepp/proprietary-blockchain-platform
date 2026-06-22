@@ -113,12 +113,6 @@ window.CoreEngine = {
                 btn.disabled = true;
             }
 
-            const avatarHash = await uploadMediaAssetFile(avatarFile);
-            if (!avatarHash) throw new Error("Avatar upload failed. Please try again.");
-            
-            if (btn) {
-                btn.innerText = "Creating Account...";
-            }
             const res = await fetch('/api/auth/signup', { 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -140,6 +134,13 @@ window.CoreEngine = {
             } else {
                 throw new Error("Invalid server response. Expected JSON but received HTML/Text.");
             }
+
+            if (btn) {
+                btn.innerText = "Uploading Avatar...";
+            }
+            
+            const avatarHash = await uploadMediaAssetFile(avatarFile);
+            if (!avatarHash) throw new Error("Avatar upload failed. Please try again.");
             
             const profileData = { username: username, bio: "Active on the Vibe or Die Network.", avatarHash: avatarHash };
             if (referrerPublicKey) {
