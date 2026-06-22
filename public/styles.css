@@ -26,6 +26,11 @@ a:hover { text-decoration: underline; color: #fff; }
 .hidden { display: none !important; }
 
 ::-webkit-scrollbar { width: 8px; }
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
 ::-webkit-scrollbar-track { background: var(--bg-body); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
