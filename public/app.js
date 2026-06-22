@@ -1278,6 +1278,7 @@ function switchTab(tabName, element, targetKey = null) {
     if (tabName === 'wallet' && window.WalletEngine) window.WalletEngine.renderWalletDashboard();
     if (tabName === 'clout') window.loadCloutStatus();
     if (tabName === 'goals') window.loadGoalsDashboard();
+    if (tabName === 'admin') { /* No special load function needed yet */ }
 }
 
 function renderServerList() {
@@ -1962,10 +1963,15 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
         }
 
         if (profile.publicKey === window.CoreEngine.userKeys.publicKey) {
-            const adminPanel = document.getElementById('ui-admin-panel');
-            if (adminPanel) {
-                if (profile.isAdmin) adminPanel.classList.remove('hidden');
-                else adminPanel.classList.add('hidden');
+            const adminTab = document.getElementById('nav-admin-tab');
+            if (adminTab) {
+                if (profile.isAdmin) adminTab.classList.remove('hidden');
+                else adminTab.classList.add('hidden');
+            }
+
+            const submissionsTab = document.getElementById('nav-submissions-tab');
+            if (submissionsTab) {
+                submissionsTab.classList.toggle('hidden', !profile.isAdmin);
             }
 
             window.currentUserIsAdmin = !!profile.isAdmin;

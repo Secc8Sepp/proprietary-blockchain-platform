@@ -177,6 +177,7 @@
                     <div class="side-nav-item" id="nav-market-tab" onclick="switchTab('market', this)">🛒 Digital Marketplace</div>
                     <div class="side-nav-item" id="nav-goals-tab" onclick="switchTab('goals', this)">🎯 Goals & Rewards</div>
                     <div class="side-nav-item" onclick="switchTab('tools', this)">🛠️ Tools</div>
+                    <div class="side-nav-item hidden" id="nav-admin-tab" onclick="switchTab('admin', this)">🛡️ Admin</div>
                     <div class="side-nav-item hidden" id="btn-install-pwa" onclick="promptPwaInstall()">⬇️ Install App</div>
                 </div>
                 
@@ -472,19 +473,6 @@
                         <!-- JS populated -->
                     </div>
 
-                    <div id="ui-admin-panel" class="hidden" style="margin-top: 30px; border-top: 1px solid var(--danger); padding-top: 20px;">
-                        <h4 style="color: var(--danger);">🛑 Admin OTC Mint (Investors)</h4>
-                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">Mint raw $VOD directly to an investor's wallet after clearing a USD wire transfer.</p>
-                        <input id="input-mint-recipient" placeholder="Investor Public Key" style="margin-bottom: 12px;" />
-                        <input id="input-mint-amount" type="number" placeholder="Amount to Mint" style="margin-bottom: 12px;" />
-                        <button style="background: var(--danger); color: #fff; width: 100%;" onclick="window.WalletEngine.executeAdminMint()">Mint & Transfer</button>                        
-                        
-                        <h4 style="color: var(--danger); margin-top: 20px;">🛑 Admin Delete User</h4>
-                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">Permanently remove a user from the network. They will be marked as deleted and will not appear in feeds, profiles, or any public views. This action cannot be undone.</p>
-                        <input id="input-delete-recipient" placeholder="Paste the exact User Public Key to delete" style="margin-bottom: 12px;" />
-                        <button style="background: var(--danger); color: #fff; width: 100%;" onclick="window.WalletEngine.promptAdminDeleteUser(document.getElementById('input-delete-recipient').value)">🗑️ Delete User From Ledger</button>
-                    </div>
-
                     <h4 style="margin-top: 20px;">💾 My Digital Assets</h4>
                     <div id="ui-wallet-owned-assets" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 30px;"></div>
 
@@ -661,6 +649,24 @@
                     </div>
                 </div>
 
+                <!-- VIEW 14: ADMIN -->
+                <div id="view-admin" class="hidden">
+                    <div class="card">
+                        <h2 style="color: var(--danger); margin-top: 0;">🛡️ Admin Panel</h2>
+                        <div id="ui-admin-panel">
+                            <h4 style="color: var(--danger);">🛑 Admin OTC Mint (Investors)</h4>
+                            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">Mint raw $VOD directly to an investor's wallet after clearing a USD wire transfer.</p>
+                            <input id="input-mint-recipient" placeholder="Investor Public Key" style="margin-bottom: 12px;" />
+                            <input id="input-mint-amount" type="number" placeholder="Amount to Mint" style="margin-bottom: 12px;" />
+                            <button style="background: var(--danger); color: #fff; width: 100%;" onclick="window.WalletEngine.executeAdminMint()">Mint & Transfer</button>                        
+                            
+                            <h4 style="color: var(--danger); margin-top: 20px;">🛑 Admin Delete User</h4>
+                            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">Permanently remove a user from the network. They will be marked as deleted and will not appear in feeds, profiles, or any public views. This action cannot be undone.</p>
+                            <input id="input-delete-recipient" placeholder="Paste the exact User Public Key to delete" style="margin-bottom: 12px;" />
+                            <button style="background: var(--danger); color: #fff; width: 100%;" onclick="window.WalletEngine.promptAdminDeleteUser(document.getElementById('input-delete-recipient').value)">🗑️ Delete User From Ledger</button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="resizer" id="resizer-right"></div>
