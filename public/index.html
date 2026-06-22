@@ -168,6 +168,7 @@
                 <div class="side-card" id="card-main-nav" style="padding: 0; background: transparent; border: none;">
                     <div class="side-nav-item active" onclick="switchTab('feed', this)">🏠 The Global Feed</div>
                     <div class="side-nav-item" id="nav-discover-tab" onclick="switchTab('discover', this)">🌊 Discover Feed</div>
+                    <div class="side-nav-item hidden" id="nav-submissions-tab" onclick="switchTab('submissions', this)">📥 Submissions</div>
                     <div class="side-nav-item" onclick="switchTab('profile', this)">👤 My Spot</div>
                     <div class="side-nav-item" onclick="switchTab('clout', this)">👑 Clout Leaderboard</div>
                 <div class="side-nav-item" onclick="switchTab('events', this)">📅 Events</div>
@@ -650,6 +651,14 @@
                 <!-- VIEW 12: COMMISSIONS DASHBOARD -->
                 <div id="view-commissions" class="hidden">
                     <!-- This will be populated by loadCommissionsDashboard() -->
+                </div>
+
+                <!-- VIEW 13: SUBMISSIONS -->
+                <div id="view-submissions" class="hidden">
+                    <div class="card">
+                        <h2 style="color: var(--primary); margin-top: 0;">📥 Radio Submissions</h2>
+                        <div id="submissions-container" style="display: flex; flex-direction: column; gap: 15px;"></div>
+                    </div>
                 </div>
 
             </div>

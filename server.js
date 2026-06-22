@@ -16,6 +16,7 @@ const profileService = require('./services/profileService');
 const goalsService = require('./services/goalsService');
 const cloutService = require('./services/cloutService');
 const Wallet = require('./core/wallet');
+const submissionsRoutes = require('./routes/submissions.js');
 
 
 const app = express();
@@ -282,6 +283,7 @@ if (authModule) {
 app.use('/api/social', socialRoutes);
 app.use('/api/feed', feedRoutes);
 app.use('/api/auth', authModule.router);
+app.use('/api/radio', submissionsRoutes);
 
 const toolsRoutes = require('./routes/tools');
 app.use('/api/tools', toolsRoutes);

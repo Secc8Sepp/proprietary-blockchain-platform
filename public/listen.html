@@ -96,6 +96,24 @@
         </div>
     </div>
 
+    <div class="radio-card" style="border-color: var(--success); box-shadow: 0px 8px 40px rgba(31, 188, 115, 0.4); max-width: 380px; width: 100%; margin: 40px auto 20px auto;">
+        <h4 style="margin: 0 0 10px 0; color: var(--success);">Got Heat?</h4>
+        <p style="font-size: 13px; color: var(--text-muted); margin: 0 0 20px 0;">Submit your track for a chance to be featured on VIBE OR DIE RADIO.</p>
+        
+        <div style="text-align: left;">
+            <label style="font-size: 12px;">Artist Name</label>
+            <input id="submit-artist-name" type="text" placeholder="Your artist or band name..." style="margin-bottom: 10px;">
+            
+            <label style="font-size: 12px;">Track Title</label>
+            <input id="submit-track-title" type="text" placeholder="The name of your masterpiece..." style="margin-bottom: 10px;">
+            
+            <label style="font-size: 12px;">Your MP3 File</label>
+            <input id="submit-mp3-file" type="file" accept="audio/mpeg" style="margin-bottom: 15px;">
+        </div>
+        <button id="btn-submit-track" onclick="handleTrackSubmission()" style="width: 100%; background: var(--success); color: #000;">Submit for Review</button>
+        <p id="submit-status" style="font-size: 12px; color: var(--warning); margin-top: 15px; min-height: 15px;"></p>
+    </div>
+
     <script>
         function toggleVODRadio() {
             var stream = document.getElementById('radioBrain');
@@ -127,6 +145,56 @@
 
         getNowPlaying();
         setInterval(getNowPlaying, 10000);
+    </script>
+    <script>
+        async function handleTrackSubmission() {
+            const artistName = document.getElementById('submit-artist-name').value.trim();
+            const trackTitle = document.getElementById('submit-track-title').value.trim();
+            const fileInput = document.getElementById('submit-mp3-file');
+            const file = fileInput.files[0];
+            const statusEl = document.getElementById('submit-status');
+            const submitBtn = document.getElementById('btn-submit-track');
+
+            if (!artistName || !trackTitle || !file) {
+                statusEl.innerText = 'Please fill out all fields and select a file.';
+                return;
+            }
+
+            if (file.type !== 'audio/mpeg') {
+                statusEl.innerText = 'Please upload a valid MP3 file.';
+                return;
+            }
+
+            submitBtn.disabled = true;
+            statusEl.style.color = 'var(--primary)';
+            statusEl.innerText = 'Uploading...';
+
+            const formData = new FormData();
+            formData.append('artistName', artistName);
+            formData.append('trackTitle', trackTitle);
+            formData.append('track', file);
+
+            try {
+                const response = await fetch('/api/radio/submit-track', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.message || 'An unknown error occurred.');
+                }
+                statusEl.style.color = 'var(--success)';
+                statusEl.innerText = result.message;
+                document.getElementById('submit-artist-name').value = '';
+                document.getElementById('submit-track-title').value = '';
+                fileInput.value = '';
+            } catch (error) {
+                statusEl.style.color = 'var(--danger)';
+                statusEl.innerText = 'Upload failed: ' + error.message;
+            } finally {
+                submitBtn.disabled = false;
+            }
+        }
     </script>
 
 </body>
