@@ -1274,7 +1274,10 @@ function switchTab(tabName, element, targetKey = null) {
     if (tabName === 'hotornot') window.BattleEngines.loadHotOrNot();
     if (tabName === 'discover') window.loadDiscoverFeed();
     if (tabName === 'feed') window.loadMainGlobalFeed();
-    if (tabName === 'tools' && window.StemSplitterEngine) window.StemSplitterEngine.render();
+    if (tabName === 'tools' && window.StemSplitterEngine) {
+        // This is now part of the admin dashboard, but we can keep the logic here for now.
+        window.loadAdminDashboard();
+    }
     if (tabName === 'wallet' && window.WalletEngine) window.WalletEngine.renderWalletDashboard();
     if (tabName === 'clout') window.loadCloutStatus();
     if (tabName === 'goals') window.loadGoalsDashboard();
@@ -1967,11 +1970,6 @@ async function fetchUserProfile(publicKey, isNavUpdateOnly) {
             if (adminTab) {
                 if (profile.isAdmin) adminTab.classList.remove('hidden');
                 else adminTab.classList.add('hidden');
-            }
-
-            const submissionsTab = document.getElementById('nav-submissions-tab');
-            if (submissionsTab) {
-                submissionsTab.classList.toggle('hidden', !profile.isAdmin);
             }
 
             window.currentUserIsAdmin = !!profile.isAdmin;
@@ -3225,6 +3223,74 @@ window.loadCommissionsDashboard = async function() {
         container.innerHTML = '<div class="card"><div class="card-body" style="color: var(--danger);">Failed to load commissions.</div></div>';
         console.error(err);
     }
+}
+
+async function loadAdminDashboard() {
+    const container = document.getElementById('view-admin');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="card">
+            <div class="card-header">Admin Control Panel</div>
+            <div class="card-body">
+                <h4 style="color: var(--primary);">OTC Mint</h4>
+                <p style="font-size: 12px; color: var(--text-muted);">Directly mint $VOD to a user's wallet. This is for rewards, grants, or corrections.</p>
+                <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; align-items: flex-end;">
+                    <input type="text" id="input-mint-recipient" placeholder="Recipient Public Key">
+                    <input type="number" id="input-mint-amount" placeholder="Amount">
+                    <button onclick="window.WalletEngine.executeAdminMint()">Mint</button>
+                </div>
+                <hr style="border-color: var(--border); margin: 20px 0;">
+                <h4 style="color: var(--danger);">Danger Zone</h4>
+                <p style="font-size: 12px; color: var(--text-muted);">Permanently delete a user and all their content from the network.</p>
+                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px; align-items: flex-end;">
+                    <input type="text" id="input-delete-recipient" placeholder="Target Public Key to Delete">
+                    <button class="danger" onclick="window.WalletEngine.promptAdminDeleteUser(document.getElementById('input-delete-recipient').value)">Delete User</button>
+                </div>
+            </div>
+        </div>
+        <div class="card" style="margin-top: 20px;">
+            <div class="card-header">Radio Submissions</div>
+            <div id="admin-submissions-list" class="card-body">Loading submissions...</div>
+        </div>
+    `;
+
+    try {
+        const res = await fetch('/api/radio/submissions');
+        const submissions = await res.json();
+        const listEl = document.getElementById('admin-submissions-list');
+        if (submissions.length === 0) {
+            listEl.innerHTML = '<p style="color: var(--text-muted); text-align: center;">No pending submissions.</p>';
+            return;
+        }
+
+        listEl.innerHTML = submissions.map(s => `
+            <div class="submission-row" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid var(--border);">
+                <div>
+                    <div style="font-weight: bold; color: #fff;">${escapeHtml(s.trackTitle)}</div>
+                    <div style="font-size: 12px; color: var(--text-muted);">by ${escapeHtml(s.artistName)}</div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="secondary" style="padding: 5px 10px;" onclick="window.open('/tracks/${s.id.replace('.json', '.mp3')}')">Preview</button>
+                    <button style="padding: 5px 10px; background: var(--success);" onclick="approveSubmission('${s.id}', '${escapeJsArg(s.artistName)} - ${escapeJsArg(s.trackTitle)}.mp3')">Approve</button>
+                    <button style="padding: 5px 10px; background: var(--danger);" onclick="rejectSubmission('${s.id}')">Reject</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (err) {
+        console.error("Failed to load submissions:", err);
+        document.getElementById('admin-submissions-list').innerHTML = '<p style="color: var(--danger);">Failed to load submissions.</p>';
+    }
+}
+
+async function approveSubmission(id, newFilename) {
+    await fetch(`/api/radio/submissions/${id}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ newFilename }) });
+    loadAdminDashboard();
+}
+
+async function rejectSubmission(id) {
+    await fetch(`/api/radio/submissions/${id}/reject`, { method: 'POST' });
+    loadAdminDashboard();
 }
 
 function getAssetIcon(itemType) {

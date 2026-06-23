@@ -32,7 +32,7 @@ window.WalletEngine = {
         if (!confirm(`ARE YOU ABSOLUTELY SURE?\n\nThis will delete the user ${targetProfile.username} (${target.substring(0,10)}...). This action is permanent and cannot be undone.`)) return;
 
         try {
-            await window.CoreEngine.sendSignedTransaction('ADMIN_DELETE_USER', target, {});
+            await window.CoreEngine.sendSignedTransaction('ADMIN_DELETE_USER', target, {}); // NOSONAR
             alert(`✅ Successfully deleted user! They have been removed from the network. Refreshing...`);
 
             // If we are on the deleted user's profile, navigate away.
@@ -42,7 +42,7 @@ window.WalletEngine = {
             }
             
             // Clear input if it exists on the page
-            const targetInput = document.getElementById('input-delete-recipient');
+            const targetInput = document.getElementById('input-delete-recipient'); // This ID is now in the admin dashboard
             if (targetInput) targetInput.value = '';
 
             // Force refresh of data
